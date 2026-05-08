@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-08T20:46:21.483Z",
+  "generatedAt": "2026-05-08T21:43:38.914Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -114,27 +114,27 @@
       "name": "JPMorgan Chase",
       "sector": "Financials",
       "holding": false,
-      "price": 302.1,
-      "change": -4.17,
-      "changePct": -1.3615
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "BAC",
       "name": "Bank of America",
       "sector": "Financials",
       "holding": false,
-      "price": 51.31,
-      "change": -1.44,
-      "changePct": -2.7299
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "GS",
       "name": "Goldman Sachs",
       "sector": "Financials",
       "holding": false,
-      "price": 936.48,
-      "change": 10.61,
-      "changePct": 1.1459
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "V",
