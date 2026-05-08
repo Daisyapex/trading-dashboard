@@ -1,6 +1,7 @@
 // scripts/fetch.mjs
 import { readFileSync, writeFileSync } from "node:fs";
-import yahooFinance from "yahoo-finance2";
+import YF from "yahoo-finance2";
+const yahooFinance = YF.default || YF;
 
 
 
