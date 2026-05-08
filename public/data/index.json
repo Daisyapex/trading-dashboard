@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-08T21:55:38.134Z",
+  "generatedAt": "2026-05-08T21:59:05.031Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -114,18 +114,18 @@
       "name": "JPMorgan Chase",
       "sector": "Financials",
       "holding": false,
-      "price": 302.1,
-      "change": -4.17,
-      "changePct": -1.3615
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "BAC",
       "name": "Bank of America",
       "sector": "Financials",
       "holding": false,
-      "price": 51.31,
-      "change": -1.44,
-      "changePct": -2.7299
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "GS",
@@ -141,81 +141,81 @@
       "name": "Visa Inc.",
       "sector": "Financials",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 318.79,
+      "change": -2.49,
+      "changePct": -0.775
     },
     {
       "symbol": "JNJ",
       "name": "Johnson & Johnson",
       "sector": "Healthcare",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 221.32,
+      "change": -1.19,
+      "changePct": -0.5348
     },
     {
       "symbol": "LLY",
       "name": "Eli Lilly",
       "sector": "Healthcare",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 948.45,
+      "change": -26.51,
+      "changePct": -2.7191
     },
     {
       "symbol": "UNH",
       "name": "UnitedHealth",
       "sector": "Healthcare",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 379.98,
+      "change": 10.24,
+      "changePct": 2.7695
     },
     {
       "symbol": "XOM",
       "name": "Exxon Mobil",
       "sector": "Energy",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 144.57,
+      "change": -2.01,
+      "changePct": -1.3713
     },
     {
       "symbol": "WMT",
       "name": "Walmart",
       "sector": "Consumer Staples",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 130.43,
+      "change": 0.23,
+      "changePct": 0.1767
     },
     {
       "symbol": "COST",
       "name": "Costco",
       "sector": "Consumer Staples",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 1008.79,
+      "change": -3.27,
+      "changePct": -0.3231
     },
     {
       "symbol": "KO",
       "name": "Coca-Cola",
       "sector": "Consumer Staples",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 78.42,
+      "change": -0.01,
+      "changePct": -0.0128
     },
     {
       "symbol": "DIS",
       "name": "Walt Disney",
       "sector": "Communication Services",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 108.02,
+      "change": -0.64,
+      "changePct": -0.589
     }
   ]
 }
