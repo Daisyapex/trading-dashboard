@@ -228,7 +228,9 @@ const TIMEFRAMES = [
 ];
 
 async function fetchYahooCandles(symbol, range, interval) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
+  const isIntraday = interval.includes("m") || interval.includes("h");
+  const target = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
+  const url = isIntraday ? `https://corsproxy.io/?${encodeURIComponent(target)}` : target;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yahoo ${res.status}`);
   const data = await res.json();
