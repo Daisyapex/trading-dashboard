@@ -1,10 +1,4 @@
 // scripts/fetch.mjs
-// Runs on GitHub Actions once per day. Reads tickers.json, calls Finnhub
-// for fundamentals/quote/recommendations + Yahoo for OHLCV, writes one
-// JSON file per ticker into public/data/.
-//
-// Required env var: FINNHUB_KEY (set as a GitHub repo secret).
-
 import { readFileSync, writeFileSync } from "node:fs";
 
 const FINNHUB_KEY = process.env.FINNHUB_KEY;
@@ -169,7 +163,7 @@ async function main() {
         symbol: t.symbol,
         name: t.name,
         sector: t.sector,
-        holding: !!t.holding,         // <-- THE FIX: propagate holding flag to index
+        holding: !!t.holding,
         price: data.quote.current,
         change: data.quote.change,
         changePct: data.quote.changePct,
