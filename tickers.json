@@ -1,29 +1,29 @@
 {
   "tickers": [
+    { "symbol": "NVDA",  "name": "NVIDIA Corp.",       "sector": "Technology",              "peers": ["AMD", "INTC", "AVGO", "QCOM"],          "holding": true },
+    { "symbol": "NOW",   "name": "ServiceNow",         "sector": "Technology",              "peers": ["CRM", "WDAY", "ORCL", "MSFT"],          "holding": true },
+    { "symbol": "MSFT",  "name": "Microsoft Corp.",    "sector": "Technology",              "peers": ["AAPL", "GOOGL", "ORCL", "CRM"],         "holding": true },
+    { "symbol": "MU",    "name": "Micron Technology",  "sector": "Technology",              "peers": ["NVDA", "AMD", "INTC", "TSM"],           "holding": true },
+    { "symbol": "AMD",   "name": "Advanced Micro Dev", "sector": "Technology",              "peers": ["NVDA", "INTC", "AVGO", "QCOM"],         "holding": true },
+    { "symbol": "SNY",   "name": "Sanofi ADR",         "sector": "Healthcare",              "peers": ["PFE", "MRK", "JNJ", "LLY"],             "holding": true },
+
     { "symbol": "AAPL",  "name": "Apple Inc.",         "sector": "Technology",              "peers": ["MSFT", "GOOGL", "META", "AMZN"] },
-    { "symbol": "MSFT",  "name": "Microsoft Corp.",    "sector": "Technology",              "peers": ["AAPL", "GOOGL", "ORCL", "CRM"] },
     { "symbol": "GOOGL", "name": "Alphabet Inc.",      "sector": "Technology",              "peers": ["MSFT", "AAPL", "META", "AMZN"] },
     { "symbol": "META",  "name": "Meta Platforms",     "sector": "Technology",              "peers": ["GOOGL", "MSFT", "AAPL", "AMZN"] },
     { "symbol": "AMZN",  "name": "Amazon.com",         "sector": "Consumer Discretionary",  "peers": ["WMT", "COST", "TGT", "EBAY"] },
-    { "symbol": "NVDA",  "name": "NVIDIA Corp.",       "sector": "Technology",              "peers": ["AMD", "INTC", "AVGO", "QCOM"] },
     { "symbol": "TSLA",  "name": "Tesla, Inc.",        "sector": "Consumer Discretionary",  "peers": ["F", "GM", "RIVN", "TM"] },
-    { "symbol": "AMD",   "name": "Advanced Micro Dev", "sector": "Technology",              "peers": ["NVDA", "INTC", "AVGO", "QCOM"] },
     { "symbol": "NFLX",  "name": "Netflix",            "sector": "Communication Services",  "peers": ["DIS", "PARA", "WBD", "AMZN"] },
     { "symbol": "JPM",   "name": "JPMorgan Chase",     "sector": "Financials",              "peers": ["BAC", "WFC", "C", "GS"] },
     { "symbol": "BAC",   "name": "Bank of America",    "sector": "Financials",              "peers": ["JPM", "WFC", "C", "MS"] },
     { "symbol": "GS",    "name": "Goldman Sachs",      "sector": "Financials",              "peers": ["MS", "JPM", "BAC", "C"] },
     { "symbol": "V",     "name": "Visa Inc.",          "sector": "Financials",              "peers": ["MA", "AXP", "PYPL", "FIS"] },
-    { "symbol": "MA",    "name": "Mastercard",         "sector": "Financials",              "peers": ["V", "AXP", "PYPL", "FIS"] },
     { "symbol": "JNJ",   "name": "Johnson & Johnson",  "sector": "Healthcare",              "peers": ["PFE", "MRK", "ABBV", "LLY"] },
     { "symbol": "LLY",   "name": "Eli Lilly",          "sector": "Healthcare",              "peers": ["JNJ", "MRK", "PFE", "ABBV"] },
     { "symbol": "UNH",   "name": "UnitedHealth",       "sector": "Healthcare",              "peers": ["CVS", "ELV", "CI", "HUM"] },
     { "symbol": "XOM",   "name": "Exxon Mobil",        "sector": "Energy",                  "peers": ["CVX", "COP", "SLB", "EOG"] },
-    { "symbol": "CVX",   "name": "Chevron",            "sector": "Energy",                  "peers": ["XOM", "COP", "SLB", "EOG"] },
     { "symbol": "WMT",   "name": "Walmart",            "sector": "Consumer Staples",        "peers": ["COST", "TGT", "KR", "AMZN"] },
     { "symbol": "COST",  "name": "Costco",             "sector": "Consumer Staples",        "peers": ["WMT", "TGT", "BJ", "KR"] },
-    { "symbol": "PG",    "name": "Procter & Gamble",   "sector": "Consumer Staples",        "peers": ["KO", "PEP", "CL", "UL"] },
     { "symbol": "KO",    "name": "Coca-Cola",          "sector": "Consumer Staples",        "peers": ["PEP", "PG", "MNST", "KDP"] },
-    { "symbol": "NKE",   "name": "Nike, Inc.",         "sector": "Consumer Discretionary",  "peers": ["LULU", "DECK", "SKX", "UAA"] },
     { "symbol": "DIS",   "name": "Walt Disney",        "sector": "Communication Services",  "peers": ["NFLX", "PARA", "WBD", "CMCSA"] }
   ]
 }
