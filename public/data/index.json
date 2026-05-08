@@ -1,5 +1,205 @@
 {
-  "generatedAt": "2026-05-08T00:00:00.000Z",
-  "tickers": [],
-  "_note": "This is a placeholder. After you push the repo and add your FINNHUB_KEY secret, run the 'Fetch Market Data' workflow from the Actions tab to populate real data."
+  "generatedAt": "2026-05-08T18:42:51.554Z",
+  "tickers": [
+    {
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "sector": "Technology",
+      "price": 292.7,
+      "change": 5.26,
+      "changePct": 1.8299
+    },
+    {
+      "symbol": "MSFT",
+      "name": "Microsoft Corp.",
+      "sector": "Technology",
+      "price": 415.72,
+      "change": -5.05,
+      "changePct": -1.2002
+    },
+    {
+      "symbol": "GOOGL",
+      "name": "Alphabet Inc.",
+      "sector": "Technology",
+      "price": 398.73,
+      "change": 0.74,
+      "changePct": 0.1859
+    },
+    {
+      "symbol": "META",
+      "name": "Meta Platforms",
+      "sector": "Technology",
+      "price": 609.86,
+      "change": -6.95,
+      "changePct": -1.1268
+    },
+    {
+      "symbol": "AMZN",
+      "name": "Amazon.com",
+      "sector": "Consumer Discretionary",
+      "price": 272.29,
+      "change": 1.12,
+      "changePct": 0.413
+    },
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA Corp.",
+      "sector": "Technology",
+      "price": 215.24,
+      "change": 3.74,
+      "changePct": 1.7683
+    },
+    {
+      "symbol": "TSLA",
+      "name": "Tesla, Inc.",
+      "sector": "Consumer Discretionary",
+      "price": 428.29,
+      "change": 16.5,
+      "changePct": 4.0069
+    },
+    {
+      "symbol": "AMD",
+      "name": "Advanced Micro Dev",
+      "sector": "Technology",
+      "price": 447.46,
+      "change": 39,
+      "changePct": 9.5481
+    },
+    {
+      "symbol": "NFLX",
+      "name": "Netflix",
+      "sector": "Communication Services",
+      "price": 87.44,
+      "change": -0.81,
+      "changePct": -0.9178
+    },
+    {
+      "symbol": "JPM",
+      "name": "JPMorgan Chase",
+      "sector": "Financials",
+      "price": 301.97,
+      "change": -4.3,
+      "changePct": -1.404
+    },
+    {
+      "symbol": "BAC",
+      "name": "Bank of America",
+      "sector": "Financials",
+      "price": 51.48,
+      "change": -1.27,
+      "changePct": -2.4076
+    },
+    {
+      "symbol": "GS",
+      "name": "Goldman Sachs",
+      "sector": "Financials",
+      "price": 933.88,
+      "change": 8.01,
+      "changePct": 0.8651
+    },
+    {
+      "symbol": "V",
+      "name": "Visa Inc.",
+      "sector": "Financials",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "MA",
+      "name": "Mastercard",
+      "sector": "Financials",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "JNJ",
+      "name": "Johnson & Johnson",
+      "sector": "Healthcare",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "LLY",
+      "name": "Eli Lilly",
+      "sector": "Healthcare",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "UNH",
+      "name": "UnitedHealth",
+      "sector": "Healthcare",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "XOM",
+      "name": "Exxon Mobil",
+      "sector": "Energy",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "CVX",
+      "name": "Chevron",
+      "sector": "Energy",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "WMT",
+      "name": "Walmart",
+      "sector": "Consumer Staples",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "COST",
+      "name": "Costco",
+      "sector": "Consumer Staples",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "PG",
+      "name": "Procter & Gamble",
+      "sector": "Consumer Staples",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "KO",
+      "name": "Coca-Cola",
+      "sector": "Consumer Staples",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "NKE",
+      "name": "Nike, Inc.",
+      "sector": "Consumer Discretionary",
+      "price": null,
+      "change": null,
+      "changePct": null
+    },
+    {
+      "symbol": "DIS",
+      "name": "Walt Disney",
+      "sector": "Communication Services",
+      "price": null,
+      "change": null,
+      "changePct": null
+    }
+  ]
 }
