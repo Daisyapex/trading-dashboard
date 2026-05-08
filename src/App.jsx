@@ -215,8 +215,7 @@ function useLiveQuote(symbol) {
 // TIMEFRAME-AWARE CANDLE FETCHING
 // ============================================================
 const TIMEFRAMES = [
-  { key: "1D", range: "1d", interval: "5m", label: "1D" },
-  { key: "5D", range: "5d", interval: "30m", label: "5D" },
+
   { key: "1M", range: "1mo", interval: "1d", label: "1M" },
   { key: "6M", range: "6mo", interval: "1d", label: "6M" },
   { key: "YTD", range: "ytd", interval: "1d", label: "YTD" },
