@@ -1,10 +1,5 @@
-// scripts/fetch.mjs
+// scripts/fetch.mjs — direct HTTP, manual Yahoo crumb auth (no external library)
 import { readFileSync, writeFileSync } from "node:fs";
-import YahooFinance from "yahoo-finance2";
-const YF = YahooFinance.default || YahooFinance;
-const yahooFinance = new YF();
-
-
 
 const FINNHUB_KEY = process.env.FINNHUB_KEY;
 if (!FINNHUB_KEY) {
@@ -15,6 +10,68 @@ if (!FINNHUB_KEY) {
 const FINNHUB = "https://finnhub.io/api/v1";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Browser-like User-Agent — Yahoo blocks generic UAs
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.5",
+};
+
+// ============ Yahoo cookie + crumb auth ============
+let YAHOO_COOKIE = null;
+let YAHOO_CRUMB = null;
+
+async function ensureYahooAuth() {
+  if (YAHOO_COOKIE && YAHOO_CRUMB) return true;
+
+  try {
+    // Step 1: Get the consent cookie from fc.yahoo.com (provides A1/A3 cookies)
+    const r1 = await fetch("https://fc.yahoo.com/", {
+      headers: BROWSER_HEADERS, redirect: "manual",
+    });
+    const setCookie = r1.headers.get("set-cookie") || "";
+    if (setCookie) {
+      // Extract just the name=value pairs (drop the metadata)
+      YAHOO_COOKIE = setCookie.split(",").map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
+    }
+
+    if (!YAHOO_COOKIE) {
+      // Fallback: try query1 root
+      const r2 = await fetch("https://query1.finance.yahoo.com/", { headers: BROWSER_HEADERS });
+      const sc2 = r2.headers.get("set-cookie") || "";
+      YAHOO_COOKIE = sc2.split(",").map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
+    }
+
+    if (!YAHOO_COOKIE) {
+      console.warn("Could not obtain Yahoo cookies");
+      return false;
+    }
+
+    // Step 2: Get the crumb using the cookie
+    const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE },
+    });
+    if (!crumbRes.ok) {
+      console.warn(`Yahoo crumb request failed: ${crumbRes.status}`);
+      return false;
+    }
+    YAHOO_CRUMB = (await crumbRes.text()).trim();
+
+    if (!YAHOO_CRUMB || YAHOO_CRUMB.length > 50) {
+      console.warn(`Invalid crumb received: ${YAHOO_CRUMB?.slice(0, 30)}`);
+      YAHOO_CRUMB = null;
+      return false;
+    }
+
+    console.log(`Yahoo auth OK (crumb=${YAHOO_CRUMB.slice(0, 8)}...)`);
+    return true;
+  } catch (e) {
+    console.warn(`Yahoo auth failed: ${e.message}`);
+    return false;
+  }
+}
+
+// ============ Finnhub helper ============
 async function finnhub(path, params = {}) {
   const qs = new URLSearchParams({ ...params, token: FINNHUB_KEY });
   const url = `${FINNHUB}${path}?${qs}`;
@@ -28,58 +85,95 @@ async function finnhub(path, params = {}) {
   return res.json();
 }
 
-// Yahoo candles via library
-async function yahooCandles(symbol, period1, interval) {
+// ============ Yahoo candles (no auth needed for chart endpoint) ============
+async function yahooCandles(symbol, range = "1y", interval = "1d") {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
   try {
-    const result = await yahooFinance.chart(symbol, {
-      period1: new Date(period1 * 1000),
-      period2: new Date(),
-      interval,
-    });
-    if (!result?.quotes) return [];
-    return result.quotes
-      .filter((q) => q.close != null)
-      .map((q) => ({
-        date: new Date(q.date).toISOString().slice(0, 10),
-        time: Math.floor(new Date(q.date).getTime() / 1000),
-        open: +(q.open ?? q.close).toFixed(2),
-        high: +(q.high ?? q.close).toFixed(2),
-        low: +(q.low ?? q.close).toFixed(2),
-        close: +q.close.toFixed(2),
-        volume: q.volume || 0,
-      }));
+    const res = await fetch(url, { headers: BROWSER_HEADERS });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return [];
+    const ts = result.timestamp || [];
+    const q = result.indicators?.quote?.[0] || {};
+    const candles = [];
+    for (let i = 0; i < ts.length; i++) {
+      if (q.close[i] == null) continue;
+      candles.push({
+        date: new Date(ts[i] * 1000).toISOString().slice(0, 10),
+        time: ts[i],
+        open: +(q.open[i] ?? q.close[i]).toFixed(2),
+        high: +(q.high[i] ?? q.close[i]).toFixed(2),
+        low: +(q.low[i] ?? q.close[i]).toFixed(2),
+        close: +q.close[i].toFixed(2),
+        volume: q.volume[i] || 0,
+      });
+    }
+    return candles;
   } catch (e) {
     console.warn(`yahoo candles ${symbol}: ${e.message}`);
     return [];
   }
 }
 
-// Yahoo quoteSummary — uses library, auto-handles auth/crumbs
+// ============ Yahoo quoteSummary (needs cookie + crumb) ============
 async function yahooSummary(symbol) {
+  if (!YAHOO_CRUMB) return null;
+  const modules = [
+    "financialData", "defaultKeyStatistics", "summaryDetail", "price",
+    "recommendationTrend", "upgradeDowngradeHistory",
+    "earningsTrend", "earningsHistory",
+    "insiderTransactions", "majorHoldersBreakdown",
+  ].join(",");
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
   try {
-    const modules = [
-      "financialData", "defaultKeyStatistics", "summaryDetail", "price",
-      "recommendationTrend", "upgradeDowngradeHistory",
-      "earningsTrend", "earningsHistory",
-      "insiderTransactions", "majorHoldersBreakdown",
-    ];
-    const result = await yahooFinance.quoteSummary(symbol, { modules });
-    return result || null;
+    const res = await fetch(url, {
+      headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE },
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        // Crumb expired — refresh and retry once
+        console.warn(`crumb expired for ${symbol}, refreshing...`);
+        YAHOO_COOKIE = null; YAHOO_CRUMB = null;
+        await ensureYahooAuth();
+        if (YAHOO_CRUMB) {
+          const url2 = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
+          const res2 = await fetch(url2, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE } });
+          if (res2.ok) {
+            const data = await res2.json();
+            return data?.quoteSummary?.result?.[0] || null;
+          }
+        }
+      }
+      console.warn(`yahoo summary ${symbol}: HTTP ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    return data?.quoteSummary?.result?.[0] || null;
   } catch (e) {
-    console.warn(`yahoo summary ${symbol}: ${e.message?.slice(0, 80)}`);
+    console.warn(`yahoo summary ${symbol}: ${e.message}`);
     return null;
   }
 }
 
+// Helper: extract raw number from Yahoo response (which wraps as { raw, fmt })
+const v = (obj, ...path) => {
+  let cur = obj;
+  for (const p of path) {
+    if (cur == null) return null;
+    cur = cur[p];
+  }
+  if (cur == null) return null;
+  if (typeof cur === "object" && "raw" in cur) return cur.raw;
+  return cur;
+};
+
 async function fetchTicker(t) {
   console.log(`Fetching ${t.symbol}${t.holding ? " (HOLDING)" : ""}...`);
 
-  const period1Y = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365;
-  const period5Y = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 365 * 5;
-
   const [candles1Y, candles5Y, quote, profile, metrics, recs, summary] = await Promise.all([
-    yahooCandles(t.symbol, period1Y, "1d"),
-    yahooCandles(t.symbol, period5Y, "1wk"),
+    yahooCandles(t.symbol, "1y", "1d"),
+    yahooCandles(t.symbol, "5y", "1wk"),
     finnhub("/quote", { symbol: t.symbol }),
     finnhub("/stock/profile2", { symbol: t.symbol }),
     finnhub("/stock/metric", { symbol: t.symbol, metric: "all" }),
@@ -101,16 +195,16 @@ async function fetchTicker(t) {
       const fd = ys?.financialData || {};
       peerData[p] = {
         price: q?.c ?? null,
-        pe: sd.trailingPE ?? m?.metric?.peBasicExclExtraTTM ?? null,
-        fwdPe: ks.forwardPE ?? sd.forwardPE ?? null,
-        peg: ks.pegRatio ?? ks.trailingPegRatio ?? null,
-        ps: sd.priceToSalesTrailing12Months ?? m?.metric?.psTTM ?? null,
-        evEbitda: ks.enterpriseToEbitda ?? null,
-        roe: fd.returnOnEquity != null ? fd.returnOnEquity * 100 : (m?.metric?.roeTTM ?? null),
-        mcap: sd.marketCap != null ? sd.marketCap / 1e6 : (m?.metric?.marketCapitalization ?? null),
+        pe: v(sd, "trailingPE") ?? m?.metric?.peBasicExclExtraTTM ?? null,
+        fwdPe: v(ks, "forwardPE") ?? v(sd, "forwardPE") ?? null,
+        peg: v(ks, "pegRatio") ?? v(ks, "trailingPegRatio") ?? null,
+        ps: v(sd, "priceToSalesTrailing12Months") ?? m?.metric?.psTTM ?? null,
+        evEbitda: v(ks, "enterpriseToEbitda") ?? null,
+        roe: v(fd, "returnOnEquity") != null ? v(fd, "returnOnEquity") * 100 : (m?.metric?.roeTTM ?? null),
+        mcap: v(sd, "marketCap") != null ? v(sd, "marketCap") / 1e6 : (m?.metric?.marketCapitalization ?? null),
       };
     }
-    await sleep(200);
+    await sleep(250);
   }
 
   const m = metrics?.metric || {};
@@ -130,38 +224,33 @@ async function fetchTicker(t) {
   const recTrend = summary?.recommendationTrend?.trend || [];
   const upgrades = summary?.upgradeDowngradeHistory?.history || [];
   const analystData = {
-    targetMean: fd.targetMeanPrice ?? null,
-    targetHigh: fd.targetHighPrice ?? null,
-    targetLow: fd.targetLowPrice ?? null,
-    targetMedian: fd.targetMedianPrice ?? null,
-    numAnalysts: fd.numberOfAnalystOpinions ?? null,
+    targetMean: v(fd, "targetMeanPrice"),
+    targetHigh: v(fd, "targetHighPrice"),
+    targetLow: v(fd, "targetLowPrice"),
+    targetMedian: v(fd, "targetMedianPrice"),
+    numAnalysts: v(fd, "numberOfAnalystOpinions"),
     monthlyTrend: recTrend.slice(0, 4).reverse().map((r) => ({
       period: r.period, strongBuy: r.strongBuy ?? 0, buy: r.buy ?? 0,
       hold: r.hold ?? 0, sell: r.sell ?? 0, strongSell: r.strongSell ?? 0,
     })),
     latestActions: upgrades.slice(0, 5).map((u) => ({
-      date: u.epochGradeDate ? new Date(u.epochGradeDate).toISOString().slice(0, 10) : null,
+      date: u.epochGradeDate ? new Date(u.epochGradeDate * 1000).toISOString().slice(0, 10) : null,
       firm: u.firm ?? null, toGrade: u.toGrade ?? null,
       fromGrade: u.fromGrade ?? null, action: u.action ?? null,
     })),
   };
 
-  // Lynch metrics
+  // Lynch
   const earningsTrend = summary?.earningsTrend?.trend || [];
   const nextYrTrend = earningsTrend.find((e) => e.period === "+1y") || {};
   const fiveYrTrend = earningsTrend.find((e) => e.period === "+5y") || {};
-  const epsGrowthNext = nextYrTrend?.growth ?? null;
-  const fiveYrGrowth = fiveYrTrend?.growth ?? null;
-
+  const epsGrowthNext = v(nextYrTrend, "growth");
+  const fiveYrGrowth = v(fiveYrTrend, "growth");
   const earningsHistoryArr = summary?.earningsHistory?.history || [];
   const epsHistory = earningsHistoryArr.map((e) => ({
-    quarter: e.quarter ?? null,
-    actual: e.epsActual ?? null,
-    estimate: e.epsEstimate ?? null,
-    surprise: e.epsDifference ?? null,
-    surprisePct: e.surprisePercent ?? null,
+    actual: v(e, "epsActual"), estimate: v(e, "epsEstimate"),
+    surprise: v(e, "epsDifference"), surprisePct: v(e, "surprisePercent"),
   })).filter((e) => e.actual != null);
-
   const epsValues = epsHistory.map((e) => e.actual).filter((v) => v != null);
   const epsMean = epsValues.length ? epsValues.reduce((s, x) => s + x, 0) / epsValues.length : null;
   const epsStdev = epsValues.length > 1 ? Math.sqrt(epsValues.reduce((s, x) => s + (x - epsMean) ** 2, 0) / epsValues.length) : null;
@@ -173,16 +262,16 @@ async function fetchTicker(t) {
     const txt = (tx.transactionText || "").toLowerCase();
     const isBuy = txt.includes("purchase") || txt.includes("buy");
     const isSell = txt.includes("sale") || txt.includes("sell");
-    const value = tx.value ?? 0;
+    const value = v(tx, "value") ?? 0;
     if (isBuy) { insiderBuys++; insiderBuyValue += value; }
     if (isSell) { insiderSells++; insiderSellValue += value; }
   });
 
-  const mcap = sd.marketCap;
-  const revG = fd.revenueGrowth;
+  const mcapRaw = v(sd, "marketCap");
+  const revG = v(fd, "revenueGrowth");
   let lynchCategory = "—";
-  if (mcap && revG != null) {
-    if (mcap > 200e9 && Math.abs(revG) < 0.05) lynchCategory = "Stalwart";
+  if (mcapRaw && revG != null) {
+    if (mcapRaw > 200e9 && Math.abs(revG) < 0.05) lynchCategory = "Stalwart";
     else if (revG > 0.20) lynchCategory = "Fast Grower";
     else if (revG < -0.05) lynchCategory = "Turnaround";
     else if (revG < 0.05) lynchCategory = "Slow Grower";
@@ -199,18 +288,18 @@ async function fetchTicker(t) {
     insiderBuyValue: Math.round(insiderBuyValue),
     insiderSellValue: Math.round(insiderSellValue),
     netInsiderActivity: insiderBuyValue - insiderSellValue,
-    heldByInsiders: ks.heldPercentInsiders ?? null,
-    heldByInstitutions: ks.heldPercentInstitutions ?? null,
-    shortRatio: ks.shortRatio ?? null,
-    shortPctFloat: ks.shortPercentOfFloat ?? null,
-    pegRatio: ks.pegRatio ?? ks.trailingPegRatio ?? m.pegRatio ?? null,
+    heldByInsiders: v(ks, "heldPercentInsiders"),
+    heldByInstitutions: v(ks, "heldPercentInstitutions"),
+    shortRatio: v(ks, "shortRatio"),
+    shortPctFloat: v(ks, "shortPercentOfFloat"),
+    pegRatio: v(ks, "pegRatio") ?? v(ks, "trailingPegRatio") ?? m.pegRatio ?? null,
   };
 
   const simonsData = candles1Y && candles1Y.length >= 50 ? computeSimonsMetrics(candles1Y) : null;
 
   return {
     symbol: t.symbol,
-    name: t.name || profile?.name || pr?.shortName || t.symbol,
+    name: t.name || profile?.name || v(pr, "shortName") || t.symbol,
     sector: t.sector || profile?.finnhubIndustry || "—",
     peers: t.peers || [],
     holding: !!t.holding,
@@ -219,42 +308,41 @@ async function fetchTicker(t) {
       current: quote?.c ?? null, change: quote?.d ?? null, changePct: quote?.dp ?? null,
       high: quote?.h ?? null, low: quote?.l ?? null, open: quote?.o ?? null, prevClose: quote?.pc ?? null,
     },
-    candles: candles1Y || [],
-    candles5Y: candles5Y || [],
+    candles: candles1Y || [], candles5Y: candles5Y || [],
     fundamentals: {
-      pe: sd.trailingPE ?? m.peBasicExclExtraTTM ?? m.peTTM ?? null,
-      fwdPe: ks.forwardPE ?? sd.forwardPE ?? null,
-      peg: ks.pegRatio ?? ks.trailingPegRatio ?? m.pegRatio ?? null,
-      pb: ks.priceToBook ?? m.pbAnnual ?? m.pbQuarterly ?? null,
-      ps: sd.priceToSalesTrailing12Months ?? m.psTTM ?? null,
-      evEbitda: ks.enterpriseToEbitda ?? m["enterpriseValue/EBITDATTM"] ?? null,
-      divYield: sd.dividendYield != null ? sd.dividendYield * 100 : (m.dividendYieldIndicatedAnnual ?? null),
-      divRate: sd.dividendRate ?? null,
-      qtrlyDivAmt: ks.lastDividendValue ?? null,
-      payout: sd.payoutRatio != null ? sd.payoutRatio * 100 : (m.payoutRatioTTM ?? null),
-      roe: fd.returnOnEquity != null ? fd.returnOnEquity * 100 : (m.roeTTM ?? null),
+      pe: v(sd, "trailingPE") ?? m.peBasicExclExtraTTM ?? m.peTTM ?? null,
+      fwdPe: v(ks, "forwardPE") ?? v(sd, "forwardPE") ?? null,
+      peg: v(ks, "pegRatio") ?? v(ks, "trailingPegRatio") ?? m.pegRatio ?? null,
+      pb: v(ks, "priceToBook") ?? m.pbAnnual ?? m.pbQuarterly ?? null,
+      ps: v(sd, "priceToSalesTrailing12Months") ?? m.psTTM ?? null,
+      evEbitda: v(ks, "enterpriseToEbitda") ?? m["enterpriseValue/EBITDATTM"] ?? null,
+      divYield: v(sd, "dividendYield") != null ? v(sd, "dividendYield") * 100 : (m.dividendYieldIndicatedAnnual ?? null),
+      divRate: v(sd, "dividendRate"),
+      qtrlyDivAmt: v(ks, "lastDividendValue"),
+      payout: v(sd, "payoutRatio") != null ? v(sd, "payoutRatio") * 100 : (m.payoutRatioTTM ?? null),
+      roe: v(fd, "returnOnEquity") != null ? v(fd, "returnOnEquity") * 100 : (m.roeTTM ?? null),
       roic: m.roiTTM ?? null,
-      debtEq: fd.debtToEquity ?? m["totalDebt/totalEquityAnnual"] ?? null,
-      eps: ks.trailingEps ?? m.epsBasicExclExtraItemsTTM ?? null,
-      epsForward: ks.forwardEps ?? null,
-      revGrowth: fd.revenueGrowth != null ? fd.revenueGrowth * 100 : (m.revenueGrowthTTMYoy ?? null),
-      grossMargin: fd.grossMargins != null ? fd.grossMargins * 100 : (m.grossMarginTTM ?? null),
-      opMargin: fd.operatingMargins != null ? fd.operatingMargins * 100 : (m.operatingMarginTTM ?? null),
-      profitMargin: fd.profitMargins != null ? fd.profitMargins * 100 : null,
-      mcap: sd.marketCap != null ? sd.marketCap / 1e6 : (m.marketCapitalization ?? null),
-      mcapRaw: sd.marketCap ?? null,
-      week52High: sd.fiftyTwoWeekHigh ?? m["52WeekHigh"] ?? null,
-      week52Low: sd.fiftyTwoWeekLow ?? m["52WeekLow"] ?? null,
-      avgVol: sd.averageVolume ?? null,
-      beta: ks.beta ?? m.beta ?? null,
-      sharesOut: ks.sharesOutstanding ?? null,
-      bookValue: ks.bookValue ?? null,
-      currentRatio: fd.currentRatio ?? null,
-      quickRatio: fd.quickRatio ?? null,
-      totalCash: fd.totalCash ?? null,
-      totalDebt: fd.totalDebt ?? null,
-      freeCashflow: fd.freeCashflow ?? null,
-      operCashflow: fd.operatingCashflow ?? null,
+      debtEq: v(fd, "debtToEquity") ?? m["totalDebt/totalEquityAnnual"] ?? null,
+      eps: v(ks, "trailingEps") ?? m.epsBasicExclExtraItemsTTM ?? null,
+      epsForward: v(ks, "forwardEps"),
+      revGrowth: v(fd, "revenueGrowth") != null ? v(fd, "revenueGrowth") * 100 : (m.revenueGrowthTTMYoy ?? null),
+      grossMargin: v(fd, "grossMargins") != null ? v(fd, "grossMargins") * 100 : (m.grossMarginTTM ?? null),
+      opMargin: v(fd, "operatingMargins") != null ? v(fd, "operatingMargins") * 100 : (m.operatingMarginTTM ?? null),
+      profitMargin: v(fd, "profitMargins") != null ? v(fd, "profitMargins") * 100 : null,
+      mcap: mcapRaw != null ? mcapRaw / 1e6 : (m.marketCapitalization ?? null),
+      mcapRaw,
+      week52High: v(sd, "fiftyTwoWeekHigh") ?? m["52WeekHigh"] ?? null,
+      week52Low: v(sd, "fiftyTwoWeekLow") ?? m["52WeekLow"] ?? null,
+      avgVol: v(sd, "averageVolume"),
+      beta: v(ks, "beta") ?? m.beta ?? null,
+      sharesOut: v(ks, "sharesOutstanding"),
+      bookValue: v(ks, "bookValue"),
+      currentRatio: v(fd, "currentRatio"),
+      quickRatio: v(fd, "quickRatio"),
+      totalCash: v(fd, "totalCash"),
+      totalDebt: v(fd, "totalDebt"),
+      freeCashflow: v(fd, "freeCashflow"),
+      operCashflow: v(fd, "operatingCashflow"),
     },
     consensus: {
       rating, score: score != null ? +score.toFixed(2) : null, analysts: totalRecs || null,
@@ -272,48 +360,34 @@ async function fetchTicker(t) {
 function computeSimonsMetrics(candles) {
   const closes = candles.map((c) => c.close);
   const returns = closes.slice(1).map((c, i) => Math.log(c / closes[i]));
-
   const autocorr = (k) => {
     if (returns.length < k + 5) return null;
-    const r = returns.slice(0, returns.length - k);
-    const rk = returns.slice(k);
+    const r = returns.slice(0, returns.length - k); const rk = returns.slice(k);
     const m1 = r.reduce((s, x) => s + x, 0) / r.length;
     const m2 = rk.reduce((s, x) => s + x, 0) / rk.length;
     let num = 0, d1 = 0, d2 = 0;
     for (let i = 0; i < r.length; i++) {
       num += (r[i] - m1) * (rk[i] - m2);
-      d1 += (r[i] - m1) ** 2;
-      d2 += (rk[i] - m2) ** 2;
+      d1 += (r[i] - m1) ** 2; d2 += (rk[i] - m2) ** 2;
     }
     return d1 && d2 ? +(num / Math.sqrt(d1 * d2)).toFixed(3) : null;
   };
-
   const atr = (() => {
     if (candles.length < 15) return null;
     const trs = [];
     for (let i = 1; i < candles.length; i++) {
-      const tr = Math.max(
-        candles[i].high - candles[i].low,
+      const tr = Math.max(candles[i].high - candles[i].low,
         Math.abs(candles[i].high - candles[i - 1].close),
-        Math.abs(candles[i].low - candles[i - 1].close)
-      );
+        Math.abs(candles[i].low - candles[i - 1].close));
       trs.push(tr);
     }
-    const last14 = trs.slice(-14);
-    return +(last14.reduce((s, x) => s + x, 0) / 14).toFixed(2);
+    return +(trs.slice(-14).reduce((s, x) => s + x, 0) / 14).toFixed(2);
   })();
-
   let peak = closes[0]; let mdd = 0;
-  for (const c of closes) {
-    if (c > peak) peak = c;
-    const dd = (c - peak) / peak;
-    if (dd < mdd) mdd = dd;
-  }
-
+  for (const c of closes) { if (c > peak) peak = c; const dd = (c - peak) / peak; if (dd < mdd) mdd = dd; }
   const meanR = returns.reduce((s, x) => s + x, 0) / returns.length;
   const sdR = Math.sqrt(returns.reduce((s, x) => s + (x - meanR) ** 2, 0) / returns.length);
   const sharpe = sdR ? +(meanR / sdR * Math.sqrt(252)).toFixed(2) : null;
-
   const obv = [0];
   for (let i = 1; i < candles.length; i++) {
     const prev = obv[i - 1];
@@ -324,27 +398,26 @@ function computeSimonsMetrics(candles) {
   const obv20 = obv.slice(-20);
   const obvSlope = obv20.length === 20 ? (obv20[19] - obv20[0]) / 20 : null;
   const obvTrend = obvSlope == null ? "—" : obvSlope > 0 ? "Accumulation" : obvSlope < 0 ? "Distribution" : "Neutral";
-
   const dowReturns = [[], [], [], [], []];
   for (let i = 1; i < candles.length; i++) {
     const day = new Date(candles[i].date).getUTCDay();
     if (day >= 1 && day <= 5) dowReturns[day - 1].push(returns[i - 1]);
   }
   const dowAvg = dowReturns.map((arr) => arr.length ? +(arr.reduce((s, x) => s + x, 0) / arr.length * 100).toFixed(3) : null);
-
   return {
-    autocorrLag1: autocorr(1),
-    autocorrLag5: autocorr(5),
-    autocorrLag20: autocorr(20),
-    atr14: atr,
-    maxDrawdown: +(mdd * 100).toFixed(2),
-    sharpe1Y: sharpe,
-    obvTrend,
-    dowAvgReturns: dowAvg,
+    autocorrLag1: autocorr(1), autocorrLag5: autocorr(5), autocorrLag20: autocorr(20),
+    atr14: atr, maxDrawdown: +(mdd * 100).toFixed(2),
+    sharpe1Y: sharpe, obvTrend, dowAvgReturns: dowAvg,
   };
 }
 
 async function main() {
+  console.log("Initializing Yahoo Finance auth...");
+  const ok = await ensureYahooAuth();
+  if (!ok) {
+    console.warn("⚠️  Yahoo auth failed — fundamentals will be Finnhub-only");
+  }
+
   const config = JSON.parse(readFileSync("tickers.json", "utf8"));
   const out = { generatedAt: new Date().toISOString(), tickers: [] };
 
