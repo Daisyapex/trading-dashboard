@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, ReferenceLine, Cell, ComposedChart, Rectangle,
+  ResponsiveContainer, ReferenceLine, Cell, ComposedChart,
 } from "recharts";
 import {
   Activity, DollarSign, Users, MessageSquare, AlertCircle,
   Search, ChevronRight, Sigma, GitCompare, Briefcase, Loader2,
-  Menu, X,
+  Menu, X, Target, TrendingUp, TrendingDown,
 } from "lucide-react";
+import { createChart, CandlestickSeries, LineSeries, HistogramSeries } from "lightweight-charts";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -113,42 +114,77 @@ const realizedVol = (data, period = 30) => {
 };
 
 // ============================================================
-// CANDLESTICK CUSTOM SHAPE
+// TRADINGVIEW CANDLESTICK CHART COMPONENT
 // ============================================================
-// Renders OHLC as a candlestick: thin wick (high-low) + thick body (open-close).
-// Recharts gives us x, y, width, height for the bar; we use that to compute
-// the candle geometry from the original OHLC data.
-const Candlestick = (props) => {
-  const { x, width, payload, yAxis } = props;
-  if (!payload || payload.open == null || payload.close == null || !yAxis?.scale) return null;
-  const { open, close, high, low } = payload;
-  const isUp = close >= open;
-  const color = isUp ? "#0a8554" : "#c4314b";
-  const fill = isUp ? "#0a8554" : "#c4314b";
+function CandlestickChart({ data, height = 400 }) {
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
 
-  // Scale prices to pixel positions
-  const yHigh = yAxis.scale(high);
-  const yLow = yAxis.scale(low);
-  const yOpen = yAxis.scale(open);
-  const yClose = yAxis.scale(close);
-  const bodyTop = Math.min(yOpen, yClose);
-  const bodyBottom = Math.max(yOpen, yClose);
-  const bodyHeight = Math.max(1, bodyBottom - bodyTop);
+  useEffect(() => {
+    if (!containerRef.current || !data?.length) return;
 
-  // Candle body width (slimmer than bar slot)
-  const bodyW = Math.max(2, width * 0.7);
-  const bodyX = x + (width - bodyW) / 2;
-  const wickX = x + width / 2;
+    const chart = createChart(containerRef.current, {
+      width: containerRef.current.clientWidth,
+      height,
+      layout: {
+        background: { type: "solid", color: "#ffffff" },
+        textColor: "#1a1f2c",
+        fontFamily: "'IBM Plex Mono', monospace",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: "#efece5" },
+        horzLines: { color: "#efece5" },
+      },
+      rightPriceScale: { borderColor: "#e6e3db" },
+      timeScale: { borderColor: "#e6e3db", timeVisible: false, secondsVisible: false },
+      crosshair: {
+        mode: 1, // Magnet mode
+        vertLine: { color: "#d4a017", style: 2, labelBackgroundColor: "#1a1f2c" },
+        horzLine: { color: "#d4a017", style: 2, labelBackgroundColor: "#1a1f2c" },
+      },
+    });
+    chartRef.current = chart;
 
-  return (
-    <g>
-      {/* Wick */}
-      <line x1={wickX} x2={wickX} y1={yHigh} y2={yLow} stroke={color} strokeWidth={1} />
-      {/* Body */}
-      <rect x={bodyX} y={bodyTop} width={bodyW} height={bodyHeight} fill={fill} stroke={color} strokeWidth={0.5} />
-    </g>
-  );
-};
+    // Candlestick series
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "#0a8554", downColor: "#c4314b",
+      borderUpColor: "#0a8554", borderDownColor: "#c4314b",
+      wickUpColor: "#0a8554", wickDownColor: "#c4314b",
+    });
+    candleSeries.setData(data.map((d) => ({
+      time: d.date, open: d.open, high: d.high, low: d.low, close: d.close,
+    })));
+
+    // SMA overlays
+    const addLine = (key, color) => {
+      const series = chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      const lineData = data.filter((d) => d[key] != null).map((d) => ({ time: d.date, value: d[key] }));
+      if (lineData.length) series.setData(lineData);
+      return series;
+    };
+    addLine("sma20", "#d4a017");
+    addLine("sma50", "#86b09c");
+    addLine("sma200", "#7ba2cc");
+
+    chart.timeScale().fitContent();
+
+    // Resize handler
+    const handleResize = () => {
+      if (containerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
+      }
+    };
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+    };
+  }, [data, height]);
+
+  return <div ref={containerRef} style={{ width: "100%", height }} />;
+}
 
 // ============================================================
 // LIVE FETCHING
@@ -226,6 +262,7 @@ async function fetchAdHoc(symbol) {
       hold: latestRec.hold ?? 0, sell: latestRec.sell ?? 0, strongSell: latestRec.strongSell ?? 0,
       sells, period: latestRec.period ?? null,
     },
+    analyst: null, // Ad-hoc doesn't fetch Yahoo analyst data
     isAdHoc: true,
   };
 }
@@ -237,26 +274,6 @@ const fmt = (n, d = 2) => (n == null || isNaN(n) ? "—" : Number(n).toFixed(d))
 const pct = (n) => (n == null || isNaN(n) ? "—" : `${n > 0 ? "+" : ""}${Number(n).toFixed(2)}%`);
 const colorFor = (n) => (n > 0 ? "#0a8554" : n < 0 ? "#c4314b" : "#5a6573");
 const labelFromDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-// Custom tooltip for candlestick
-const CandleTooltip = ({ active, payload }) => {
-  if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload;
-  if (!d) return null;
-  const isUp = d.close >= d.open;
-  return (
-    <div style={{ background: "#1a1f2c", border: "1px solid #d4a017", borderRadius: 2, padding: "8px 10px", fontSize: 11, color: "#fff", fontFamily: "'IBM Plex Mono', monospace" }}>
-      <div style={{ color: "#d4a017", fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
-      <div>O: <span style={{ color: "#fff" }}>{fmt(d.open)}</span></div>
-      <div>H: <span style={{ color: "#0a8554" }}>{fmt(d.high)}</span></div>
-      <div>L: <span style={{ color: "#c4314b" }}>{fmt(d.low)}</span></div>
-      <div>C: <span style={{ color: isUp ? "#0a8554" : "#c4314b", fontWeight: 600 }}>{fmt(d.close)}</span></div>
-      {d.sma20 && <div style={{ marginTop: 4, color: "#d4a017" }}>SMA20: {fmt(d.sma20)}</div>}
-      {d.sma50 && <div style={{ color: "#86b09c" }}>SMA50: {fmt(d.sma50)}</div>}
-      {d.sma200 && <div style={{ color: "#7ba2cc" }}>SMA200: {fmt(d.sma200)}</div>}
-    </div>
-  );
-};
 
 // ============================================================
 // MAIN
@@ -320,20 +337,16 @@ export default function App() {
   const displayQuote = live.quote || data.quote;
   const f = data.fundamentals;
   const c = data.consensus;
+  const a = data.analyst;
 
   let last, lastRsi, lastZ, sqzActive, hurst, rv30, rv90, chartData,
-      trendSignal, momentumSignal, reversionSignal, regimeSignal,
-      yMin, yMax;
+      trendSignal, momentumSignal, reversionSignal, regimeSignal;
   if (enriched) {
     last = enriched[enriched.length - 1];
     lastRsi = last.rsi; lastZ = last.zscore; sqzActive = last.sqz_on;
     hurst = hurstExponent(enriched, Math.min(100, enriched.length - 1));
     rv30 = realizedVol(enriched, 30); rv90 = realizedVol(enriched, 90);
     chartData = enriched.slice(-120);
-    // Compute price domain including SMA200 to keep all overlays in view
-    const allPrices = chartData.flatMap((d) => [d.high, d.low, d.sma20, d.sma50, d.sma200].filter((x) => x != null));
-    yMin = Math.min(...allPrices) * 0.98;
-    yMax = Math.max(...allPrices) * 1.02;
     trendSignal = last.close > last.sma50 && last.sma50 > last.sma200 ? "Bullish trend" :
                   last.close < last.sma50 && last.sma50 < last.sma200 ? "Bearish trend" : "Mixed";
     momentumSignal = lastRsi > 70 ? "Overbought" : lastRsi < 30 ? "Oversold" : "Neutral";
@@ -438,6 +451,13 @@ export default function App() {
             </div>
           </div>
 
+          {/* ============================================================ */}
+          {/* ANALYST INSIGHTS PANEL — at the top, like your reference image */}
+          {/* ============================================================ */}
+          {a && a.targetMean && (
+            <AnalystInsightsPanel data={data} a={a} c={c} currentPrice={displayQuote.current} isMobile={isMobile} />
+          )}
+
           {enriched && (
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
               <SignalCard icon={Activity} label="Technical" value={trendSignal} />
@@ -458,11 +478,11 @@ export default function App() {
             </div>
           )}
 
-          {/* TECHNICAL CHARTS — CANDLESTICK */}
+          {/* TRADINGVIEW CANDLESTICK CHART */}
           {enriched && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-head">
-                <span className="panel-title">Candlestick · 120D</span>
+                <span className="panel-title">Candlestick · 1Y · Daily</span>
                 {!isMobile && (
                   <span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>
                     <span style={{ color: "#0a8554" }}>▲</span> bullish &nbsp;
@@ -473,49 +493,34 @@ export default function App() {
                   </span>
                 )}
               </div>
-              {/* Candlestick chart */}
-              <div style={{ padding: "8px 4px 0" }}>
-                <ResponsiveContainer width="100%" height={isMobile ? 240 : 320}>
-                  <ComposedChart data={chartData} margin={{ top: 8, right: isMobile ? 44 : 56, left: 0, bottom: 0 }} syncId="tech">
-                    <XAxis dataKey="label" hide />
-                    <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" domain={[yMin, yMax]} orientation="right" width={isMobile ? 44 : 56} />
-                    <Tooltip content={<CandleTooltip />} cursor={{ stroke: "#d4a017", strokeDasharray: "3 3", strokeWidth: 0.8 }} />
-                    {/* Candlesticks rendered as custom-shape bars over the (low) baseline */}
-                    <Bar dataKey="high" shape={<Candlestick />} isAnimationActive={false} />
-                    {/* SMA overlays */}
-                    <Line type="monotone" dataKey="sma20" stroke="#d4a017" strokeWidth={1.2} dot={false} name="SMA20" connectNulls />
-                    <Line type="monotone" dataKey="sma50" stroke="#86b09c" strokeWidth={1.2} dot={false} name="SMA50" connectNulls />
-                    <Line type="monotone" dataKey="sma200" stroke="#7ba2cc" strokeWidth={1.2} dot={false} name="SMA200" connectNulls />
-                  </ComposedChart>
-                </ResponsiveContainer>
+              <div style={{ padding: 4 }}>
+                <CandlestickChart data={enriched} height={isMobile ? 280 : 420} />
               </div>
 
-              {/* RSI */}
+              {/* RSI / MACD / SQZMOM still use Recharts since they're synced */}
               <div style={{ padding: "0 4px", borderTop: "1px solid #efece5" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
                   <span className="panel-title" style={{ fontSize: 10 }}>RSI(14)</span>
                   <span className="mono" style={{ fontSize: 10, color: lastRsi > 70 ? "#c4314b" : lastRsi < 30 ? "#0a8554" : "#1a1f2c" }}>{fmt(lastRsi, 1)}</span>
                 </div>
                 <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
-                  <LineChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }} syncId="tech">
+                  <LineChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }}>
                     <XAxis dataKey="label" hide />
                     <YAxis domain={[0, 100]} ticks={[30, 70]} tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={isMobile ? 44 : 56} />
                     <ReferenceLine y={70} stroke="#c4314b" strokeDasharray="2 2" strokeWidth={0.8} />
                     <ReferenceLine y={30} stroke="#0a8554" strokeDasharray="2 2" strokeWidth={0.8} />
                     <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} />
-                    <Line type="monotone" dataKey="rsi" stroke="#7c3aed" strokeWidth={1.2} dot={false} name="RSI" />
+                    <Line type="monotone" dataKey="rsi" stroke="#7c3aed" strokeWidth={1.2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-
-              {/* MACD */}
               <div style={{ padding: "0 4px", borderTop: "1px solid #efece5" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
                   <span className="panel-title" style={{ fontSize: 10 }}>MACD</span>
                   <span className="mono" style={{ fontSize: 10 }}>{fmt(last.macd, 2)} / {fmt(last.signal, 2)}</span>
                 </div>
                 <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
-                  <ComposedChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }} syncId="tech">
+                  <ComposedChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }}>
                     <XAxis dataKey="label" hide />
                     <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={isMobile ? 44 : 56} />
                     <ReferenceLine y={0} stroke="#5a6573" strokeWidth={0.5} />
@@ -526,15 +531,13 @@ export default function App() {
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
-
-              {/* SQZMOM */}
               <div style={{ padding: "0 4px 8px", borderTop: "1px solid #efece5" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
                   <span className="panel-title" style={{ fontSize: 10 }}>SQZMOM_LB</span>
                   <span className="mono" style={{ fontSize: 10 }}>{sqzActive ? <span style={{ color: "#c4314b" }}>● ON</span> : <span style={{ color: "#0a8554" }}>○ off</span>} · {fmt(last.sqz_mom, 2)}</span>
                 </div>
                 <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
-                  <BarChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }} syncId="tech">
+                  <BarChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }}>
                     <XAxis dataKey="label" tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" interval={Math.floor(chartData.length / (isMobile ? 4 : 8))} />
                     <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={isMobile ? 44 : 56} />
                     <ReferenceLine y={0} stroke="#5a6573" strokeWidth={0.5} />
@@ -584,9 +587,6 @@ export default function App() {
                   <StatRow label="Squeeze" value={<span className="mono">{sqzActive ? <span style={{ color: "#c4314b" }}>Compressed</span> : <span style={{ color: "#0a8554" }}>Released</span>}</span>} />
                   <StatRow label="50/200" value={<span className="mono">{last.sma50 > last.sma200 ? <span style={{ color: "#0a8554" }}>Golden</span> : <span style={{ color: "#c4314b" }}>Death</span>}</span>} />
                   <StatRow label="Beta" value={<span className="mono">{fmt(f.beta, 2)}</span>} />
-                  <div style={{ marginTop: 10, padding: 8, background: "#f5f3ed", borderRadius: 2, fontSize: 10, color: "#5a6573", lineHeight: 1.5 }}>
-                    <strong style={{ color: "#1a1f2c" }}>Regime:</strong> {regimeSignal}. {hurst < 0.45 ? "Mean-reversion outperforms here." : hurst > 0.55 ? "Trend-following outperforms." : "Mixed — reduce sizing."}
-                  </div>
                 </div>
               </div>
             </div>
@@ -712,7 +712,7 @@ export default function App() {
               <AlertCircle size={16} color="#d4a017" />
               <div style={{ flex: 1, fontSize: isMobile ? 11 : 12, lineHeight: 1.6 }}>
                 <span style={{ color: "#d4a017", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: 10 }}>Composite · </span>
-                Trend <strong>{trendSignal.toLowerCase()}</strong>, momentum {momentumSignal.toLowerCase()} (RSI {fmt(lastRsi, 0)}). Z-score {fmt(lastZ, 1)}σ — {reversionSignal.toLowerCase()}. Regime: <strong>{regimeSignal.toLowerCase()}</strong>. Street: <strong>{c.rating?.toLowerCase() ?? "n/a"}</strong>. P/E {fmt(f.pe, 1)} {peerAvg("pe") ? `vs peers ${fmt(peerAvg("pe"), 1)}` : ""}.
+                Trend <strong>{trendSignal.toLowerCase()}</strong>, momentum {momentumSignal.toLowerCase()} (RSI {fmt(lastRsi, 0)}). Z-score {fmt(lastZ, 1)}σ — {reversionSignal.toLowerCase()}. Regime: <strong>{regimeSignal.toLowerCase()}</strong>. Street: <strong>{c.rating?.toLowerCase() ?? "n/a"}</strong>{a?.targetMean ? `. Target $${fmt(a.targetMean, 0)} (${pct(((a.targetMean - displayQuote.current) / displayQuote.current) * 100)} upside)` : ""}.
               </div>
               {!isMobile && <ChevronRight size={16} color="#8a93a3" />}
             </div>
@@ -722,6 +722,141 @@ export default function App() {
     </div>
   );
 }
+
+// ============================================================
+// ANALYST INSIGHTS PANEL
+// ============================================================
+function AnalystInsightsPanel({ data, a, c, currentPrice, isMobile }) {
+  const upside = currentPrice && a.targetMean ? ((a.targetMean - currentPrice) / currentPrice) * 100 : null;
+  const targetPct = a.targetHigh && a.targetLow && currentPrice ?
+    ((currentPrice - a.targetLow) / (a.targetHigh - a.targetLow)) * 100 : 50;
+  const meanPct = a.targetHigh && a.targetLow ?
+    ((a.targetMean - a.targetLow) / (a.targetHigh - a.targetLow)) * 100 : 50;
+
+  return (
+    <div className="panel" style={{ marginBottom: 16, background: "#1a1f2c", borderColor: "#1a1f2c", color: "#fff" }}>
+      <div style={{ padding: isMobile ? "12px 14px 8px" : "14px 18px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #2d3548" }}>
+        <span style={{ fontSize: isMobile ? 13 : 15, fontWeight: 600, letterSpacing: "-0.01em" }}>Analyst Insights: <span style={{ color: "#d4a017" }}>{data.symbol}</span></span>
+        {a.numAnalysts && <span className="mono" style={{ fontSize: 10, color: "#8a93a3" }}>{a.numAnalysts} analysts</span>}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1.4fr 1.2fr 1fr", gap: 0 }}>
+        {/* CONSENSUS RATING */}
+        <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #2d3548", borderBottom: isMobile ? "1px solid #2d3548" : "none" }}>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Top Analyst Rating</div>
+          <div className="serif" style={{ fontSize: 22, fontWeight: 600, color: "#fff", marginBottom: 6 }}>{c.rating}</div>
+          {c.score && (
+            <>
+              <div style={{ height: 6, background: "#2d3548", borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
+                <div style={{ width: `${(c.score / 5) * 100}%`, height: "100%", background: c.score >= 4 ? "#4ade80" : c.score >= 3 ? "#d4a017" : "#f87171" }} />
+              </div>
+              <div className="mono" style={{ fontSize: 10, color: "#8a93a3" }}>{fmt(c.score, 1)}/5.0 · {c.buys} BUY · {c.hold} HOLD · {c.sells} SELL</div>
+            </>
+          )}
+        </div>
+
+        {/* PRICE TARGETS */}
+        <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #2d3548", borderBottom: isMobile ? "1px solid #2d3548" : "none" }}>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Analyst Price Targets</div>
+          <div style={{ position: "relative", marginBottom: 24, marginTop: 24 }}>
+            {/* Track */}
+            <div style={{ height: 4, background: "#2d3548", borderRadius: 2, position: "relative" }}>
+              {/* Current price marker */}
+              {currentPrice && (
+                <div style={{ position: "absolute", left: `${Math.max(2, Math.min(98, targetPct))}%`, top: -22, transform: "translateX(-50%)", textAlign: "center" }}>
+                  <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 2 }}>Current</div>
+                  <div className="mono" style={{ background: "#fff", color: "#1a1f2c", padding: "2px 6px", borderRadius: 2, fontSize: 11, fontWeight: 600 }}>${fmt(currentPrice)}</div>
+                </div>
+              )}
+              {/* Mean target marker */}
+              <div style={{ position: "absolute", left: `${Math.max(2, Math.min(98, meanPct))}%`, top: 12, transform: "translateX(-50%)", textAlign: "center" }}>
+                <div className="mono" style={{ background: "#d4a017", color: "#1a1f2c", padding: "2px 6px", borderRadius: 2, fontSize: 11, fontWeight: 600 }}>${fmt(a.targetMean, 0)}</div>
+                <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 2 }}>Avg Target</div>
+              </div>
+              {/* Dots at low/high */}
+              <div style={{ position: "absolute", left: 0, top: -3, width: 10, height: 10, borderRadius: "50%", background: "#c4314b" }} />
+              <div style={{ position: "absolute", right: 0, top: -3, width: 10, height: 10, borderRadius: "50%", background: "#0a8554" }} />
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 28 }}>
+            <div>
+              <div className="mono" style={{ fontSize: 13, fontWeight: 500, color: "#f87171" }}>${fmt(a.targetLow, 0)}</div>
+              <div style={{ fontSize: 9, color: "#8a93a3" }}>Low</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div className="mono" style={{ fontSize: 13, fontWeight: 500, color: "#4ade80" }}>${fmt(a.targetHigh, 0)}</div>
+              <div style={{ fontSize: 9, color: "#8a93a3" }}>High</div>
+            </div>
+          </div>
+          {upside != null && (
+            <div style={{ marginTop: 10, padding: "6px 10px", background: upside > 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", border: `1px solid ${upside > 0 ? "#4ade80" : "#f87171"}`, borderRadius: 2, fontSize: 11, color: upside > 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>
+              {upside > 0 ? <TrendingUp size={11} style={{ display: "inline", marginRight: 4 }} /> : <TrendingDown size={11} style={{ display: "inline", marginRight: 4 }} />}
+              {pct(upside)} implied upside
+            </div>
+          )}
+        </div>
+
+        {/* RECOMMENDATIONS HISTORY */}
+        <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #2d3548", borderBottom: isMobile ? "1px solid #2d3548" : "none" }}>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Recommendations · Trend</div>
+          {a.monthlyTrend?.length ? (
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", gap: 8, height: 90 }}>
+              {a.monthlyTrend.map((m, i) => {
+                const total = m.strongBuy + m.buy + m.hold + m.sell + m.strongSell;
+                if (!total) return <div key={i} style={{ flex: 1, fontSize: 9, color: "#8a93a3", textAlign: "center" }}>—</div>;
+                const monthLabel = m.period?.match(/^-?(\d+)/) ? (m.period === "0m" ? "Now" : `-${m.period.match(/(\d+)/)[1]}m`) : (m.period || `M${i+1}`);
+                return (
+                  <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
+                    <div className="mono" style={{ fontSize: 10, color: "#fff", fontWeight: 600, marginBottom: 2 }}>{total}</div>
+                    <div style={{ width: "100%", maxWidth: 32, flex: 1, display: "flex", flexDirection: "column", borderRadius: 2, overflow: "hidden", background: "#2d3548" }}>
+                      {m.strongBuy > 0 && <div style={{ flex: m.strongBuy, background: "#4ade80" }} />}
+                      {m.buy > 0 && <div style={{ flex: m.buy, background: "#86efac" }} />}
+                      {m.hold > 0 && <div style={{ flex: m.hold, background: "#d4a017" }} />}
+                      {m.sell > 0 && <div style={{ flex: m.sell, background: "#fb923c" }} />}
+                      {m.strongSell > 0 && <div style={{ flex: m.strongSell, background: "#f87171" }} />}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 4 }}>{monthLabel}</div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: "#8a93a3" }}>No trend data</div>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 9, marginTop: 10, color: "#8a93a3" }}>
+            <span><span style={{ color: "#4ade80" }}>●</span> Strong Buy</span>
+            <span><span style={{ color: "#86efac" }}>●</span> Buy</span>
+            <span><span style={{ color: "#d4a017" }}>●</span> Hold</span>
+            <span><span style={{ color: "#f87171" }}>●</span> Sell</span>
+          </div>
+        </div>
+
+        {/* LATEST RATING */}
+        <div style={{ padding: "14px 16px" }}>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Latest Action</div>
+          {a.latestActions?.length ? (
+            <div>
+              <AnalystRow label="Date" value={a.latestActions[0].date} />
+              <AnalystRow label="Firm" value={a.latestActions[0].firm} />
+              <AnalystRow label="Action" value={a.latestActions[0].action || "—"} />
+              <AnalystRow label="Rating" value={a.latestActions[0].toGrade || "—"} />
+              {a.latestActions[0].fromGrade && <AnalystRow label="From" value={a.latestActions[0].fromGrade} />}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: "#8a93a3" }}>No recent actions</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const AnalystRow = ({ label, value }) => (
+  <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px dotted #2d3548", fontSize: 11 }}>
+    <span style={{ color: "#8a93a3" }}>{label}</span>
+    <span style={{ color: "#fff", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>{value}</span>
+  </div>
+);
 
 const TickerButton = ({ t, active, onClick, isHolding }) => (
   <button onClick={onClick} className={`ticker-btn ${active ? "active" : ""}`} style={{ borderLeftColor: isHolding && !active ? "#d4a017" : undefined }}>
