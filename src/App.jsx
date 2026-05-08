@@ -6,7 +6,7 @@ import {
 import {
   Activity, DollarSign, Users, MessageSquare, AlertCircle,
   Search, ChevronRight, Sigma, GitCompare, Briefcase, Loader2,
-  Menu, X, Target, TrendingUp, TrendingDown,
+  Menu, X, TrendingUp, TrendingDown, BarChart3,
 } from "lucide-react";
 import { createChart } from "lightweight-charts";
 
@@ -17,6 +17,11 @@ const BASE = import.meta.env.BASE_URL;
 // ============================================================
 const FINNHUB_KEY = "d7v2oe9r01qp7l70qf20d7v2oe9r01qp7l70qf2g";
 const REFRESH_MS = 60_000;
+
+// Right-pad on charts so the inner plot area lines up with the candlestick chart's
+// price scale (which lightweight-charts auto-sizes to ~56px desktop / ~44px mobile).
+const RIGHT_PAD_DESKTOP = 56;
+const RIGHT_PAD_MOBILE = 50;
 
 function isMarketOpen() {
   const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
@@ -46,7 +51,7 @@ const sma = (data, period) => data.map((d, i) => {
 });
 const ema = (data, period, key = "close", outKey) => {
   const k = 2 / (period + 1); const out = outKey || `ema${period}`;
-  let prev = data[0][key];
+  let prev = data[0]?.[key]; if (prev == null) return data;
   return data.map((d, i) => { const v = i === 0 ? d[key] : d[key] * k + prev * (1 - k); prev = v; return { ...d, [out]: +v.toFixed(3) }; });
 };
 const rsi = (data, period = 14) => {
@@ -65,6 +70,7 @@ const rsi = (data, period = 14) => {
   });
 };
 const macd = (data) => {
+  if (data.length < 26) return data.map((d) => ({ ...d, macd: null, signal: null, hist: null }));
   let d = ema(data, 12, "close", "_e12"); d = ema(d, 26, "close", "_e26");
   const macdLine = d.map((x) => +(x._e12 - x._e26).toFixed(3));
   const k = 2 / 10; let prev = macdLine[0];
@@ -114,9 +120,9 @@ const realizedVol = (data, period = 30) => {
 };
 
 // ============================================================
-// TRADINGVIEW CANDLESTICK CHART COMPONENT
+// CANDLESTICK CHART
 // ============================================================
-function CandlestickChart({ data, height = 400 }) {
+function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -124,29 +130,19 @@ function CandlestickChart({ data, height = 400 }) {
     if (!containerRef.current || !data?.length) return;
 
     const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth,
-      height,
-      layout: {
-        background: { type: "solid", color: "#ffffff" },
-        textColor: "#1a1f2c",
-        fontFamily: "'IBM Plex Mono', monospace",
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: "#efece5" },
-        horzLines: { color: "#efece5" },
-      },
-      rightPriceScale: { borderColor: "#e6e3db" },
-      timeScale: { borderColor: "#e6e3db", timeVisible: false, secondsVisible: false },
+      width: containerRef.current.clientWidth, height,
+      layout: { background: { type: "solid", color: "#ffffff" }, textColor: "#1a1f2c", fontFamily: "'IBM Plex Mono', monospace", fontSize: 11 },
+      grid: { vertLines: { color: "#efece5" }, horzLines: { color: "#efece5" } },
+      rightPriceScale: { borderColor: "#e6e3db", scaleMargins: { top: 0.1, bottom: 0.1 } },
+      timeScale: { borderColor: "#e6e3db", timeVisible: false, secondsVisible: false, rightOffset: 4 },
       crosshair: {
-        mode: 1, // Magnet mode
+        mode: 1,
         vertLine: { color: "#d4a017", style: 2, labelBackgroundColor: "#1a1f2c" },
         horzLine: { color: "#d4a017", style: 2, labelBackgroundColor: "#1a1f2c" },
       },
     });
     chartRef.current = chart;
 
-    // Candlestick series
     const candleSeries = chart.addCandlestickSeries({
       upColor: "#0a8554", downColor: "#c4314b",
       borderUpColor: "#0a8554", borderDownColor: "#c4314b",
@@ -156,12 +152,10 @@ function CandlestickChart({ data, height = 400 }) {
       time: d.date, open: d.open, high: d.high, low: d.low, close: d.close,
     })));
 
-    // SMA overlays
     const addLine = (key, color) => {
       const series = chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       const lineData = data.filter((d) => d[key] != null).map((d) => ({ time: d.date, value: d[key] }));
       if (lineData.length) series.setData(lineData);
-      return series;
     };
     addLine("sma20", "#d4a017");
     addLine("sma50", "#86b09c");
@@ -169,25 +163,28 @@ function CandlestickChart({ data, height = 400 }) {
 
     chart.timeScale().fitContent();
 
-    // Resize handler
+    // Report price scale width to parent so subcharts can match
+    setTimeout(() => {
+      try {
+        const w = chart.priceScale("right").width();
+        if (onPriceScaleWidth && w) onPriceScaleWidth(w);
+      } catch (e) {}
+    }, 50);
+
     const handleResize = () => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
       }
     };
     window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.remove();
-    };
+    return () => { window.removeEventListener("resize", handleResize); chart.remove(); };
   }, [data, height]);
 
   return <div ref={containerRef} style={{ width: "100%", height }} />;
 }
 
 // ============================================================
-// LIVE FETCHING
+// LIVE QUOTE
 // ============================================================
 function useLiveQuote(symbol) {
   const [quote, setQuote] = useState(null);
@@ -217,53 +214,61 @@ function useLiveQuote(symbol) {
   return { quote, status, lastUpdate };
 }
 
+// ============================================================
+// TIMEFRAME-AWARE CANDLE FETCHING
+// ============================================================
+const TIMEFRAMES = [
+  { key: "1D", range: "1d", interval: "5m", label: "1D" },
+  { key: "5D", range: "5d", interval: "30m", label: "5D" },
+  { key: "1M", range: "1mo", interval: "1d", label: "1M" },
+  { key: "6M", range: "6mo", interval: "1d", label: "6M" },
+  { key: "YTD", range: "ytd", interval: "1d", label: "YTD" },
+  { key: "1Y", range: "1y", interval: "1d", label: "1Y", isDefault: true },
+  { key: "5Y", range: "5y", interval: "1wk", label: "5Y" },
+];
+
+async function fetchYahooCandles(symbol, range, interval) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Yahoo ${res.status}`);
+  const data = await res.json();
+  const result = data?.chart?.result?.[0];
+  if (!result) return [];
+  const ts = result.timestamp || [];
+  const q = result.indicators?.quote?.[0] || {};
+  const candles = [];
+  for (let i = 0; i < ts.length; i++) {
+    if (q.close[i] == null) continue;
+    const isIntraday = interval.includes("m") || interval.includes("h");
+    candles.push({
+      date: isIntraday ? new Date(ts[i] * 1000).toISOString() : new Date(ts[i] * 1000).toISOString().slice(0, 10),
+      time: ts[i],
+      open: +(q.open[i] || q.close[i]).toFixed(2),
+      high: +(q.high[i] || q.close[i]).toFixed(2),
+      low: +(q.low[i] || q.close[i]).toFixed(2),
+      close: +q.close[i].toFixed(2),
+      volume: q.volume[i] || 0,
+    });
+  }
+  return candles;
+}
+
 async function fetchAdHoc(symbol) {
   if (!FINNHUB_KEY || FINNHUB_KEY === "PASTE_YOUR_FINNHUB_KEY_HERE") throw new Error("Finnhub key not configured");
   const f = (path, params) => fetch(`https://finnhub.io/api/v1${path}?${new URLSearchParams({ ...params, token: FINNHUB_KEY })}`).then(r => r.ok ? r.json() : null);
-  const candlesUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=1y&interval=1d`;
-  const [quote, profile, metrics, recs, candlesRes] = await Promise.all([
+  const [quote, profile, candles] = await Promise.all([
     f("/quote", { symbol }), f("/stock/profile2", { symbol }),
-    f("/stock/metric", { symbol, metric: "all" }), f("/stock/recommendation", { symbol }),
-    fetch(candlesUrl).then(r => r.ok ? r.json() : null).catch(() => null),
+    fetchYahooCandles(symbol, "1y", "1d").catch(() => []),
   ]);
-  if (!quote || quote.c == null || quote.c === 0) throw new Error(`No data found for "${symbol}". Check the ticker symbol.`);
-  let candles = [];
-  if (candlesRes?.chart?.result?.[0]) {
-    const r = candlesRes.chart.result[0];
-    const ts = r.timestamp || []; const q = r.indicators?.quote?.[0] || {};
-    for (let i = 0; i < ts.length; i++) {
-      if (q.close[i] == null) continue;
-      candles.push({ date: new Date(ts[i] * 1000).toISOString().slice(0, 10), open: +q.open[i].toFixed(2), high: +q.high[i].toFixed(2), low: +q.low[i].toFixed(2), close: +q.close[i].toFixed(2), volume: q.volume[i] || 0 });
-    }
-  }
-  const m = metrics?.metric || {};
-  const latestRec = recs?.[0] || {};
-  const totalRecs = (latestRec.strongBuy || 0) + (latestRec.buy || 0) + (latestRec.hold || 0) + (latestRec.sell || 0) + (latestRec.strongSell || 0);
-  const buys = (latestRec.strongBuy || 0) + (latestRec.buy || 0);
-  const sells = (latestRec.sell || 0) + (latestRec.strongSell || 0);
-  const score = totalRecs ? (5 * (latestRec.strongBuy || 0) + 4 * (latestRec.buy || 0) + 3 * (latestRec.hold || 0) + 2 * (latestRec.sell || 0) + (latestRec.strongSell || 0)) / totalRecs : null;
-  const rating = score == null ? "—" : score >= 4.5 ? "Strong Buy" : score >= 3.7 ? "Buy" : score >= 2.7 ? "Hold" : score >= 1.7 ? "Sell" : "Strong Sell";
+  if (!quote || quote.c == null || quote.c === 0) throw new Error(`No data for "${symbol}"`);
   return {
     symbol, name: profile?.name || symbol, sector: profile?.finnhubIndustry || "—",
     peers: [], peerData: {}, fetchedAt: new Date().toISOString(),
     quote: { current: quote.c, change: quote.d, changePct: quote.dp, high: quote.h, low: quote.l, open: quote.o, prevClose: quote.pc },
-    candles,
-    fundamentals: {
-      pe: m.peBasicExclExtraTTM ?? m.peTTM ?? null, fwdPe: m.peExclExtraAnnual ?? null, peg: m.pegRatio ?? null,
-      pb: m.pbAnnual ?? m.pbQuarterly ?? null, ps: m.psTTM ?? null, evEbitda: m["enterpriseValue/EBITDATTM"] ?? null,
-      divYield: m.dividendYieldIndicatedAnnual ?? m.currentDividendYieldTTM ?? null, payout: m.payoutRatioTTM ?? null,
-      roe: m.roeTTM ?? m.roeRfy ?? null, roic: m.roiTTM ?? null, debtEq: m["totalDebt/totalEquityAnnual"] ?? null,
-      eps: m.epsBasicExclExtraItemsTTM ?? m.epsTTM ?? null, revGrowth: m.revenueGrowthTTMYoy ?? null,
-      opMargin: m.operatingMarginTTM ?? null, mcap: m.marketCapitalization ?? null,
-      week52High: m["52WeekHigh"] ?? null, week52Low: m["52WeekLow"] ?? null, beta: m.beta ?? null,
-    },
-    consensus: { rating, score: score != null ? +score.toFixed(2) : null, analysts: totalRecs || null,
-      strongBuy: latestRec.strongBuy ?? 0, buy: latestRec.buy ?? 0, buys,
-      hold: latestRec.hold ?? 0, sell: latestRec.sell ?? 0, strongSell: latestRec.strongSell ?? 0,
-      sells, period: latestRec.period ?? null,
-    },
-    analyst: null, // Ad-hoc doesn't fetch Yahoo analyst data
-    isAdHoc: true,
+    candles, candles5Y: [],
+    fundamentals: { mcap: null, week52High: null, week52Low: null },
+    consensus: { rating: "—", analysts: 0 },
+    analyst: null, lynch: null, simons: null, isAdHoc: true,
   };
 }
 
@@ -274,6 +279,13 @@ const fmt = (n, d = 2) => (n == null || isNaN(n) ? "—" : Number(n).toFixed(d))
 const pct = (n) => (n == null || isNaN(n) ? "—" : `${n > 0 ? "+" : ""}${Number(n).toFixed(2)}%`);
 const colorFor = (n) => (n > 0 ? "#0a8554" : n < 0 ? "#c4314b" : "#5a6573");
 const labelFromDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const formatMcap = (raw) => {
+  if (!raw) return "—";
+  if (raw >= 1e12) return `${(raw / 1e12).toFixed(2)}T`;
+  if (raw >= 1e9) return `${(raw / 1e9).toFixed(2)}B`;
+  if (raw >= 1e6) return `${(raw / 1e6).toFixed(2)}M`;
+  return raw.toString();
+};
 
 // ============================================================
 // MAIN
@@ -288,8 +300,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [timeframe, setTimeframe] = useState("1Y");
+  const [tfCandles, setTfCandles] = useState(null);
+  const [tfLoading, setTfLoading] = useState(false);
+  const [priceScaleWidth, setPriceScaleWidth] = useState(null);
   const isMobile = useIsMobile();
-
   const live = useLiveQuote(ticker);
 
   useEffect(() => {
@@ -301,12 +316,26 @@ export default function App() {
 
   useEffect(() => {
     if (!ticker) return;
-    setData(null); setSearchError(null);
+    setData(null); setSearchError(null); setTfCandles(null); setTimeframe("1Y");
     fetch(`${BASE}data/${ticker}.json`)
       .then((r) => r.ok ? r.json() : fetchAdHoc(ticker))
       .then(setData)
       .catch((e) => setError(e.message));
   }, [ticker]);
+
+  // When timeframe changes, fetch the appropriate candles
+  useEffect(() => {
+    if (!data || !ticker) return;
+    if (timeframe === "1Y") { setTfCandles(null); return; } // use baked-in 1Y data
+    if (timeframe === "5Y" && data.candles5Y?.length) { setTfCandles(data.candles5Y); return; } // use baked-in 5Y data
+    const tf = TIMEFRAMES.find((t) => t.key === timeframe);
+    if (!tf) return;
+    setTfLoading(true);
+    fetchYahooCandles(ticker, tf.range, tf.interval)
+      .then((c) => setTfCandles(c))
+      .catch(() => setTfCandles([]))
+      .finally(() => setTfLoading(false));
+  }, [timeframe, ticker, data]);
 
   useEffect(() => { if (isMobile) setSidebarOpen(false); }, [ticker, isMobile]);
 
@@ -322,37 +351,52 @@ export default function App() {
     } catch (err) { setSearchError(err.message); } finally { setSearchLoading(false); }
   };
 
+  // Active candles for chart (timeframe-aware)
+  const activeCandles = useMemo(() => {
+    if (timeframe === "1Y") return data?.candles || [];
+    if (tfCandles !== null) return tfCandles;
+    return data?.candles || [];
+  }, [data, timeframe, tfCandles]);
+
+  // Enrich with indicators (only for daily/weekly bars; intraday skips heavier indicators)
   const enriched = useMemo(() => {
-    if (!data?.candles || data.candles.length < 30) return null;
-    let d = data.candles.map((c) => ({ ...c, label: labelFromDate(c.date) }));
-    d = sma(d, 20); d = sma(d, 50); d = sma(d, 200);
+    if (!activeCandles || activeCandles.length < 30) return null;
+    let d = activeCandles.map((c) => ({ ...c, label: labelFromDate(c.date) }));
+    if (d.length >= 20) d = sma(d, 20);
+    if (d.length >= 50) d = sma(d, 50);
+    if (d.length >= 200) d = sma(d, 200);
     d = rsi(d); d = macd(d); d = sqzmom(d); d = zscore(d, 20);
     return d;
-  }, [data]);
+  }, [activeCandles]);
 
   if (loading) return <LoadingScreen />;
   if (error) return <ErrorScreen message={error} />;
   if (!index || !data) return <LoadingScreen />;
 
   const displayQuote = live.quote || data.quote;
-  const f = data.fundamentals;
-  const c = data.consensus;
+  const f = data.fundamentals || {};
+  const c = data.consensus || {};
   const a = data.analyst;
+  const ly = data.lynch;
+  const sm = data.simons;
 
   let last, lastRsi, lastZ, sqzActive, hurst, rv30, rv90, chartData,
       trendSignal, momentumSignal, reversionSignal, regimeSignal;
-  if (enriched) {
+  if (enriched && enriched.length >= 30) {
     last = enriched[enriched.length - 1];
     lastRsi = last.rsi; lastZ = last.zscore; sqzActive = last.sqz_on;
     hurst = hurstExponent(enriched, Math.min(100, enriched.length - 1));
     rv30 = realizedVol(enriched, 30); rv90 = realizedVol(enriched, 90);
-    chartData = enriched.slice(-120);
-    trendSignal = last.close > last.sma50 && last.sma50 > last.sma200 ? "Bullish trend" :
-                  last.close < last.sma50 && last.sma50 < last.sma200 ? "Bearish trend" : "Mixed";
+    chartData = enriched.slice(-Math.min(120, enriched.length));
+    trendSignal = last.sma200 ? (last.close > last.sma50 && last.sma50 > last.sma200 ? "Bullish trend" :
+                  last.close < last.sma50 && last.sma50 < last.sma200 ? "Bearish trend" : "Mixed") : "—";
     momentumSignal = lastRsi > 70 ? "Overbought" : lastRsi < 30 ? "Oversold" : "Neutral";
     reversionSignal = lastZ > 2 ? "Stretched ↑ (fade)" : lastZ < -2 ? "Stretched ↓ (buy)" : Math.abs(lastZ) < 0.5 ? "At mean" : "In range";
     regimeSignal = hurst > 0.55 ? "Trending" : hurst < 0.45 ? "Mean-reverting" : "Random walk";
   }
+
+  // Right-edge padding for indicator panes (matches the candlestick chart's price scale)
+  const paneRightPad = priceScaleWidth || (isMobile ? RIGHT_PAD_MOBILE : RIGHT_PAD_DESKTOP);
 
   const peerRows = [
     { ticker: data.symbol, name: data.name, price: displayQuote.current, pe: f.pe, fwdPe: f.fwdPe, peg: f.peg, ps: f.ps, evEbitda: f.evEbitda, roe: f.roe, mcap: f.mcap, isSelf: true },
@@ -409,7 +453,6 @@ export default function App() {
                 {searchLoading && <Loader2 size={11} className="spin" style={{ position: "absolute", right: 8, top: 9, color: "#d4a017" }} />}
               </form>
               {searchError && <div style={{ marginTop: 6, fontSize: 10, color: "#c4314b", lineHeight: 1.4 }}>{searchError}</div>}
-              {!searchInput && !searchError && <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.4 }}>Type any US ticker. Press Enter.</div>}
             </div>
 
             {holdings.length > 0 && (
@@ -451,13 +494,12 @@ export default function App() {
             </div>
           </div>
 
-          {/* ============================================================ */}
-          {/* ANALYST INSIGHTS PANEL — at the top, like your reference image */}
-          {/* ============================================================ */}
+          {/* ANALYST INSIGHTS PANEL */}
           {a && a.targetMean && (
             <AnalystInsightsPanel data={data} a={a} c={c} currentPrice={displayQuote.current} isMobile={isMobile} />
           )}
 
+          {/* SIGNAL STRIP */}
           {enriched && (
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
               <SignalCard icon={Activity} label="Technical" value={trendSignal} />
@@ -467,97 +509,117 @@ export default function App() {
             </div>
           )}
 
-          {!enriched && data.candles?.length > 0 && (
-            <div className="panel" style={{ padding: 16, marginBottom: 16, fontSize: 12, color: "#5a6573" }}>
-              ⚠️ Limited price history ({data.candles.length} bars). Showing fundamentals only.
-            </div>
-          )}
-          {!data.candles?.length && (
-            <div className="panel" style={{ padding: 16, marginBottom: 16, fontSize: 12, color: "#5a6573" }}>
-              ⚠️ No price history available. Showing quote and fundamentals only.
-            </div>
-          )}
-
-          {/* TRADINGVIEW CANDLESTICK CHART */}
-          {enriched && (
-            <div className="panel" style={{ marginBottom: 16 }}>
-              <div className="panel-head">
-                <span className="panel-title">Candlestick · 1Y · Daily</span>
-                {!isMobile && (
-                  <span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>
-                    <span style={{ color: "#0a8554" }}>▲</span> bullish &nbsp;
-                    <span style={{ color: "#c4314b" }}>▼</span> bearish &nbsp;
-                    <span style={{ color: "#d4a017" }}>━</span> SMA20 &nbsp;
-                    <span style={{ color: "#86b09c" }}>━</span> SMA50 &nbsp;
-                    <span style={{ color: "#7ba2cc" }}>━</span> SMA200
-                  </span>
-                )}
-              </div>
-              <div style={{ padding: 4 }}>
-                <CandlestickChart data={enriched} height={isMobile ? 280 : 420} />
-              </div>
-
-              {/* RSI / MACD / SQZMOM still use Recharts since they're synced */}
-              <div style={{ padding: "0 4px", borderTop: "1px solid #efece5" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
-                  <span className="panel-title" style={{ fontSize: 10 }}>RSI(14)</span>
-                  <span className="mono" style={{ fontSize: 10, color: lastRsi > 70 ? "#c4314b" : lastRsi < 30 ? "#0a8554" : "#1a1f2c" }}>{fmt(lastRsi, 1)}</span>
-                </div>
-                <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
-                  <LineChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="label" hide />
-                    <YAxis domain={[0, 100]} ticks={[30, 70]} tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={isMobile ? 44 : 56} />
-                    <ReferenceLine y={70} stroke="#c4314b" strokeDasharray="2 2" strokeWidth={0.8} />
-                    <ReferenceLine y={30} stroke="#0a8554" strokeDasharray="2 2" strokeWidth={0.8} />
-                    <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} />
-                    <Line type="monotone" dataKey="rsi" stroke="#7c3aed" strokeWidth={1.2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ padding: "0 4px", borderTop: "1px solid #efece5" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
-                  <span className="panel-title" style={{ fontSize: 10 }}>MACD</span>
-                  <span className="mono" style={{ fontSize: 10 }}>{fmt(last.macd, 2)} / {fmt(last.signal, 2)}</span>
-                </div>
-                <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
-                  <ComposedChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="label" hide />
-                    <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={isMobile ? 44 : 56} />
-                    <ReferenceLine y={0} stroke="#5a6573" strokeWidth={0.5} />
-                    <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} />
-                    <Bar dataKey="hist">{chartData.map((d, i) => (<Cell key={i} fill={d.hist >= 0 ? "#0a8554" : "#c4314b"} fillOpacity={0.6} />))}</Bar>
-                    <Line type="monotone" dataKey="macd" stroke="#1a4f8c" strokeWidth={1.2} dot={false} />
-                    <Line type="monotone" dataKey="signal" stroke="#c4314b" strokeWidth={1} dot={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              <div style={{ padding: "0 4px 8px", borderTop: "1px solid #efece5" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
-                  <span className="panel-title" style={{ fontSize: 10 }}>SQZMOM_LB</span>
-                  <span className="mono" style={{ fontSize: 10 }}>{sqzActive ? <span style={{ color: "#c4314b" }}>● ON</span> : <span style={{ color: "#0a8554" }}>○ off</span>} · {fmt(last.sqz_mom, 2)}</span>
-                </div>
-                <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
-                  <BarChart data={chartData} margin={{ top: 4, right: isMobile ? 44 : 56, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" interval={Math.floor(chartData.length / (isMobile ? 4 : 8))} />
-                    <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={isMobile ? 44 : 56} />
-                    <ReferenceLine y={0} stroke="#5a6573" strokeWidth={0.5} />
-                    <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} />
-                    <Bar dataKey="sqz_mom">
-                      {chartData.map((d, i) => {
-                        const prevMom = i > 0 ? chartData[i - 1].sqz_mom : 0;
-                        const rising = d.sqz_mom >= prevMom; let fill = "#5a6573";
-                        if (d.sqz_mom > 0) fill = rising ? "#0a8554" : "#86b09c";
-                        else fill = rising ? "#e89aa6" : "#c4314b";
-                        return <Cell key={i} fill={fill} />;
-                      })}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+          {/* CANDLESTICK + TIMEFRAME SELECTOR */}
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div className="panel-head">
+              <span className="panel-title">Candlestick · {timeframe}</span>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {TIMEFRAMES.map((tf) => (
+                  <button key={tf.key} onClick={() => setTimeframe(tf.key)} className={`tf-btn ${timeframe === tf.key ? "active" : ""}`}>
+                    {tf.label}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
+            <div style={{ padding: 4, position: "relative", minHeight: isMobile ? 280 : 420 }}>
+              {tfLoading && (
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.7)", zIndex: 5 }}>
+                  <Loader2 size={20} className="spin" color="#d4a017" />
+                </div>
+              )}
+              {activeCandles?.length > 0 ? (
+                <CandlestickChart key={`${ticker}-${timeframe}`} data={enriched || activeCandles} height={isMobile ? 280 : 420} isMobile={isMobile} onPriceScaleWidth={setPriceScaleWidth} />
+              ) : (
+                <div style={{ padding: 32, color: "#8a93a3", textAlign: "center" }}>No data for this timeframe</div>
+              )}
+            </div>
 
-          {/* QUANT */}
+            {/* GOOGLE-STYLE STATS BAR */}
+            {f && (
+              <div style={{ borderTop: "1px solid #efece5", padding: isMobile ? "10px 12px" : "12px 16px", display: "grid",
+                gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: isMobile ? "10px 16px" : "10px 24px" }}>
+                <GStat label="Open" value={fmt(displayQuote.open)} />
+                <GStat label="High" value={fmt(displayQuote.high)} />
+                <GStat label="Low" value={fmt(displayQuote.low)} />
+                <GStat label="Mkt cap" value={formatMcap(f.mcapRaw)} />
+                <GStat label="P/E ratio" value={fmt(f.pe, 2)} />
+                <GStat label="52-wk high" value={fmt(f.week52High)} />
+                <GStat label="Dividend" value={f.divYield != null ? `${fmt(f.divYield, 3)}%` : "—"} />
+                <GStat label="52-wk low" value={fmt(f.week52Low)} />
+                <GStat label="Forward P/E" value={fmt(f.fwdPe, 2)} />
+                <GStat label="Qtrly Div Amt" value={f.qtrlyDivAmt ? fmt(f.qtrlyDivAmt, 3) : "—"} />
+                <GStat label="EPS" value={f.eps ? `$${fmt(f.eps, 2)}` : "—"} />
+                <GStat label="Avg Vol" value={f.avgVol ? formatMcap(f.avgVol) : "—"} />
+              </div>
+            )}
+
+            {/* RSI / MACD / SQZMOM panes — aligned with candlestick chart's price scale */}
+            {enriched && (
+              <>
+                <div style={{ padding: "0 4px", borderTop: "1px solid #efece5" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
+                    <span className="panel-title" style={{ fontSize: 10 }}>RSI(14)</span>
+                    <span className="mono" style={{ fontSize: 10, color: lastRsi > 70 ? "#c4314b" : lastRsi < 30 ? "#0a8554" : "#1a1f2c" }}>{fmt(lastRsi, 1)}</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
+                    <LineChart data={chartData} margin={{ top: 4, right: paneRightPad, left: 0, bottom: 0 }}>
+                      <XAxis dataKey="label" hide />
+                      <YAxis domain={[0, 100]} ticks={[30, 70]} tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={paneRightPad} />
+                      <ReferenceLine y={70} stroke="#c4314b" strokeDasharray="2 2" strokeWidth={0.8} />
+                      <ReferenceLine y={30} stroke="#0a8554" strokeDasharray="2 2" strokeWidth={0.8} />
+                      <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} />
+                      <Line type="monotone" dataKey="rsi" stroke="#7c3aed" strokeWidth={1.2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ padding: "0 4px", borderTop: "1px solid #efece5" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
+                    <span className="panel-title" style={{ fontSize: 10 }}>MACD</span>
+                    <span className="mono" style={{ fontSize: 10 }}>{fmt(last?.macd, 2)} / {fmt(last?.signal, 2)}</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
+                    <ComposedChart data={chartData} margin={{ top: 4, right: paneRightPad, left: 0, bottom: 0 }}>
+                      <XAxis dataKey="label" hide />
+                      <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={paneRightPad} />
+                      <ReferenceLine y={0} stroke="#5a6573" strokeWidth={0.5} />
+                      <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} />
+                      <Bar dataKey="hist">{chartData.map((d, i) => (<Cell key={i} fill={d.hist >= 0 ? "#0a8554" : "#c4314b"} fillOpacity={0.6} />))}</Bar>
+                      <Line type="monotone" dataKey="macd" stroke="#1a4f8c" strokeWidth={1.2} dot={false} />
+                      <Line type="monotone" dataKey="signal" stroke="#c4314b" strokeWidth={1} dot={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ padding: "0 4px 8px", borderTop: "1px solid #efece5" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px 0" }}>
+                    <span className="panel-title" style={{ fontSize: 10 }}>SQZMOM_LB</span>
+                    <span className="mono" style={{ fontSize: 10 }}>{sqzActive ? <span style={{ color: "#c4314b" }}>● ON</span> : <span style={{ color: "#0a8554" }}>○ off</span>} · {fmt(last?.sqz_mom, 2)}</span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={isMobile ? 70 : 90}>
+                    <BarChart data={chartData} margin={{ top: 4, right: paneRightPad, left: 0, bottom: 0 }}>
+                      <XAxis dataKey="label" tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" interval={Math.floor(chartData.length / (isMobile ? 4 : 8))} />
+                      <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={paneRightPad} />
+                      <ReferenceLine y={0} stroke="#5a6573" strokeWidth={0.5} />
+                      <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} />
+                      <Bar dataKey="sqz_mom">
+                        {chartData.map((d, i) => {
+                          const prev = i > 0 ? chartData[i - 1].sqz_mom : 0;
+                          const rising = d.sqz_mom >= prev; let fill = "#5a6573";
+                          if (d.sqz_mom > 0) fill = rising ? "#0a8554" : "#86b09c";
+                          else fill = rising ? "#e89aa6" : "#c4314b";
+                          return <Cell key={i} fill={fill} />;
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* PETER LYNCH PANEL */}
+          {ly && <LynchPanel ly={ly} f={f} isMobile={isMobile} />}
+
+          {/* QUANT (Z-score, vol, regime) + SIMONS metrics */}
           {enriched && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-head"><span className="panel-title">Quant · Statistical</span><Sigma size={13} color="#d4a017" /></div>
@@ -585,20 +647,24 @@ export default function App() {
                   <StatRow label="Vol 90d" value={<span className="mono">{fmt(rv90, 1)}%</span>} />
                   <StatRow label="Vol-of-Vol" value={<span className="mono" style={{ color: rv30 > rv90 ? "#c4314b" : "#0a8554" }}>{fmt(rv30 / rv90, 2)}×</span>} />
                   <StatRow label="Squeeze" value={<span className="mono">{sqzActive ? <span style={{ color: "#c4314b" }}>Compressed</span> : <span style={{ color: "#0a8554" }}>Released</span>}</span>} />
-                  <StatRow label="50/200" value={<span className="mono">{last.sma50 > last.sma200 ? <span style={{ color: "#0a8554" }}>Golden</span> : <span style={{ color: "#c4314b" }}>Death</span>}</span>} />
+                  <StatRow label="50/200" value={<span className="mono">{last?.sma50 > last?.sma200 ? <span style={{ color: "#0a8554" }}>Golden</span> : <span style={{ color: "#c4314b" }}>Death</span>}</span>} />
                   <StatRow label="Beta" value={<span className="mono">{fmt(f.beta, 2)}</span>} />
                 </div>
               </div>
             </div>
           )}
 
+          {/* SIMONS / RENAISSANCE-STYLE METRICS */}
+          {sm && <SimonsPanel sm={sm} isMobile={isMobile} />}
+
+          {/* PEER COMPARISON */}
           {peerRows.length > 1 && !data.isAdHoc && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-head"><span className="panel-title">Peer Comparison</span><GitCompare size={13} color="#d4a017" /></div>
               <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 <table className="peers">
                   <thead>
-                    <tr><th>Ticker</th><th>Price</th><th>P/E</th><th>Fwd P/E</th><th>PEG</th><th>P/S</th><th>EV/EBITDA</th><th>ROE %</th><th>Mkt Cap</th></tr>
+                    <tr><th>Ticker</th><th>Price</th><th>P/E</th><th>Fwd P/E</th><th>PEG</th><th>P/S</th><th>EV/EBITDA</th><th>ROE %</th><th>Mkt Cap M</th></tr>
                   </thead>
                   <tbody>
                     {peerRows.map((r) => {
@@ -630,23 +696,26 @@ export default function App() {
             </div>
           )}
 
+          {/* VALUE / CONSENSUS / 52W */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16 }}>
             <div className="panel">
               <div className="panel-head"><span className="panel-title">Value · Fundamentals</span><DollarSign size={13} color="#d4a017" /></div>
               <div style={{ padding: "10px 14px" }}>
-                <StatRow label="P/E (TTM)" value={<span className="mono">{fmt(f.pe, 1)}</span>} />
-                <StatRow label="Forward P/E" value={<span className="mono">{fmt(f.fwdPe, 1)}</span>} />
+                <StatRow label="P/E (TTM)" value={<span className="mono">{fmt(f.pe, 2)}</span>} />
+                <StatRow label="Forward P/E" value={<span className="mono">{fmt(f.fwdPe, 2)}</span>} />
                 <StatRow label="PEG" value={<span className="mono" style={{ color: f.peg && f.peg < 1 ? "#0a8554" : f.peg > 2 ? "#c4314b" : "#1a1f2c" }}>{fmt(f.peg, 2)}</span>} />
-                <StatRow label="P/B" value={<span className="mono">{fmt(f.pb, 1)}</span>} />
-                <StatRow label="P/S" value={<span className="mono">{fmt(f.ps, 1)}</span>} />
-                <StatRow label="EV/EBITDA" value={<span className="mono">{fmt(f.evEbitda, 1)}</span>} />
-                <StatRow label="Div Yield" value={<span className="mono">{f.divYield ? fmt(f.divYield, 2) + "%" : "—"}</span>} />
-                <StatRow label="ROE" value={<span className="mono" style={{ color: f.roe > 15 ? "#0a8554" : "#1a1f2c" }}>{f.roe ? fmt(f.roe, 1) + "%" : "—"}</span>} />
+                <StatRow label="P/B" value={<span className="mono">{fmt(f.pb, 2)}</span>} />
+                <StatRow label="P/S" value={<span className="mono">{fmt(f.ps, 2)}</span>} />
+                <StatRow label="EV/EBITDA" value={<span className="mono">{fmt(f.evEbitda, 2)}</span>} />
+                <StatRow label="Div Yield" value={<span className="mono">{f.divYield != null ? fmt(f.divYield, 3) + "%" : "—"}</span>} />
+                <StatRow label="ROE" value={<span className="mono" style={{ color: f.roe > 15 ? "#0a8554" : "#1a1f2c" }}>{f.roe != null ? fmt(f.roe, 2) + "%" : "—"}</span>} />
                 <StatRow label="Debt/Equity" value={<span className="mono">{fmt(f.debtEq, 2)}</span>} />
-                <StatRow label="Op. Margin" value={<span className="mono">{f.opMargin ? fmt(f.opMargin, 1) + "%" : "—"}</span>} />
+                <StatRow label="Op. Margin" value={<span className="mono">{f.opMargin != null ? fmt(f.opMargin, 2) + "%" : "—"}</span>} />
+                <StatRow label="Profit Margin" value={<span className="mono">{f.profitMargin != null ? fmt(f.profitMargin, 2) + "%" : "—"}</span>} />
                 <StatRow label="Rev Growth" value={<span className="mono" style={{ color: colorFor(f.revGrowth) }}>{f.revGrowth != null ? pct(f.revGrowth) : "—"}</span>} />
-                <StatRow label="EPS" value={<span className="mono">${fmt(f.eps, 2)}</span>} />
-                <StatRow label="Mkt Cap ($M)" value={<span className="mono">{fmt(f.mcap, 0)}</span>} />
+                <StatRow label="EPS (TTM)" value={<span className="mono">${fmt(f.eps, 2)}</span>} />
+                <StatRow label="EPS Forward" value={<span className="mono">${fmt(f.epsForward, 2)}</span>} />
+                <StatRow label="Mkt Cap" value={<span className="mono">{formatMcap(f.mcapRaw)}</span>} />
               </div>
             </div>
 
@@ -712,12 +781,100 @@ export default function App() {
               <AlertCircle size={16} color="#d4a017" />
               <div style={{ flex: 1, fontSize: isMobile ? 11 : 12, lineHeight: 1.6 }}>
                 <span style={{ color: "#d4a017", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: 10 }}>Composite · </span>
-                Trend <strong>{trendSignal.toLowerCase()}</strong>, momentum {momentumSignal.toLowerCase()} (RSI {fmt(lastRsi, 0)}). Z-score {fmt(lastZ, 1)}σ — {reversionSignal.toLowerCase()}. Regime: <strong>{regimeSignal.toLowerCase()}</strong>. Street: <strong>{c.rating?.toLowerCase() ?? "n/a"}</strong>{a?.targetMean ? `. Target $${fmt(a.targetMean, 0)} (${pct(((a.targetMean - displayQuote.current) / displayQuote.current) * 100)} upside)` : ""}.
+                Trend <strong>{trendSignal?.toLowerCase()}</strong>, momentum {momentumSignal?.toLowerCase()} (RSI {fmt(lastRsi, 0)}). Z-score {fmt(lastZ, 1)}σ — {reversionSignal?.toLowerCase()}. Regime: <strong>{regimeSignal?.toLowerCase()}</strong>. Street: <strong>{c.rating?.toLowerCase() ?? "n/a"}</strong>{a?.targetMean ? `. Target $${fmt(a.targetMean, 0)} (${pct(((a.targetMean - displayQuote.current) / displayQuote.current) * 100)} upside)` : ""}{ly?.category && ly.category !== "—" ? `. Lynch: ${ly.category.toLowerCase()}` : ""}.
               </div>
               {!isMobile && <ChevronRight size={16} color="#8a93a3" />}
             </div>
           )}
         </main>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// LYNCH PANEL
+// ============================================================
+function LynchPanel({ ly, f, isMobile }) {
+  const peg = ly.pegRatio ?? f.peg;
+  const insiderNet = ly.netInsiderActivity;
+  const insiderColor = insiderNet > 0 ? "#0a8554" : insiderNet < 0 ? "#c4314b" : "#5a6573";
+  const cashDebtRatio = f.totalCash && f.totalDebt ? f.totalCash / f.totalDebt : null;
+
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Peter Lynch · Fundamental Lens</span>
+        <span className="pill" style={{ background: "#d4a017", color: "#1a1f2c" }}>{ly.category}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 0 }}>
+        <div style={{ padding: "12px 14px", borderRight: isMobile ? "none" : "1px solid #efece5", borderBottom: isMobile ? "1px solid #efece5" : "none" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Growth & Valuation</div>
+          <StatRow label="PEG (Lynch's pick)" value={<span className="mono" style={{ color: peg && peg < 1 ? "#0a8554" : peg > 2 ? "#c4314b" : "#1a1f2c", fontWeight: 600 }}>{fmt(peg, 2)}</span>} />
+          <StatRow label="EPS Growth (Next Yr)" value={<span className="mono" style={{ color: colorFor(ly.epsGrowthNextYr) }}>{ly.epsGrowthNextYr != null ? pct(ly.epsGrowthNextYr) : "—"}</span>} />
+          <StatRow label="EPS Growth (5 Yr)" value={<span className="mono" style={{ color: colorFor(ly.epsGrowth5Yr) }}>{ly.epsGrowth5Yr != null ? pct(ly.epsGrowth5Yr) : "—"}</span>} />
+          <StatRow label="EPS Stability (CV)" value={<span className="mono" title="Coefficient of variation. Lower = more stable.">{ly.epsCoefVar != null ? `${fmt(ly.epsCoefVar, 2)}${ly.epsCoefVar < 0.3 ? " ✓" : ""}` : "—"}</span>} />
+          <StatRow label="Rev Growth (TTM)" value={<span className="mono" style={{ color: colorFor(f.revGrowth) }}>{f.revGrowth != null ? pct(f.revGrowth) : "—"}</span>} />
+        </div>
+        <div style={{ padding: "12px 14px", borderRight: isMobile ? "none" : "1px solid #efece5", borderBottom: isMobile ? "1px solid #efece5" : "none" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Balance Sheet</div>
+          <StatRow label="Debt/Equity" value={<span className="mono" style={{ color: f.debtEq && f.debtEq < 50 ? "#0a8554" : f.debtEq > 100 ? "#c4314b" : "#1a1f2c" }}>{fmt(f.debtEq, 2)}</span>} />
+          <StatRow label="Current Ratio" value={<span className="mono" style={{ color: f.currentRatio && f.currentRatio > 1.5 ? "#0a8554" : f.currentRatio < 1 ? "#c4314b" : "#1a1f2c" }}>{fmt(f.currentRatio, 2)}</span>} />
+          <StatRow label="Quick Ratio" value={<span className="mono">{fmt(f.quickRatio, 2)}</span>} />
+          <StatRow label="Cash" value={<span className="mono">{f.totalCash ? formatMcap(f.totalCash) : "—"}</span>} />
+          <StatRow label="Total Debt" value={<span className="mono">{f.totalDebt ? formatMcap(f.totalDebt) : "—"}</span>} />
+          <StatRow label="Cash/Debt" value={<span className="mono" style={{ color: cashDebtRatio > 1 ? "#0a8554" : cashDebtRatio < 0.3 ? "#c4314b" : "#1a1f2c" }}>{fmt(cashDebtRatio, 2)}</span>} />
+        </div>
+        <div style={{ padding: "12px 14px" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Insider & Ownership</div>
+          <StatRow label="Insiders %" value={<span className="mono">{ly.heldByInsiders != null ? fmt(ly.heldByInsiders * 100, 2) + "%" : "—"}</span>} />
+          <StatRow label="Institutions %" value={<span className="mono">{ly.heldByInstitutions != null ? fmt(ly.heldByInstitutions * 100, 1) + "%" : "—"}</span>} />
+          <StatRow label="Insider Buys (6M)" value={<span className="mono" style={{ color: ly.insiderBuys > ly.insiderSells ? "#0a8554" : "#1a1f2c" }}>{ly.insiderBuys ?? 0}</span>} />
+          <StatRow label="Insider Sells (6M)" value={<span className="mono">{ly.insiderSells ?? 0}</span>} />
+          <StatRow label="Net Insider $" value={<span className="mono" style={{ color: insiderColor, fontWeight: 600 }}>{ly.netInsiderActivity ? (ly.netInsiderActivity > 0 ? "+" : "") + formatMcap(Math.abs(ly.netInsiderActivity)) : "—"}</span>} />
+          <StatRow label="Short Ratio" value={<span className="mono" style={{ color: ly.shortRatio > 5 ? "#c4314b" : "#1a1f2c" }}>{fmt(ly.shortRatio, 2)}</span>} />
+          <StatRow label="Short % Float" value={<span className="mono" style={{ color: ly.shortPctFloat > 0.1 ? "#c4314b" : "#1a1f2c" }}>{ly.shortPctFloat != null ? fmt(ly.shortPctFloat * 100, 2) + "%" : "—"}</span>} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// SIMONS PANEL
+// ============================================================
+function SimonsPanel({ sm, isMobile }) {
+  const dowNames = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Simons-Style · Statistical Edge</span>
+        <BarChart3 size={13} color="#d4a017" />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 0 }}>
+        <div style={{ padding: "12px 14px", borderRight: isMobile ? "none" : "1px solid #efece5", borderBottom: isMobile ? "1px solid #efece5" : "none" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Autocorrelation (returns)</div>
+          <StatRow label="Lag-1" value={<span className="mono" title="Short-term return correlation. Negative = mean-reverting day-to-day.">{fmt(sm.autocorrLag1, 3)}</span>} />
+          <StatRow label="Lag-5" value={<span className="mono">{fmt(sm.autocorrLag5, 3)}</span>} />
+          <StatRow label="Lag-20" value={<span className="mono">{fmt(sm.autocorrLag20, 3)}</span>} />
+          <div style={{ marginTop: 10, padding: 8, background: "#f5f3ed", borderRadius: 2, fontSize: 10, color: "#5a6573", lineHeight: 1.5 }}>
+            <strong style={{ color: "#1a1f2c" }}>Read:</strong> negative lag-1 favors short-term mean reversion; positive favors momentum.
+          </div>
+        </div>
+        <div style={{ padding: "12px 14px", borderRight: isMobile ? "none" : "1px solid #efece5", borderBottom: isMobile ? "1px solid #efece5" : "none" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Risk & Money Flow</div>
+          <StatRow label="ATR(14)" value={<span className="mono" title="Avg True Range. Use for vol-based position sizing.">{fmt(sm.atr14, 2)}</span>} />
+          <StatRow label="Sharpe (1Y)" value={<span className="mono" style={{ color: sm.sharpe1Y > 1 ? "#0a8554" : sm.sharpe1Y < 0 ? "#c4314b" : "#1a1f2c" }}>{fmt(sm.sharpe1Y, 2)}</span>} />
+          <StatRow label="Max Drawdown (1Y)" value={<span className="mono" style={{ color: "#c4314b" }}>{fmt(sm.maxDrawdown, 2)}%</span>} />
+          <StatRow label="OBV Trend" value={<span className="mono" style={{ color: sm.obvTrend === "Accumulation" ? "#0a8554" : sm.obvTrend === "Distribution" ? "#c4314b" : "#1a1f2c" }}>{sm.obvTrend}</span>} />
+        </div>
+        <div style={{ padding: "12px 14px" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Calendar Effect (avg daily return)</div>
+          {sm.dowAvgReturns?.map((v, i) => (
+            <StatRow key={i} label={dowNames[i]} value={<span className="mono" style={{ color: colorFor(v) }}>{v != null ? `${v > 0 ? "+" : ""}${v.toFixed(2)}%` : "—"}</span>} />
+          ))}
+          <div style={{ marginTop: 6, fontSize: 10, color: "#5a6573", lineHeight: 1.4 }}>Renaissance founders famously studied day-of-week effects.</div>
+        </div>
       </div>
     </div>
   );
@@ -739,9 +896,7 @@ function AnalystInsightsPanel({ data, a, c, currentPrice, isMobile }) {
         <span style={{ fontSize: isMobile ? 13 : 15, fontWeight: 600, letterSpacing: "-0.01em" }}>Analyst Insights: <span style={{ color: "#d4a017" }}>{data.symbol}</span></span>
         {a.numAnalysts && <span className="mono" style={{ fontSize: 10, color: "#8a93a3" }}>{a.numAnalysts} analysts</span>}
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1.4fr 1.2fr 1fr", gap: 0 }}>
-        {/* CONSENSUS RATING */}
         <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #2d3548", borderBottom: isMobile ? "1px solid #2d3548" : "none" }}>
           <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Top Analyst Rating</div>
           <div className="serif" style={{ fontSize: 22, fontWeight: 600, color: "#fff", marginBottom: 6 }}>{c.rating}</div>
@@ -754,39 +909,27 @@ function AnalystInsightsPanel({ data, a, c, currentPrice, isMobile }) {
             </>
           )}
         </div>
-
-        {/* PRICE TARGETS */}
         <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #2d3548", borderBottom: isMobile ? "1px solid #2d3548" : "none" }}>
           <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Analyst Price Targets</div>
           <div style={{ position: "relative", marginBottom: 24, marginTop: 24 }}>
-            {/* Track */}
             <div style={{ height: 4, background: "#2d3548", borderRadius: 2, position: "relative" }}>
-              {/* Current price marker */}
               {currentPrice && (
                 <div style={{ position: "absolute", left: `${Math.max(2, Math.min(98, targetPct))}%`, top: -22, transform: "translateX(-50%)", textAlign: "center" }}>
                   <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 2 }}>Current</div>
                   <div className="mono" style={{ background: "#fff", color: "#1a1f2c", padding: "2px 6px", borderRadius: 2, fontSize: 11, fontWeight: 600 }}>${fmt(currentPrice)}</div>
                 </div>
               )}
-              {/* Mean target marker */}
               <div style={{ position: "absolute", left: `${Math.max(2, Math.min(98, meanPct))}%`, top: 12, transform: "translateX(-50%)", textAlign: "center" }}>
                 <div className="mono" style={{ background: "#d4a017", color: "#1a1f2c", padding: "2px 6px", borderRadius: 2, fontSize: 11, fontWeight: 600 }}>${fmt(a.targetMean, 0)}</div>
                 <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 2 }}>Avg Target</div>
               </div>
-              {/* Dots at low/high */}
               <div style={{ position: "absolute", left: 0, top: -3, width: 10, height: 10, borderRadius: "50%", background: "#c4314b" }} />
               <div style={{ position: "absolute", right: 0, top: -3, width: 10, height: 10, borderRadius: "50%", background: "#0a8554" }} />
             </div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 28 }}>
-            <div>
-              <div className="mono" style={{ fontSize: 13, fontWeight: 500, color: "#f87171" }}>${fmt(a.targetLow, 0)}</div>
-              <div style={{ fontSize: 9, color: "#8a93a3" }}>Low</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div className="mono" style={{ fontSize: 13, fontWeight: 500, color: "#4ade80" }}>${fmt(a.targetHigh, 0)}</div>
-              <div style={{ fontSize: 9, color: "#8a93a3" }}>High</div>
-            </div>
+            <div><div className="mono" style={{ fontSize: 13, fontWeight: 500, color: "#f87171" }}>${fmt(a.targetLow, 0)}</div><div style={{ fontSize: 9, color: "#8a93a3" }}>Low</div></div>
+            <div style={{ textAlign: "right" }}><div className="mono" style={{ fontSize: 13, fontWeight: 500, color: "#4ade80" }}>${fmt(a.targetHigh, 0)}</div><div style={{ fontSize: 9, color: "#8a93a3" }}>High</div></div>
           </div>
           {upside != null && (
             <div style={{ marginTop: 10, padding: "6px 10px", background: upside > 0 ? "rgba(74,222,128,0.1)" : "rgba(248,113,113,0.1)", border: `1px solid ${upside > 0 ? "#4ade80" : "#f87171"}`, borderRadius: 2, fontSize: 11, color: upside > 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>
@@ -795,8 +938,6 @@ function AnalystInsightsPanel({ data, a, c, currentPrice, isMobile }) {
             </div>
           )}
         </div>
-
-        {/* RECOMMENDATIONS HISTORY */}
         <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #2d3548", borderBottom: isMobile ? "1px solid #2d3548" : "none" }}>
           <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Recommendations · Trend</div>
           {a.monthlyTrend?.length ? (
@@ -804,7 +945,7 @@ function AnalystInsightsPanel({ data, a, c, currentPrice, isMobile }) {
               {a.monthlyTrend.map((m, i) => {
                 const total = m.strongBuy + m.buy + m.hold + m.sell + m.strongSell;
                 if (!total) return <div key={i} style={{ flex: 1, fontSize: 9, color: "#8a93a3", textAlign: "center" }}>—</div>;
-                const monthLabel = m.period?.match(/^-?(\d+)/) ? (m.period === "0m" ? "Now" : `-${m.period.match(/(\d+)/)[1]}m`) : (m.period || `M${i+1}`);
+                const monthLabel = m.period === "0m" ? "Now" : m.period;
                 return (
                   <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
                     <div className="mono" style={{ fontSize: 10, color: "#fff", fontWeight: 600, marginBottom: 2 }}>{total}</div>
@@ -830,8 +971,6 @@ function AnalystInsightsPanel({ data, a, c, currentPrice, isMobile }) {
             <span><span style={{ color: "#f87171" }}>●</span> Sell</span>
           </div>
         </div>
-
-        {/* LATEST RATING */}
         <div style={{ padding: "14px 16px" }}>
           <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Latest Action</div>
           {a.latestActions?.length ? (
@@ -850,6 +989,16 @@ function AnalystInsightsPanel({ data, a, c, currentPrice, isMobile }) {
     </div>
   );
 }
+
+// ============================================================
+// SUBCOMPONENTS
+// ============================================================
+const GStat = ({ label, value }) => (
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", borderBottom: "1px dotted #efece5", paddingBottom: 2 }}>
+    <span style={{ fontSize: 11, color: "#5a6573" }}>{label}</span>
+    <span className="mono" style={{ fontSize: 13, fontWeight: 500 }}>{value}</span>
+  </div>
+);
 
 const AnalystRow = ({ label, value }) => (
   <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px dotted #2d3548", fontSize: 11 }}>
@@ -887,41 +1036,6 @@ const LiveStatus = ({ status, lastUpdate, compact }) => {
   );
 };
 
-const Styles = () => (
-  <style>{`
-    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap');
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; overflow-x: hidden; }
-    body { -webkit-text-size-adjust: 100%; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spin { animation: spin 0.8s linear infinite; }
-    .mono { font-family: 'IBM Plex Mono', monospace; font-feature-settings: 'tnum' 1; }
-    .serif { font-family: 'IBM Plex Serif', serif; }
-    .panel { background: #fff; border: 1px solid #e6e3db; border-radius: 2px; }
-    .panel-head { padding: 10px 14px; border-bottom: 1px solid #efece5; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    .panel-title { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; }
-    .section-head { display: flex; align-items: center; gap: 6px; padding: 14px 14px 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; }
-    .ticker-btn { background: transparent; border: none; padding: 10px 12px; cursor: pointer; text-align: left; width: 100%; border-left: 2px solid transparent; transition: all 0.12s; min-height: 44px; }
-    .ticker-btn:hover { background: #fff; }
-    .ticker-btn.active { background: #1a1f2c; color: #fff; border-left-color: #d4a017; }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 2px; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-    table.peers { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 600px; }
-    table.peers th { text-align: right; padding: 6px 8px; color: #8a93a3; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 9px; border-bottom: 1px solid #e6e3db; white-space: nowrap; }
-    table.peers th:first-child, table.peers td:first-child { text-align: left; position: sticky; left: 0; background: inherit; }
-    table.peers td { text-align: right; padding: 6px 8px; border-bottom: 1px dotted #efece5; white-space: nowrap; }
-    table.peers tr.self { background: #fff8e1; }
-    table.peers tr.self td { font-weight: 600; }
-    table.peers tr.self td:first-child { background: #fff8e1; }
-    table.peers tr.avg { background: #f5f3ed; font-style: italic; color: #5a6573; }
-    table.peers tr.avg td:first-child { background: #f5f3ed; }
-    @media (max-width: 768px) {
-      input, button, select, textarea { font-size: 16px; }
-      input.mono { font-size: 13px; }
-    }
-  `}</style>
-);
-
 const SignalCard = ({ icon: Icon, label, value }) => (
   <div className="panel" style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
     <Icon size={16} color="#d4a017" strokeWidth={1.5} style={{ flexShrink: 0 }} />
@@ -942,11 +1056,49 @@ const StatRow = ({ label, value }) => (
 const LoadingScreen = () => (
   <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui", color: "#5a6573", background: "#fafaf7" }}>Loading market data…</div>
 );
-
 const ErrorScreen = ({ message }) => (
   <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "system-ui", padding: 32, background: "#fafaf7" }}>
     <AlertCircle size={48} color="#c4314b" style={{ marginBottom: 16 }} />
     <h2 style={{ margin: "0 0 8px", color: "#1a1f2c" }}>Cannot load data</h2>
     <p style={{ color: "#5a6573", textAlign: "center", maxWidth: 480 }}>{message}</p>
   </div>
+);
+
+const Styles = () => (
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap');
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; overflow-x: hidden; }
+    body { -webkit-text-size-adjust: 100%; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 0.8s linear infinite; }
+    .mono { font-family: 'IBM Plex Mono', monospace; font-feature-settings: 'tnum' 1; }
+    .serif { font-family: 'IBM Plex Serif', serif; }
+    .panel { background: #fff; border: 1px solid #e6e3db; border-radius: 2px; }
+    .panel-head { padding: 10px 14px; border-bottom: 1px solid #efece5; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .panel-title { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; }
+    .section-head { display: flex; align-items: center; gap: 6px; padding: 14px 14px 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; }
+    .ticker-btn { background: transparent; border: none; padding: 10px 12px; cursor: pointer; text-align: left; width: 100%; border-left: 2px solid transparent; transition: all 0.12s; min-height: 44px; }
+    .ticker-btn:hover { background: #fff; }
+    .ticker-btn.active { background: #1a1f2c; color: #fff; border-left-color: #d4a017; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 2px; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+    .tf-btn { background: transparent; border: 1px solid #e6e3db; padding: 4px 10px; font-size: 11px; font-family: 'IBM Plex Mono', monospace; cursor: pointer; border-radius: 2px; color: #5a6573; transition: all 0.12s; min-height: 30px; }
+    .tf-btn:hover { background: #f5f3ed; border-color: #d4a017; }
+    .tf-btn.active { background: #1a1f2c; color: #fff; border-color: #1a1f2c; font-weight: 600; }
+    table.peers { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 600px; }
+    table.peers th { text-align: right; padding: 6px 8px; color: #8a93a3; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; font-size: 9px; border-bottom: 1px solid #e6e3db; white-space: nowrap; }
+    table.peers th:first-child, table.peers td:first-child { text-align: left; position: sticky; left: 0; background: inherit; }
+    table.peers td { text-align: right; padding: 6px 8px; border-bottom: 1px dotted #efece5; white-space: nowrap; }
+    table.peers tr.self { background: #fff8e1; }
+    table.peers tr.self td { font-weight: 600; }
+    table.peers tr.self td:first-child { background: #fff8e1; }
+    table.peers tr.avg { background: #f5f3ed; font-style: italic; color: #5a6573; }
+    table.peers tr.avg td:first-child { background: #f5f3ed; }
+    @media (max-width: 768px) {
+      input, button, select, textarea { font-size: 16px; }
+      input.mono { font-size: 13px; }
+      .tf-btn { font-size: 12px; }
+    }
+  `}</style>
 );
