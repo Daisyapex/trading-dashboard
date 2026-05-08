@@ -3,12 +3,9 @@
 // for fundamentals/quote/recommendations + Yahoo for OHLCV, writes one
 // JSON file per ticker into public/data/.
 //
-// No npm dependencies needed — pure Node fetch (Node 18+).
-//
 // Required env var: FINNHUB_KEY (set as a GitHub repo secret).
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const FINNHUB_KEY = process.env.FINNHUB_KEY;
 if (!FINNHUB_KEY) {
@@ -18,8 +15,6 @@ if (!FINNHUB_KEY) {
 
 const FINNHUB = "https://finnhub.io/api/v1";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// -------- API helpers --------
 
 async function finnhub(path, params = {}) {
   const qs = new URLSearchParams({ ...params, token: FINNHUB_KEY });
@@ -32,8 +27,6 @@ async function finnhub(path, params = {}) {
   return res.json();
 }
 
-// Yahoo Finance — unofficial but reliable for daily OHLCV from a server.
-// Returns ~1 year of daily candles.
 async function yahooCandles(symbol) {
   const period2 = Math.floor(Date.now() / 1000);
   const period1 = period2 - 60 * 60 * 24 * 365;
@@ -70,12 +63,9 @@ async function yahooCandles(symbol) {
   }
 }
 
-// -------- Per-ticker fetcher --------
-
 async function fetchTicker(t) {
-  console.log(`Fetching ${t.symbol}...`);
+  console.log(`Fetching ${t.symbol}${t.holding ? " (HOLDING)" : ""}...`);
 
-  // Run Yahoo + Finnhub calls in parallel for speed
   const [candles, quote, profile, metrics, recs] = await Promise.all([
     yahooCandles(t.symbol),
     finnhub("/quote", { symbol: t.symbol }),
@@ -84,9 +74,8 @@ async function fetchTicker(t) {
     finnhub("/stock/recommendation", { symbol: t.symbol }),
   ]);
 
-  // Pull peer fundamentals (lighter — just metrics)
   const peerData = {};
-  for (const p of t.peers) {
+  for (const p of (t.peers || [])) {
     const m = await finnhub("/stock/metric", { symbol: p, metric: "all" });
     const q = await finnhub("/quote", { symbol: p });
     if (m?.metric) {
@@ -102,7 +91,7 @@ async function fetchTicker(t) {
         ytd: m.metric.yearToDatePriceReturnDaily ?? null,
       };
     }
-    await sleep(150); // throttle: stay under 60/min
+    await sleep(150);
   }
 
   const m = metrics?.metric || {};
@@ -117,7 +106,8 @@ async function fetchTicker(t) {
     symbol: t.symbol,
     name: t.name || profile?.name || t.symbol,
     sector: t.sector || profile?.finnhubIndustry || "—",
-    peers: t.peers,
+    peers: t.peers || [],
+    holding: !!t.holding,
     fetchedAt: new Date().toISOString(),
     quote: {
       current: quote?.c ?? null,
@@ -141,7 +131,6 @@ async function fetchTicker(t) {
       roe: m.roeTTM ?? m.roeRfy ?? null,
       roic: m.roiTTM ?? null,
       debtEq: m["totalDebt/totalEquityAnnual"] ?? null,
-      fcfYield: m.currentRatioAnnual ? null : null,
       eps: m.epsBasicExclExtraItemsTTM ?? m.epsTTM ?? null,
       revGrowth: m.revenueGrowthTTMYoy ?? null,
       grossMargin: m.grossMarginTTM ?? null,
@@ -168,8 +157,6 @@ async function fetchTicker(t) {
   };
 }
 
-// -------- Main --------
-
 async function main() {
   const config = JSON.parse(readFileSync("tickers.json", "utf8"));
   const out = { generatedAt: new Date().toISOString(), tickers: [] };
@@ -182,19 +169,20 @@ async function main() {
         symbol: t.symbol,
         name: t.name,
         sector: t.sector,
+        holding: !!t.holding,         // <-- THE FIX: propagate holding flag to index
         price: data.quote.current,
         change: data.quote.change,
         changePct: data.quote.changePct,
       });
-      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  (${data.candles.length} bars)`);
+      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  (${data.candles.length} bars)${t.holding ? "  ★HOLDING" : ""}`);
     } catch (e) {
       console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
     }
-    await sleep(300); // additional pacing between tickers
+    await sleep(300);
   }
 
   writeFileSync("public/data/index.json", JSON.stringify(out, null, 2));
-  console.log(`\nDone. Wrote ${out.tickers.length} tickers.`);
+  console.log(`\nDone. Wrote ${out.tickers.length} tickers (${out.tickers.filter(x=>x.holding).length} marked as holdings).`);
 }
 
 main().catch((e) => {
