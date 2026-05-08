@@ -8,7 +8,7 @@ import {
   Search, ChevronRight, Sigma, GitCompare, Briefcase, Loader2,
   Menu, X, Target, TrendingUp, TrendingDown,
 } from "lucide-react";
-import { createChart, CandlestickSeries, LineSeries, HistogramSeries } from "lightweight-charts";
+import { createChart } from "lightweight-charts";
 
 const BASE = import.meta.env.BASE_URL;
 
@@ -147,7 +147,7 @@ function CandlestickChart({ data, height = 400 }) {
     chartRef.current = chart;
 
     // Candlestick series
-    const candleSeries = chart.addSeries(CandlestickSeries, {
+    const candleSeries = chart.addCandlestickSeries({
       upColor: "#0a8554", downColor: "#c4314b",
       borderUpColor: "#0a8554", borderDownColor: "#c4314b",
       wickUpColor: "#0a8554", wickDownColor: "#c4314b",
@@ -158,7 +158,7 @@ function CandlestickChart({ data, height = 400 }) {
 
     // SMA overlays
     const addLine = (key, color) => {
-      const series = chart.addSeries(LineSeries, { color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      const series = chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       const lineData = data.filter((d) => d[key] != null).map((d) => ({ time: d.date, value: d[key] }));
       if (lineData.length) series.setData(lineData);
       return series;
