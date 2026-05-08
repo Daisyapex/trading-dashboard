@@ -1,18 +1,40 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, Cell, ComposedChart,
 } from "recharts";
 import {
   Activity, DollarSign, Users, MessageSquare, AlertCircle,
-  Search, ChevronRight, Sigma, GitCompare, RefreshCw,
+  Search, ChevronRight, Sigma, GitCompare, RefreshCw, Radio,
 } from "lucide-react";
 
-// Vite exposes import.meta.env.BASE_URL automatically based on vite.config.js
 const BASE = import.meta.env.BASE_URL;
 
 // ============================================================
-// INDICATOR MATH (computed client-side from candles)
+// LIVE QUOTE CONFIG
+// ============================================================
+// Your Finnhub free-tier key. This is exposed in the browser — that's
+// acceptable for a personal dashboard used by you + one friend. If
+// anyone abuses it, rotate the key at finnhub.io/dashboard.
+// Free tier allows 60 calls/min, plenty for a 60-second refresh.
+const FINNHUB_KEY = "d7v2oe9r01qp7l70qf20d7v2oe9r01qp7l70qf2g";
+
+// Refresh interval — 60 seconds
+const REFRESH_MS = 60_000;
+
+// Returns true if US equity markets are currently open
+// (9:30 AM – 4:00 PM ET, weekdays). Doesn't check holidays;
+// off-hours just means the API returns the last close.
+function isMarketOpen() {
+  const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const mins = et.getHours() * 60 + et.getMinutes();
+  return mins >= 9 * 60 + 30 && mins <= 16 * 60;
+}
+
+// ============================================================
+// INDICATOR MATH
 // ============================================================
 
 const sma = (data, period) =>
@@ -128,18 +150,74 @@ const realizedVol = (data, period = 30) => {
 };
 
 // ============================================================
+// LIVE QUOTE HOOK — polls Finnhub every 60s for the active ticker
+// ============================================================
+
+function useLiveQuote(symbol) {
+  const [quote, setQuote] = useState(null);
+  const [status, setStatus] = useState("idle");
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+    if (!FINNHUB_KEY || FINNHUB_KEY === "PASTE_YOUR_FINNHUB_KEY_HERE") {
+      setStatus("unconfigured");
+      return;
+    }
+
+    let cancelled = false;
+    setQuote(null);
+    setStatus("idle");
+
+    const fetchQuote = async () => {
+      try {
+        const res = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.c == null || data.c === 0) return;
+        setQuote({
+          current: data.c,
+          change: data.d,
+          changePct: data.dp,
+          high: data.h,
+          low: data.l,
+          open: data.o,
+          prevClose: data.pc,
+        });
+        setLastUpdate(new Date());
+        setStatus(isMarketOpen() ? "live" : "closed");
+      } catch (e) {
+        if (!cancelled) setStatus("error");
+      }
+    };
+
+    fetchQuote();
+    intervalRef.current = setInterval(fetchQuote, REFRESH_MS);
+
+    return () => {
+      cancelled = true;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [symbol]);
+
+  return { quote, status, lastUpdate };
+}
+
+// ============================================================
 // HELPERS
 // ============================================================
 
 const fmt = (n, d = 2) => (n == null || isNaN(n) ? "—" : Number(n).toFixed(d));
 const pct = (n) => (n == null || isNaN(n) ? "—" : `${n > 0 ? "+" : ""}${Number(n).toFixed(2)}%`);
 const colorFor = (n) => (n > 0 ? "#0a8554" : n < 0 ? "#c4314b" : "#5a6573");
-
-const labelFromDate = (d) =>
-  new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const labelFromDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 // ============================================================
-// MAIN COMPONENT
+// MAIN
 // ============================================================
 
 export default function App() {
@@ -150,7 +228,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Load index on mount
+  const live = useLiveQuote(ticker);
+
   useEffect(() => {
     fetch(`${BASE}data/index.json`)
       .then((r) => {
@@ -165,7 +244,6 @@ export default function App() {
       .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
-  // Load ticker data when selection changes
   useEffect(() => {
     if (!ticker) return;
     setData(null);
@@ -175,7 +253,6 @@ export default function App() {
       .catch((e) => setError(e.message));
   }, [ticker]);
 
-  // Compute indicators from candles
   const enriched = useMemo(() => {
     if (!data?.candles || data.candles.length < 30) return null;
     let d = data.candles.map((c) => ({ ...c, label: labelFromDate(c.date) }));
@@ -188,6 +265,9 @@ export default function App() {
   if (error) return <ErrorScreen message={error} />;
   if (!index || !data || !enriched) return <LoadingScreen />;
 
+  // Live quote takes precedence over daily snapshot
+  const displayQuote = live.quote || data.quote;
+
   const last = enriched[enriched.length - 1];
   const lastRsi = last.rsi;
   const lastZ = last.zscore;
@@ -199,7 +279,6 @@ export default function App() {
 
   const f = data.fundamentals;
   const c = data.consensus;
-  const upsidePct = null; // Finnhub free tier doesn't include price targets reliably
 
   const trendSignal = last.close > last.sma50 && last.sma50 > last.sma200 ? "Bullish trend" :
                       last.close < last.sma50 && last.sma50 < last.sma200 ? "Bearish trend" : "Mixed";
@@ -208,7 +287,7 @@ export default function App() {
   const regimeSignal = hurst > 0.55 ? "Trending" : hurst < 0.45 ? "Mean-reverting" : "Random walk";
 
   const peerRows = [
-    { ticker: data.symbol, name: data.name, price: data.quote.current, pe: f.pe, fwdPe: f.fwdPe, peg: f.peg, ps: f.ps, evEbitda: f.evEbitda, roe: f.roe, mcap: f.mcap, isSelf: true },
+    { ticker: data.symbol, name: data.name, price: displayQuote.current, pe: f.pe, fwdPe: f.fwdPe, peg: f.peg, ps: f.ps, evEbitda: f.evEbitda, roe: f.roe, mcap: f.mcap, isSelf: true },
     ...Object.entries(data.peerData || {}).map(([sym, p]) => ({ ticker: sym, name: sym, ...p })),
   ];
   const peerAvg = (key) => {
@@ -220,12 +299,6 @@ export default function App() {
     !search || t.symbol.includes(search.toUpperCase()) || t.name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const stale = (() => {
-    if (!index.generatedAt) return null;
-    const ageHours = (Date.now() - new Date(index.generatedAt)) / 36e5;
-    return ageHours > 36;
-  })();
-
   return (
     <div style={{ fontFamily: "'IBM Plex Sans', -apple-system, sans-serif", background: "#fafaf7", minHeight: "100vh", color: "#1a1f2c" }}>
       <Styles />
@@ -236,9 +309,8 @@ export default function App() {
           <span className="mono" style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.15em" }}>EQUITY · QUANT · DESK</span>
         </div>
         <div className="mono" style={{ fontSize: 10, color: "#8a93a3", display: "flex", gap: 16, alignItems: "center" }}>
-          <RefreshCw size={11} color={stale ? "#f87171" : "#4ade80"} />
-          <span>Last refresh: {new Date(index.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-          {stale && <span style={{ color: "#f87171" }}>· STALE</span>}
+          <LiveStatus status={live.status} lastUpdate={live.lastUpdate} />
+          <span>· Snapshot: {new Date(index.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
         </div>
       </header>
 
@@ -273,12 +345,17 @@ export default function App() {
                 <span style={{ fontSize: 14, color: "#5a6573" }}>{data.name}</span>
                 <span className="pill" style={{ background: "#f5f3ed", color: "#5a6573" }}>{data.sector}</span>
               </div>
-              <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4, letterSpacing: "0.1em" }}>USD · DAILY · DATA AS OF {new Date(data.fetchedAt).toLocaleDateString()}</div>
+              <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4, letterSpacing: "0.1em" }}>
+                {live.status === "live" ? "● LIVE QUOTE" : live.status === "closed" ? "MARKET CLOSED · LAST PRICE" : "USD · DAILY"}
+                {live.lastUpdate && ` · UPDATED ${live.lastUpdate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`}
+              </div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div className="mono" style={{ fontSize: 36, fontWeight: 500, lineHeight: 1 }}>{fmt(data.quote.current)}</div>
-              <div className="mono" style={{ fontSize: 13, marginTop: 4, color: colorFor(data.quote.change) }}>
-                {data.quote.change >= 0 ? "▲" : "▼"} {fmt(Math.abs(data.quote.change ?? 0))} ({pct(data.quote.changePct)})
+              <div className="mono" style={{ fontSize: 36, fontWeight: 500, lineHeight: 1, color: live.status === "live" ? "#1a1f2c" : "#1a1f2c" }}>
+                {fmt(displayQuote.current)}
+              </div>
+              <div className="mono" style={{ fontSize: 13, marginTop: 4, color: colorFor(displayQuote.change) }}>
+                {displayQuote.change >= 0 ? "▲" : "▼"} {fmt(Math.abs(displayQuote.change ?? 0))} ({pct(displayQuote.changePct)})
               </div>
             </div>
           </div>
@@ -290,7 +367,6 @@ export default function App() {
             <SignalCard icon={MessageSquare} label="Momentum" value={momentumSignal} />
           </div>
 
-          {/* TECHNICAL CHART STACK */}
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="panel-head">
               <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -387,7 +463,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* QUANT */}
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="panel-head">
               <span className="panel-title">Quant · Statistical Signals</span>
@@ -428,7 +503,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* PEER COMPARISON */}
           {peerRows.length > 1 && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-head">
@@ -482,7 +556,6 @@ export default function App() {
             </div>
           )}
 
-          {/* VALUE / CONSENSUS / 52W */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
             <div className="panel">
               <div className="panel-head">
@@ -542,7 +615,7 @@ export default function App() {
 
             <div className="panel">
               <div className="panel-head">
-                <span className="panel-title">52-Week Range & Position</span>
+                <span className="panel-title">52-Week Range</span>
                 <Activity size={13} color="#d4a017" strokeWidth={1.5} />
               </div>
               <div style={{ padding: "14px" }}>
@@ -552,29 +625,28 @@ export default function App() {
                     <span className="mono" style={{ color: "#0a8554" }}>${fmt(f.week52High)}</span>
                   </div>
                   <div style={{ height: 6, background: "#efece5", borderRadius: 2, position: "relative" }}>
-                    {f.week52High && f.week52Low && data.quote.current && (
+                    {f.week52High && f.week52Low && displayQuote.current && (
                       <div style={{
                         position: "absolute",
-                        left: `${Math.min(100, Math.max(0, ((data.quote.current - f.week52Low) / (f.week52High - f.week52Low)) * 100))}%`,
+                        left: `${Math.min(100, Math.max(0, ((displayQuote.current - f.week52Low) / (f.week52High - f.week52Low)) * 100))}%`,
                         top: -2, width: 2, height: 10, background: "#1a1f2c", transform: "translateX(-50%)",
                       }} />
                     )}
                   </div>
                   <div style={{ textAlign: "center", fontSize: 10, color: "#5a6573", marginTop: 6 }}>
-                    Current: ${fmt(data.quote.current)} ({f.week52High && f.week52Low ? fmt(((data.quote.current - f.week52Low) / (f.week52High - f.week52Low)) * 100, 0) : "—"}% of range)
+                    Current: ${fmt(displayQuote.current)} ({f.week52High && f.week52Low ? fmt(((displayQuote.current - f.week52Low) / (f.week52High - f.week52Low)) * 100, 0) : "—"}% of range)
                   </div>
                 </div>
-                <StatRow label="Day High" value={<span className="mono">${fmt(data.quote.high)}</span>} />
-                <StatRow label="Day Low" value={<span className="mono">${fmt(data.quote.low)}</span>} />
-                <StatRow label="Day Open" value={<span className="mono">${fmt(data.quote.open)}</span>} />
-                <StatRow label="Prev Close" value={<span className="mono">${fmt(data.quote.prevClose)}</span>} />
+                <StatRow label="Day High" value={<span className="mono">${fmt(displayQuote.high)}</span>} />
+                <StatRow label="Day Low" value={<span className="mono">${fmt(displayQuote.low)}</span>} />
+                <StatRow label="Day Open" value={<span className="mono">${fmt(displayQuote.open)}</span>} />
+                <StatRow label="Prev Close" value={<span className="mono">${fmt(displayQuote.prevClose)}</span>} />
                 <StatRow label="52W High" value={<span className="mono">${fmt(f.week52High)}</span>} />
                 <StatRow label="52W Low" value={<span className="mono">${fmt(f.week52Low)}</span>} />
               </div>
             </div>
           </div>
 
-          {/* COMPOSITE READ */}
           <div className="panel" style={{ marginTop: 16, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, background: "#1a1f2c", color: "#fff", borderColor: "#1a1f2c" }}>
             <AlertCircle size={16} color="#d4a017" />
             <div style={{ flex: 1, fontSize: 12, lineHeight: 1.6 }}>
@@ -589,13 +661,42 @@ export default function App() {
   );
 }
 
-// -------- Subcomponents --------
+// ============================================================
+// SUBCOMPONENTS
+// ============================================================
+
+const LiveStatus = ({ status, lastUpdate }) => {
+  const config = {
+    live:    { color: "#4ade80", label: "LIVE",       pulse: true  },
+    closed:  { color: "#d4a017", label: "AFTER HOURS",pulse: false },
+    error:   { color: "#f87171", label: "OFFLINE",    pulse: false },
+    idle:    { color: "#8a93a3", label: "CONNECTING", pulse: false },
+    unconfigured: { color: "#8a93a3", label: "DAILY ONLY", pulse: false },
+  }[status] || { color: "#8a93a3", label: "—", pulse: false };
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span style={{
+        width: 7, height: 7, borderRadius: "50%", background: config.color,
+        animation: config.pulse ? "pulse 1.5s infinite" : "none",
+      }} />
+      <span style={{ color: config.color, fontWeight: 600, letterSpacing: "0.1em" }}>{config.label}</span>
+      {lastUpdate && status !== "unconfigured" && (
+        <span>· {lastUpdate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+      )}
+    </span>
+  );
+};
 
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600&display=swap');
     * { box-sizing: border-box; }
     body { margin: 0; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
     .mono { font-family: 'IBM Plex Mono', monospace; font-feature-settings: 'tnum' 1; }
     .serif { font-family: 'IBM Plex Serif', serif; }
     .panel { background: #fff; border: 1px solid #e6e3db; border-radius: 2px; }
