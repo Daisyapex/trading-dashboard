@@ -2,9 +2,8 @@ name: Fetch Market Data
 
 on:
   schedule:
-    # Run at 22:00 UTC every weekday (after US market close 21:00 UTC, with buffer)
     - cron: "0 22 * * 1-5"
-  workflow_dispatch: # Allow manual trigger from Actions tab
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,6 +20,9 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Install dependencies
+        run: npm install
+
       - name: Run fetch script
         env:
           FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
@@ -29,11 +31,7 @@ jobs:
       - name: Commit updated data
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add public/data/
-          if git diff --cached --quiet; then
-            echo "No data changes to commit."
-          else
-            git commit -m "data: daily refresh $(date -u +%Y-%m-%d)"
-            git push
-          fi
+          git diff --staged --quiet || git commit -m "data: daily refresh $(date -u +'%Y-%m-%d')"
+          git push
