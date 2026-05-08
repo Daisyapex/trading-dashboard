@@ -6,8 +6,6 @@
     { "symbol": "MU",    "name": "Micron Technology",  "sector": "Technology",              "peers": ["NVDA", "AMD", "INTC", "TSM"],           "holding": true },
     { "symbol": "AMD",   "name": "Advanced Micro Dev", "sector": "Technology",              "peers": ["NVDA", "INTC", "AVGO", "QCOM"],         "holding": true },
     { "symbol": "SNY",   "name": "Sanofi ADR",         "sector": "Healthcare",              "peers": ["PFE", "MRK", "JNJ", "LLY"],             "holding": true },
-    { "symbol": "VKGLF", "name": "Viking Line (OTC)",  "sector": "Industrials",             "peers": ["RCL", "CCL", "NCLH"],                   "holding": true },
-
     { "symbol": "AAPL",  "name": "Apple Inc.",         "sector": "Technology",              "peers": ["MSFT", "GOOGL", "META", "AMZN"] },
     { "symbol": "GOOGL", "name": "Alphabet Inc.",      "sector": "Technology",              "peers": ["MSFT", "AAPL", "META", "AMZN"] },
     { "symbol": "META",  "name": "Meta Platforms",     "sector": "Technology",              "peers": ["GOOGL", "MSFT", "AAPL", "AMZN"] },
