@@ -18,8 +18,6 @@ const BASE = import.meta.env.BASE_URL;
 const FINNHUB_KEY = "d7v2oe9r01qp7l70qf20d7v2oe9r01qp7l70qf2g";
 const REFRESH_MS = 60_000;
 
-// Right-pad on charts so the inner plot area lines up with the candlestick chart's
-// price scale (which lightweight-charts auto-sizes to ~56px desktop / ~44px mobile).
 const RIGHT_PAD_DESKTOP = 56;
 const RIGHT_PAD_MOBILE = 50;
 
@@ -163,7 +161,6 @@ function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth }) {
 
     chart.timeScale().fitContent();
 
-    // Report price scale width to parent so subcharts can match
     setTimeout(() => {
       try {
         const w = chart.priceScale("right").width();
@@ -228,9 +225,9 @@ const TIMEFRAMES = [
 ];
 
 async function fetchYahooCandles(symbol, range, interval) {
-  const isIntraday = interval.includes("m") || interval.includes("h");
   const target = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
-  const url = isIntraday ? `https://corsproxy.io/?${encodeURIComponent(target)}` : target;
+  // Always proxy because Yahoo blocks browser-origin requests on this endpoint
+  const url = `https://corsproxy.io/?url=${encodeURIComponent(target)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yahoo ${res.status}`);
   const data = await res.json();
@@ -305,12 +302,13 @@ export default function App() {
   const [timeframe, setTimeframe] = useState("1Y");
   const [tfCandles, setTfCandles] = useState(null);
   const [tfLoading, setTfLoading] = useState(false);
+  const [tfError, setTfError] = useState(null);
   const [priceScaleWidth, setPriceScaleWidth] = useState(null);
   const isMobile = useIsMobile();
   const live = useLiveQuote(ticker);
 
   useEffect(() => {
-    fetch(`${BASE}data/index.json`)
+    fetch(`${BASE}data/index.json?v=${Date.now()}`)
       .then((r) => { if (!r.ok) throw new Error("No data found. Run the fetch workflow."); return r.json(); })
       .then((idx) => { setIndex(idx); if (idx.tickers?.length) setTicker(idx.tickers[0].symbol); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
@@ -318,24 +316,23 @@ export default function App() {
 
   useEffect(() => {
     if (!ticker) return;
-    setData(null); setSearchError(null); setTfCandles(null); setTimeframe("1Y");
-    fetch(`${BASE}data/${ticker}.json`)
+    setData(null); setSearchError(null); setTfCandles(null); setTimeframe("1Y"); setTfError(null);
+    fetch(`${BASE}data/${ticker}.json?v=${Date.now()}`)
       .then((r) => r.ok ? r.json() : fetchAdHoc(ticker))
       .then(setData)
       .catch((e) => setError(e.message));
   }, [ticker]);
 
-  // When timeframe changes, fetch the appropriate candles
   useEffect(() => {
     if (!data || !ticker) return;
-    if (timeframe === "1Y") { setTfCandles(null); return; } // use baked-in 1Y data
-    if (timeframe === "5Y" && data.candles5Y?.length) { setTfCandles(data.candles5Y); return; } // use baked-in 5Y data
+    if (timeframe === "1Y") { setTfCandles(null); setTfError(null); return; }
+    if (timeframe === "5Y" && data.candles5Y?.length) { setTfCandles(data.candles5Y); setTfError(null); return; }
     const tf = TIMEFRAMES.find((t) => t.key === timeframe);
     if (!tf) return;
-    setTfLoading(true);
+    setTfLoading(true); setTfError(null);
     fetchYahooCandles(ticker, tf.range, tf.interval)
-      .then((c) => setTfCandles(c))
-      .catch(() => setTfCandles([]))
+      .then((c) => { setTfCandles(c); if (!c.length) setTfError("No data returned"); })
+      .catch((e) => { console.error(`Timeframe fetch failed: ${e.message}`); setTfCandles([]); setTfError(e.message); })
       .finally(() => setTfLoading(false));
   }, [timeframe, ticker, data]);
 
@@ -353,14 +350,12 @@ export default function App() {
     } catch (err) { setSearchError(err.message); } finally { setSearchLoading(false); }
   };
 
-  // Active candles for chart (timeframe-aware)
   const activeCandles = useMemo(() => {
     if (timeframe === "1Y") return data?.candles || [];
     if (tfCandles !== null) return tfCandles;
     return data?.candles || [];
   }, [data, timeframe, tfCandles]);
 
-  // Enrich with indicators (only for daily/weekly bars; intraday skips heavier indicators)
   const enriched = useMemo(() => {
     if (!activeCandles || activeCandles.length < 30) return null;
     let d = activeCandles.map((c) => ({ ...c, label: labelFromDate(c.date) }));
@@ -397,7 +392,6 @@ export default function App() {
     regimeSignal = hurst > 0.55 ? "Trending" : hurst < 0.45 ? "Mean-reverting" : "Random walk";
   }
 
-  // Right-edge padding for indicator panes (matches the candlestick chart's price scale)
   const paneRightPad = priceScaleWidth || (isMobile ? RIGHT_PAD_MOBILE : RIGHT_PAD_DESKTOP);
 
   const peerRows = [
@@ -473,7 +467,6 @@ export default function App() {
         )}
 
         <main style={{ padding: isMobile ? 12 : 16, minWidth: 0 }}>
-          {/* TICKER HEADER */}
           <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "flex-end", justifyContent: "space-between", gap: isMobile ? 8 : 0, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid #e6e3db" }}>
             <div>
               <div style={{ display: "flex", alignItems: "baseline", gap: isMobile ? 8 : 12, flexWrap: "wrap" }}>
@@ -496,12 +489,10 @@ export default function App() {
             </div>
           </div>
 
-          {/* ANALYST INSIGHTS PANEL */}
           {a && a.targetMean && (
             <AnalystInsightsPanel data={data} a={a} c={c} currentPrice={displayQuote.current} isMobile={isMobile} />
           )}
 
-          {/* SIGNAL STRIP */}
           {enriched && (
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
               <SignalCard icon={Activity} label="Technical" value={trendSignal} />
@@ -511,7 +502,6 @@ export default function App() {
             </div>
           )}
 
-          {/* CANDLESTICK + TIMEFRAME SELECTOR */}
           <div className="panel" style={{ marginBottom: 16 }}>
             <div className="panel-head">
               <span className="panel-title">Candlestick · {timeframe}</span>
@@ -532,11 +522,12 @@ export default function App() {
               {activeCandles?.length > 0 ? (
                 <CandlestickChart key={`${ticker}-${timeframe}`} data={enriched || activeCandles} height={isMobile ? 280 : 420} isMobile={isMobile} onPriceScaleWidth={setPriceScaleWidth} />
               ) : (
-                <div style={{ padding: 32, color: "#8a93a3", textAlign: "center" }}>No data for this timeframe</div>
+                <div style={{ padding: 32, color: "#8a93a3", textAlign: "center", fontSize: 13 }}>
+                  {tfError ? `Could not load ${timeframe} data: ${tfError}` : "No data for this timeframe"}
+                </div>
               )}
             </div>
 
-            {/* GOOGLE-STYLE STATS BAR */}
             {f && (
               <div style={{ borderTop: "1px solid #efece5", padding: isMobile ? "10px 12px" : "12px 16px", display: "grid",
                 gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: isMobile ? "10px 16px" : "10px 24px" }}>
@@ -555,7 +546,6 @@ export default function App() {
               </div>
             )}
 
-            {/* RSI / MACD / SQZMOM panes — aligned with candlestick chart's price scale */}
             {enriched && (
               <>
                 <div style={{ padding: "0 4px", borderTop: "1px solid #efece5" }}>
@@ -618,10 +608,8 @@ export default function App() {
             )}
           </div>
 
-          {/* PETER LYNCH PANEL */}
           {ly && <LynchPanel ly={ly} f={f} isMobile={isMobile} />}
 
-          {/* QUANT (Z-score, vol, regime) + SIMONS metrics */}
           {enriched && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-head"><span className="panel-title">Quant · Statistical</span><Sigma size={13} color="#d4a017" /></div>
@@ -656,10 +644,8 @@ export default function App() {
             </div>
           )}
 
-          {/* SIMONS / RENAISSANCE-STYLE METRICS */}
           {sm && <SimonsPanel sm={sm} isMobile={isMobile} />}
 
-          {/* PEER COMPARISON */}
           {peerRows.length > 1 && !data.isAdHoc && (
             <div className="panel" style={{ marginBottom: 16 }}>
               <div className="panel-head"><span className="panel-title">Peer Comparison</span><GitCompare size={13} color="#d4a017" /></div>
@@ -698,7 +684,6 @@ export default function App() {
             </div>
           )}
 
-          {/* VALUE / CONSENSUS / 52W */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16 }}>
             <div className="panel">
               <div className="panel-head"><span className="panel-title">Value · Fundamentals</span><DollarSign size={13} color="#d4a017" /></div>
