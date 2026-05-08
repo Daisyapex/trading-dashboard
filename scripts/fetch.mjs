@@ -2,9 +2,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import yahooFinance from "yahoo-finance2";
 
-// Suppress all yahoo-finance2 notices
-yahooFinance.suppressNotices(["yahooSurvey", "ripHistorical"]);
-yahooFinance.setGlobalConfig({ logger: { info: () => {}, warn: () => {}, error: console.error, debug: () => {} } });
+
 
 const FINNHUB_KEY = process.env.FINNHUB_KEY;
 if (!FINNHUB_KEY) {
