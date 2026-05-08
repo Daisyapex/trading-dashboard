@@ -651,7 +651,7 @@ export default function App() {
               <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 <table className="peers">
                   <thead>
-                    <tr><th>Ticker</th><th>Price</th><th>P/E</th><th>Fwd P/E</th><th>PEG</th><th>P/S</th><th>EV/EBITDA</th><th>ROE %</th><th>Mkt Cap M</th></tr>
+                    <tr><th>Ticker</th><th>Price</th><th>P/E</th><th>Fwd P/E</th><th>PEG</th><th>P/S</th><th>EV/EBITDA</th><th>ROE %</th><th>Mkt Cap</th></tr>
                   </thead>
                   <tbody>
                     {peerRows.map((r) => {
@@ -667,7 +667,7 @@ export default function App() {
                           <td className="mono">{fmt(r.ps, 1)}</td>
                           <td className="mono">{fmt(r.evEbitda, 1)}</td>
                           <td className="mono" style={{ color: r.roe > 15 ? "#0a8554" : r.roe < 0 ? "#c4314b" : "#1a1f2c" }}>{fmt(r.roe, 1)}</td>
-                          <td className="mono">{r.mcap ? fmt(r.mcap, 0) : "—"}</td>
+                          <td className="mono">{r.mcap ? formatMcap(r.mcap * 1e6) : "—"}</td>
                         </tr>
                       );
                     })}
