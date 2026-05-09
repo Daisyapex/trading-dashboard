@@ -252,21 +252,154 @@ async function fetchYahooCandles(symbol, range, interval) {
 }
 
 async function fetchAdHoc(symbol) {
-  if (!FINNHUB_KEY || FINNHUB_KEY === "PASTE_YOUR_FINNHUB_KEY_HERE") throw new Error("Finnhub key not configured");
+  if (!FINNHUB_KEY || FINNHUB_KEY === "d7v2oe9r01qp7l70qf20d7v2oe9r01qp7l70qf2g") throw new Error("Finnhub key not configured");
   const f = (path, params) => fetch(`https://finnhub.io/api/v1${path}?${new URLSearchParams({ ...params, token: FINNHUB_KEY })}`).then(r => r.ok ? r.json() : null);
-  const [quote, profile, candles] = await Promise.all([
-    f("/quote", { symbol }), f("/stock/profile2", { symbol }),
+
+  // Yahoo quoteSummary via CORS proxy (browser can't hit Yahoo directly)
+  const yahooSummaryProxied = async (sym) => {
+    const modules = "financialData,defaultKeyStatistics,summaryDetail,price,recommendationTrend,upgradeDowngradeHistory,earningsTrend,earningsHistory,insiderTransactions";
+    const target = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${sym}?modules=${modules}`;
+    try {
+      const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data?.quoteSummary?.result?.[0] || null;
+    } catch (e) { return null; }
+  };
+  const yvAdHoc = (obj, ...path) => {
+    let cur = obj;
+    for (const p of path) { if (cur == null) return null; cur = cur[p]; }
+    if (cur == null) return null;
+    if (typeof cur === "object" && "raw" in cur) return cur.raw;
+    return cur;
+  };
+
+  const [quote, profile, metrics, recs, summary, candles] = await Promise.all([
+    f("/quote", { symbol }),
+    f("/stock/profile2", { symbol }),
+    f("/stock/metric", { symbol, metric: "all" }),
+    f("/stock/recommendation", { symbol }),
+    yahooSummaryProxied(symbol),
     fetchYahooCandles(symbol, "1y", "1d").catch(() => []),
   ]);
   if (!quote || quote.c == null || quote.c === 0) throw new Error(`No data for "${symbol}"`);
+
+  const m = metrics?.metric || {};
+  const ks = summary?.defaultKeyStatistics || {};
+  const sd = summary?.summaryDetail || {};
+  const fd = summary?.financialData || {};
+
+  const latestRec = recs?.[0] || {};
+  const totalRecs = (latestRec.strongBuy || 0) + (latestRec.buy || 0) + (latestRec.hold || 0) + (latestRec.sell || 0) + (latestRec.strongSell || 0);
+  const buys = (latestRec.strongBuy || 0) + (latestRec.buy || 0);
+  const sells = (latestRec.sell || 0) + (latestRec.strongSell || 0);
+  const score = totalRecs ? (5 * (latestRec.strongBuy || 0) + 4 * (latestRec.buy || 0) + 3 * (latestRec.hold || 0) + 2 * (latestRec.sell || 0) + (latestRec.strongSell || 0)) / totalRecs : null;
+  const rating = score == null ? "—" : score >= 4.5 ? "Strong Buy" : score >= 3.7 ? "Buy" : score >= 2.7 ? "Hold" : score >= 1.7 ? "Sell" : "Strong Sell";
+
+  const recTrend = summary?.recommendationTrend?.trend || [];
+  const upgrades = summary?.upgradeDowngradeHistory?.history || [];
+  const analystData = yvAdHoc(fd, "targetMeanPrice") ? {
+    targetMean: yvAdHoc(fd, "targetMeanPrice"),
+    targetHigh: yvAdHoc(fd, "targetHighPrice"),
+    targetLow: yvAdHoc(fd, "targetLowPrice"),
+    targetMedian: yvAdHoc(fd, "targetMedianPrice"),
+    numAnalysts: yvAdHoc(fd, "numberOfAnalystOpinions"),
+    monthlyTrend: recTrend.slice(0, 4).reverse().map((r) => ({
+      period: r.period, strongBuy: r.strongBuy ?? 0, buy: r.buy ?? 0,
+      hold: r.hold ?? 0, sell: r.sell ?? 0, strongSell: r.strongSell ?? 0,
+    })),
+    latestActions: upgrades.slice(0, 5).map((u) => ({
+      date: u.epochGradeDate ? new Date(u.epochGradeDate * 1000).toISOString().slice(0, 10) : null,
+      firm: u.firm ?? null, toGrade: u.toGrade ?? null,
+      fromGrade: u.fromGrade ?? null, action: u.action ?? null,
+    })),
+  } : null;
+
+  const mcapRaw = yvAdHoc(sd, "marketCap");
+  const revG = yvAdHoc(fd, "revenueGrowth");
+  let lynchCategory = "—";
+  if (mcapRaw && revG != null) {
+    if (mcapRaw > 200e9 && Math.abs(revG) < 0.05) lynchCategory = "Stalwart";
+    else if (revG > 0.20) lynchCategory = "Fast Grower";
+    else if (revG < -0.05) lynchCategory = "Turnaround";
+    else if (revG < 0.05) lynchCategory = "Slow Grower";
+    else lynchCategory = "Stalwart";
+  }
+
+  const earningsTrend = summary?.earningsTrend?.trend || [];
+  const nextYrTrend = earningsTrend.find((e) => e.period === "+1y") || {};
+  const fiveYrTrend = earningsTrend.find((e) => e.period === "+5y") || {};
+  const insiderTxs = summary?.insiderTransactions?.transactions || [];
+  let insiderBuys = 0, insiderSells = 0, insiderBuyValue = 0, insiderSellValue = 0;
+  insiderTxs.forEach((tx) => {
+    const txt = (tx.transactionText || "").toLowerCase();
+    const isBuy = txt.includes("purchase") || txt.includes("buy");
+    const isSell = txt.includes("sale") || txt.includes("sell");
+    const value = yvAdHoc(tx, "value") ?? 0;
+    if (isBuy) { insiderBuys++; insiderBuyValue += value; }
+    if (isSell) { insiderSells++; insiderSellValue += value; }
+  });
+
+  const lynchData = summary ? {
+    category: lynchCategory,
+    epsGrowthNextYr: yvAdHoc(nextYrTrend, "growth") != null ? yvAdHoc(nextYrTrend, "growth") * 100 : null,
+    epsGrowth5Yr: yvAdHoc(fiveYrTrend, "growth") != null ? yvAdHoc(fiveYrTrend, "growth") * 100 : null,
+    epsCoefVar: null,
+    epsHistory: [],
+    insiderBuys, insiderSells,
+    insiderBuyValue: Math.round(insiderBuyValue),
+    insiderSellValue: Math.round(insiderSellValue),
+    netInsiderActivity: insiderBuyValue - insiderSellValue,
+    heldByInsiders: yvAdHoc(ks, "heldPercentInsiders"),
+    heldByInstitutions: yvAdHoc(ks, "heldPercentInstitutions"),
+    shortRatio: yvAdHoc(ks, "shortRatio"),
+    shortPctFloat: yvAdHoc(ks, "shortPercentOfFloat"),
+    pegRatio: yvAdHoc(ks, "pegRatio") ?? yvAdHoc(ks, "trailingPegRatio") ?? m.pegRatio ?? null,
+  } : null;
+
   return {
     symbol, name: profile?.name || symbol, sector: profile?.finnhubIndustry || "—",
     peers: [], peerData: {}, fetchedAt: new Date().toISOString(),
     quote: { current: quote.c, change: quote.d, changePct: quote.dp, high: quote.h, low: quote.l, open: quote.o, prevClose: quote.pc },
     candles, candles5Y: [],
-    fundamentals: { mcap: null, week52High: null, week52Low: null },
-    consensus: { rating: "—", analysts: 0 },
-    analyst: null, lynch: null, simons: null, isAdHoc: true,
+    fundamentals: {
+      pe: yvAdHoc(sd, "trailingPE") ?? m.peBasicExclExtraTTM ?? null,
+      fwdPe: yvAdHoc(ks, "forwardPE") ?? yvAdHoc(sd, "forwardPE") ?? null,
+      peg: yvAdHoc(ks, "pegRatio") ?? yvAdHoc(ks, "trailingPegRatio") ?? null,
+      pb: yvAdHoc(ks, "priceToBook") ?? null,
+      ps: yvAdHoc(sd, "priceToSalesTrailing12Months") ?? null,
+      evEbitda: yvAdHoc(ks, "enterpriseToEbitda") ?? null,
+      divYield: yvAdHoc(sd, "dividendYield") != null ? yvAdHoc(sd, "dividendYield") * 100 : null,
+      qtrlyDivAmt: yvAdHoc(ks, "lastDividendValue"),
+      payout: yvAdHoc(sd, "payoutRatio") != null ? yvAdHoc(sd, "payoutRatio") * 100 : null,
+      roe: yvAdHoc(fd, "returnOnEquity") != null ? yvAdHoc(fd, "returnOnEquity") * 100 : null,
+      debtEq: yvAdHoc(fd, "debtToEquity") ?? null,
+      eps: yvAdHoc(ks, "trailingEps") ?? null,
+      epsForward: yvAdHoc(ks, "forwardEps"),
+      revGrowth: yvAdHoc(fd, "revenueGrowth") != null ? yvAdHoc(fd, "revenueGrowth") * 100 : null,
+      opMargin: yvAdHoc(fd, "operatingMargins") != null ? yvAdHoc(fd, "operatingMargins") * 100 : null,
+      profitMargin: yvAdHoc(fd, "profitMargins") != null ? yvAdHoc(fd, "profitMargins") * 100 : null,
+      mcap: mcapRaw != null ? mcapRaw / 1e6 : null,
+      mcapRaw,
+      week52High: yvAdHoc(sd, "fiftyTwoWeekHigh") ?? null,
+      week52Low: yvAdHoc(sd, "fiftyTwoWeekLow") ?? null,
+      avgVol: yvAdHoc(sd, "averageVolume"),
+      beta: yvAdHoc(ks, "beta") ?? null,
+      currentRatio: yvAdHoc(fd, "currentRatio"),
+      quickRatio: yvAdHoc(fd, "quickRatio"),
+      totalCash: yvAdHoc(fd, "totalCash"),
+      totalDebt: yvAdHoc(fd, "totalDebt"),
+    },
+    consensus: {
+      rating, score: score != null ? +score.toFixed(2) : null, analysts: totalRecs || null,
+      strongBuy: latestRec.strongBuy ?? 0, buy: latestRec.buy ?? 0, buys,
+      hold: latestRec.hold ?? 0, sell: latestRec.sell ?? 0, strongSell: latestRec.strongSell ?? 0,
+      sells,
+    },
+    analyst: analystData,
+    lynch: lynchData,
+    simons: null,
+    isAdHoc: true,
   };
 }
 
