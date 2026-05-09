@@ -190,7 +190,7 @@ function useLiveQuote(symbol) {
   const intervalRef = useRef(null);
   useEffect(() => {
     if (!symbol) return;
-    if (!FINNHUB_KEY || FINNHUB_KEY === "d7v2oe9r01qp7l70qf20d7v2oe9r01qp7l70qf2g") { setStatus("unconfigured"); return; }
+    if (!FINNHUB_KEY) { setStatus("unconfigured"); return; }
     let cancelled = false; setQuote(null); setStatus("idle");
     const fetchQuote = async () => {
       try {
@@ -215,7 +215,6 @@ function useLiveQuote(symbol) {
 // TIMEFRAME-AWARE CANDLE FETCHING
 // ============================================================
 const TIMEFRAMES = [
-
   { key: "1M", range: "1mo", interval: "1d", label: "1M" },
   { key: "6M", range: "6mo", interval: "1d", label: "6M" },
   { key: "YTD", range: "ytd", interval: "1d", label: "YTD" },
@@ -225,7 +224,6 @@ const TIMEFRAMES = [
 
 async function fetchYahooCandles(symbol, range, interval) {
   const target = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
-  // Always proxy because Yahoo blocks browser-origin requests on this endpoint
   const url = `https://corsproxy.io/?url=${encodeURIComponent(target)}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Yahoo ${res.status}`);
@@ -251,28 +249,29 @@ async function fetchYahooCandles(symbol, range, interval) {
   return candles;
 }
 
-async function fetchAdHoc(symbol) {
-  if (!FINNHUB_KEY || FINNHUB_KEY === "d7v2oe9r01qp7l70qf20d7v2oe9r01qp7l70qf2g") throw new Error("Finnhub key not configured");
-  const f = (path, params) => fetch(`https://finnhub.io/api/v1${path}?${new URLSearchParams({ ...params, token: FINNHUB_KEY })}`).then(r => r.ok ? r.json() : null);
+// Yahoo quoteSummary via CORS proxy (browser can't hit Yahoo directly)
+async function yahooSummaryProxied(sym) {
+  const modules = "financialData,defaultKeyStatistics,summaryDetail,price,recommendationTrend,upgradeDowngradeHistory,earningsTrend,earningsHistory,insiderTransactions";
+  const target = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${sym}?modules=${modules}`;
+  try {
+    const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.quoteSummary?.result?.[0] || null;
+  } catch (e) { return null; }
+}
 
-  // Yahoo quoteSummary via CORS proxy (browser can't hit Yahoo directly)
-  const yahooSummaryProxied = async (sym) => {
-    const modules = "financialData,defaultKeyStatistics,summaryDetail,price,recommendationTrend,upgradeDowngradeHistory,earningsTrend,earningsHistory,insiderTransactions";
-    const target = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${sym}?modules=${modules}`;
-    try {
-      const res = await fetch(`https://corsproxy.io/?url=${encodeURIComponent(target)}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data?.quoteSummary?.result?.[0] || null;
-    } catch (e) { return null; }
-  };
-  const yvAdHoc = (obj, ...path) => {
-    let cur = obj;
-    for (const p of path) { if (cur == null) return null; cur = cur[p]; }
-    if (cur == null) return null;
-    if (typeof cur === "object" && "raw" in cur) return cur.raw;
-    return cur;
-  };
+const yvAdHoc = (obj, ...path) => {
+  let cur = obj;
+  for (const p of path) { if (cur == null) return null; cur = cur[p]; }
+  if (cur == null) return null;
+  if (typeof cur === "object" && "raw" in cur) return cur.raw;
+  return cur;
+};
+
+async function fetchAdHoc(symbol) {
+  if (!FINNHUB_KEY) throw new Error("Finnhub key not configured");
+  const f = (path, params) => fetch(`https://finnhub.io/api/v1${path}?${new URLSearchParams({ ...params, token: FINNHUB_KEY })}`).then(r => r.ok ? r.json() : null);
 
   const [quote, profile, metrics, recs, summary, candles] = await Promise.all([
     f("/quote", { symbol }),
