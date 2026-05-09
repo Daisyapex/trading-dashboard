@@ -190,7 +190,7 @@ function useLiveQuote(symbol) {
   const intervalRef = useRef(null);
   useEffect(() => {
     if (!symbol) return;
-    if (!FINNHUB_KEY || FINNHUB_KEY === "PASTE_YOUR_FINNHUB_KEY_HERE") { setStatus("unconfigured"); return; }
+    if (!FINNHUB_KEY || FINNHUB_KEY === "d7v2oe9r01qp7l70qf20d7v2oe9r01qp7l70qf2g") { setStatus("unconfigured"); return; }
     let cancelled = false; setQuote(null); setStatus("idle");
     const fetchQuote = async () => {
       try {
