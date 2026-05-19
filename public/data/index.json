@@ -1,113 +1,113 @@
 {
-  "generatedAt": "2026-05-16T06:38:51.857Z",
+  "generatedAt": "2026-05-19T10:47:38.489Z",
   "tickers": [
     {
       "symbol": "NVDA",
       "name": "NVIDIA Corp.",
       "sector": "Technology",
       "holding": true,
-      "price": 225.32,
-      "change": -10.42,
-      "changePct": -4.4201
+      "price": 222.32,
+      "change": -3,
+      "changePct": -1.3314
     },
     {
       "symbol": "NOW",
       "name": "ServiceNow",
       "sector": "Technology",
       "holding": true,
-      "price": 95.07,
-      "change": 4.57,
-      "changePct": 5.0497
+      "price": 103.42,
+      "change": 8.35,
+      "changePct": 8.783
     },
     {
       "symbol": "MSFT",
       "name": "Microsoft Corp.",
       "sector": "Technology",
       "holding": true,
-      "price": 421.92,
-      "change": 12.49,
-      "changePct": 3.0506
+      "price": 423.54,
+      "change": 1.62,
+      "changePct": 0.384
     },
     {
       "symbol": "MU",
       "name": "Micron Technology",
       "sector": "Technology",
       "holding": true,
-      "price": 724.66,
-      "change": -51.35,
-      "changePct": -6.6172
+      "price": 681.54,
+      "change": -43.12,
+      "changePct": -5.9504
     },
     {
       "symbol": "AMD",
       "name": "Advanced Micro Dev",
       "sector": "Technology",
       "holding": true,
-      "price": 424.1,
-      "change": -25.6,
-      "changePct": -5.6927
+      "price": 420.99,
+      "change": -3.11,
+      "changePct": -0.7333
     },
     {
       "symbol": "TSM",
       "name": "Taiwan Semiconductor",
       "sector": "Technology",
       "holding": true,
-      "price": 404.35,
-      "change": -13.37,
-      "changePct": -3.2007
+      "price": 395.95,
+      "change": -8.4,
+      "changePct": -2.0774
     },
     {
       "symbol": "ASML",
       "name": "ASML Holding",
       "sector": "Technology",
       "holding": true,
-      "price": 1501.81,
-      "change": -82.7,
-      "changePct": -5.2193
+      "price": 1472.39,
+      "change": -29.42,
+      "changePct": -1.959
     },
     {
       "symbol": "AAPL",
       "name": "Apple Inc.",
       "sector": "Technology",
       "holding": false,
-      "price": 300.23,
-      "change": 2.02,
-      "changePct": 0.6774
+      "price": 297.84,
+      "change": -2.39,
+      "changePct": -0.7961
     },
     {
       "symbol": "GOOGL",
       "name": "Alphabet Inc.",
       "sector": "Communication Services",
       "holding": false,
-      "price": 396.78,
-      "change": -4.29,
-      "changePct": -1.0696
+      "price": 396.94,
+      "change": 0.16,
+      "changePct": 0.0403
     },
     {
       "symbol": "META",
       "name": "Meta Platforms",
       "sector": "Communication Services",
       "holding": false,
-      "price": 614.23,
-      "change": -4.2,
-      "changePct": -0.6791
+      "price": 611.21,
+      "change": -3.02,
+      "changePct": -0.4917
     },
     {
       "symbol": "AMZN",
       "name": "Amazon.com",
       "sector": "Consumer Discretionary",
       "holding": false,
-      "price": 264.14,
-      "change": -3.08,
-      "changePct": -1.1526
+      "price": 264.86,
+      "change": 0.72,
+      "changePct": 0.2726
     },
     {
       "symbol": "TSLA",
       "name": "Tesla, Inc.",
       "sector": "Consumer Discretionary",
       "holding": false,
-      "price": 422.24,
-      "change": -21.06,
-      "changePct": -4.7507
+      "price": 409.99,
+      "change": -12.25,
+      "changePct": -2.9012
     },
     {
       "symbol": "NFLX",
@@ -267,18 +267,18 @@
       "name": "Coca-Cola",
       "sector": "Consumer Staples",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 81.2,
+      "change": 0.38,
+      "changePct": 0.4702
     },
     {
       "symbol": "DIS",
       "name": "Walt Disney",
       "sector": "Communication Services",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 103.91,
+      "change": 1.19,
+      "changePct": 1.1585
     }
   ]
 }
