@@ -781,7 +781,8 @@ export default function App() {
               </div>
             </div>
           )}
-
+          
+          {op && <OptionsFlowPanel op={op} isMobile={isMobile} />}
           {sm && <SimonsPanel sm={sm} isMobile={isMobile} />}
 
           {peerRows.length > 1 && !data.isAdHoc && (
