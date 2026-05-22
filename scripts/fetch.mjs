@@ -10,7 +10,6 @@ if (!FINNHUB_KEY) {
 const FINNHUB = "https://finnhub.io/api/v1";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Browser-like User-Agent — Yahoo blocks generic UAs
 const BROWSER_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -23,46 +22,24 @@ let YAHOO_CRUMB = null;
 
 async function ensureYahooAuth() {
   if (YAHOO_COOKIE && YAHOO_CRUMB) return true;
-
   try {
-    // Step 1: Get the consent cookie from fc.yahoo.com (provides A1/A3 cookies)
-    const r1 = await fetch("https://fc.yahoo.com/", {
-      headers: BROWSER_HEADERS, redirect: "manual",
-    });
+    const r1 = await fetch("https://fc.yahoo.com/", { headers: BROWSER_HEADERS, redirect: "manual" });
     const setCookie = r1.headers.get("set-cookie") || "";
     if (setCookie) {
-      // Extract just the name=value pairs (drop the metadata)
       YAHOO_COOKIE = setCookie.split(",").map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
     }
-
     if (!YAHOO_COOKIE) {
-      // Fallback: try query1 root
       const r2 = await fetch("https://query1.finance.yahoo.com/", { headers: BROWSER_HEADERS });
       const sc2 = r2.headers.get("set-cookie") || "";
       YAHOO_COOKIE = sc2.split(",").map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
     }
-
-    if (!YAHOO_COOKIE) {
-      console.warn("Could not obtain Yahoo cookies");
-      return false;
-    }
-
-    // Step 2: Get the crumb using the cookie
+    if (!YAHOO_COOKIE) return false;
     const crumbRes = await fetch("https://query2.finance.yahoo.com/v1/test/getcrumb", {
       headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE },
     });
-    if (!crumbRes.ok) {
-      console.warn(`Yahoo crumb request failed: ${crumbRes.status}`);
-      return false;
-    }
+    if (!crumbRes.ok) return false;
     YAHOO_CRUMB = (await crumbRes.text()).trim();
-
-    if (!YAHOO_CRUMB || YAHOO_CRUMB.length > 50) {
-      console.warn(`Invalid crumb received: ${YAHOO_CRUMB?.slice(0, 30)}`);
-      YAHOO_CRUMB = null;
-      return false;
-    }
-
+    if (!YAHOO_CRUMB || YAHOO_CRUMB.length > 50) { YAHOO_CRUMB = null; return false; }
     console.log(`Yahoo auth OK (crumb=${YAHOO_CRUMB.slice(0, 8)}...)`);
     return true;
   } catch (e) {
@@ -71,7 +48,6 @@ async function ensureYahooAuth() {
   }
 }
 
-// ============ Finnhub helper ============
 async function finnhub(path, params = {}) {
   const qs = new URLSearchParams({ ...params, token: FINNHUB_KEY });
   const url = `${FINNHUB}${path}?${qs}`;
@@ -85,7 +61,6 @@ async function finnhub(path, params = {}) {
   return res.json();
 }
 
-// ============ Yahoo candles (no auth needed for chart endpoint) ============
 async function yahooCandles(symbol, range = "1y", interval = "1d") {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=${interval}`;
   try {
@@ -110,13 +85,9 @@ async function yahooCandles(symbol, range = "1y", interval = "1d") {
       });
     }
     return candles;
-  } catch (e) {
-    console.warn(`yahoo candles ${symbol}: ${e.message}`);
-    return [];
-  }
+  } catch (e) { return []; }
 }
 
-// ============ Yahoo quoteSummary (needs cookie + crumb) ============
 async function yahooSummary(symbol) {
   if (!YAHOO_CRUMB) return null;
   const modules = [
@@ -127,42 +98,129 @@ async function yahooSummary(symbol) {
   ].join(",");
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
   try {
-    const res = await fetch(url, {
-      headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE },
-    });
+    const res = await fetch(url, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE } });
     if (!res.ok) {
       if (res.status === 401) {
-        // Crumb expired — refresh and retry once
-        console.warn(`crumb expired for ${symbol}, refreshing...`);
         YAHOO_COOKIE = null; YAHOO_CRUMB = null;
         await ensureYahooAuth();
         if (YAHOO_CRUMB) {
           const url2 = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
           const res2 = await fetch(url2, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE } });
-          if (res2.ok) {
-            const data = await res2.json();
-            return data?.quoteSummary?.result?.[0] || null;
-          }
+          if (res2.ok) { const data = await res2.json(); return data?.quoteSummary?.result?.[0] || null; }
         }
       }
-      console.warn(`yahoo summary ${symbol}: HTTP ${res.status}`);
       return null;
     }
     const data = await res.json();
     return data?.quoteSummary?.result?.[0] || null;
+  } catch (e) { return null; }
+}
+
+// ============ OPTIONS CHAIN ============
+async function yahooOptions(symbol) {
+  const url = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}`;
+  try {
+    const res = await fetch(url, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE || "" } });
+    if (!res.ok) {
+      console.warn(`yahoo options ${symbol}: HTTP ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    return data?.optionChain?.result?.[0] || null;
   } catch (e) {
-    console.warn(`yahoo summary ${symbol}: ${e.message}`);
+    console.warn(`yahoo options ${symbol}: ${e.message}`);
     return null;
   }
 }
 
-// Helper: extract raw number from Yahoo response (which wraps as { raw, fmt })
+function computeOptionsMetrics(optChain, spotPrice) {
+  if (!optChain?.options?.[0]) return null;
+  const expiry = optChain.options[0];
+  const calls = expiry.calls || [];
+  const puts = expiry.puts || [];
+  if (!calls.length && !puts.length) return null;
+
+  // Put/Call ratios
+  const callVolTotal = calls.reduce((s, x) => s + (x.volume || 0), 0);
+  const putVolTotal = puts.reduce((s, x) => s + (x.volume || 0), 0);
+  const callOITotal = calls.reduce((s, x) => s + (x.openInterest || 0), 0);
+  const putOITotal = puts.reduce((s, x) => s + (x.openInterest || 0), 0);
+  const pcrVolume = callVolTotal > 0 ? +(putVolTotal / callVolTotal).toFixed(3) : null;
+  const pcrOI = callOITotal > 0 ? +(putOITotal / callOITotal).toFixed(3) : null;
+
+  // Top strikes by volume (combined calls + puts)
+  const allContracts = [
+    ...calls.map((c) => ({ ...c, type: "CALL" })),
+    ...puts.map((p) => ({ ...p, type: "PUT" })),
+  ].filter((c) => c.volume > 0);
+  allContracts.sort((a, b) => (b.volume || 0) - (a.volume || 0));
+  const topStrikes = allContracts.slice(0, 8).map((c) => ({
+    type: c.type,
+    strike: c.strike,
+    volume: c.volume || 0,
+    openInterest: c.openInterest || 0,
+    iv: c.impliedVolatility ? +(c.impliedVolatility * 100).toFixed(1) : null,
+    lastPrice: c.lastPrice ?? null,
+    // "Unusual" = volume > 2x open interest (signals new positions opening)
+    unusual: c.openInterest > 0 ? c.volume > 2 * c.openInterest : c.volume > 1000,
+  }));
+
+  // Volatility skew — IV at OTM strikes
+  // Find roughly 10-15% OTM put and call
+  const targetOTMPct = 0.10;
+  const otmCallTarget = spotPrice * (1 + targetOTMPct);
+  const otmPutTarget = spotPrice * (1 - targetOTMPct);
+
+  const closestCall = calls.filter((c) => c.impliedVolatility && c.strike >= spotPrice)
+    .reduce((closest, c) => !closest || Math.abs(c.strike - otmCallTarget) < Math.abs(closest.strike - otmCallTarget) ? c : closest, null);
+  const closestPut = puts.filter((p) => p.impliedVolatility && p.strike <= spotPrice)
+    .reduce((closest, p) => !closest || Math.abs(p.strike - otmPutTarget) < Math.abs(closest.strike - otmPutTarget) ? p : closest, null);
+  // ATM IV — closest strike to spot
+  const atmCall = calls.filter((c) => c.impliedVolatility)
+    .reduce((closest, c) => !closest || Math.abs(c.strike - spotPrice) < Math.abs(closest.strike - spotPrice) ? c : closest, null);
+
+  const ivATM = atmCall?.impliedVolatility ? +(atmCall.impliedVolatility * 100).toFixed(1) : null;
+  const ivOTMPut = closestPut?.impliedVolatility ? +(closestPut.impliedVolatility * 100).toFixed(1) : null;
+  const ivOTMCall = closestCall?.impliedVolatility ? +(closestCall.impliedVolatility * 100).toFixed(1) : null;
+  // Skew = OTM put IV - OTM call IV. Positive = fear pricing (puts more expensive).
+  const skew = (ivOTMPut != null && ivOTMCall != null) ? +(ivOTMPut - ivOTMCall).toFixed(1) : null;
+
+  // Skew curve data for visualization (every strike with IV)
+  const skewCurve = [...calls, ...puts]
+    .filter((c) => c.impliedVolatility && c.strike)
+    .map((c) => ({
+      strike: c.strike,
+      iv: +(c.impliedVolatility * 100).toFixed(1),
+      moneyness: +((c.strike / spotPrice - 1) * 100).toFixed(1), // % away from spot
+    }))
+    .sort((a, b) => a.strike - b.strike);
+
+  // Expiry date
+  const expiryDate = expiry.expirationDate ? new Date(expiry.expirationDate * 1000).toISOString().slice(0, 10) : null;
+  const daysToExpiry = expiry.expirationDate ? Math.round((expiry.expirationDate * 1000 - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+
+  return {
+    expiry: expiryDate,
+    daysToExpiry,
+    spotPrice,
+    pcrVolume,
+    pcrOI,
+    callVolTotal,
+    putVolTotal,
+    callOITotal,
+    putOITotal,
+    ivATM,
+    ivOTMPut,
+    ivOTMCall,
+    skew,
+    skewCurve,
+    topStrikes,
+  };
+}
+
 const v = (obj, ...path) => {
   let cur = obj;
-  for (const p of path) {
-    if (cur == null) return null;
-    cur = cur[p];
-  }
+  for (const p of path) { if (cur == null) return null; cur = cur[p]; }
   if (cur == null) return null;
   if (typeof cur === "object" && "raw" in cur) return cur.raw;
   return cur;
@@ -171,7 +229,7 @@ const v = (obj, ...path) => {
 async function fetchTicker(t) {
   console.log(`Fetching ${t.symbol}${t.holding ? " (HOLDING)" : ""}...`);
 
-  const [candles1Y, candles5Y, quote, profile, metrics, recs, summary] = await Promise.all([
+  const [candles1Y, candles5Y, quote, profile, metrics, recs, summary, options] = await Promise.all([
     yahooCandles(t.symbol, "1y", "1d"),
     yahooCandles(t.symbol, "5y", "1wk"),
     finnhub("/quote", { symbol: t.symbol }),
@@ -179,6 +237,7 @@ async function fetchTicker(t) {
     finnhub("/stock/metric", { symbol: t.symbol, metric: "all" }),
     finnhub("/stock/recommendation", { symbol: t.symbol }),
     yahooSummary(t.symbol),
+    yahooOptions(t.symbol),
   ]);
 
   // Peer fundamentals
@@ -220,7 +279,6 @@ async function fetchTicker(t) {
   const score = totalRecs ? (5 * (latestRec.strongBuy || 0) + 4 * (latestRec.buy || 0) + 3 * (latestRec.hold || 0) + 2 * (latestRec.sell || 0) + (latestRec.strongSell || 0)) / totalRecs : null;
   const rating = score == null ? "—" : score >= 4.5 ? "Strong Buy" : score >= 3.7 ? "Buy" : score >= 2.7 ? "Hold" : score >= 1.7 ? "Sell" : "Strong Sell";
 
-  // Analyst data
   const recTrend = summary?.recommendationTrend?.trend || [];
   const upgrades = summary?.upgradeDowngradeHistory?.history || [];
   const analystData = {
@@ -251,7 +309,7 @@ async function fetchTicker(t) {
     actual: v(e, "epsActual"), estimate: v(e, "epsEstimate"),
     surprise: v(e, "epsDifference"), surprisePct: v(e, "surprisePercent"),
   })).filter((e) => e.actual != null);
-  const epsValues = epsHistory.map((e) => e.actual).filter((v) => v != null);
+  const epsValues = epsHistory.map((e) => e.actual).filter((x) => x != null);
   const epsMean = epsValues.length ? epsValues.reduce((s, x) => s + x, 0) / epsValues.length : null;
   const epsStdev = epsValues.length > 1 ? Math.sqrt(epsValues.reduce((s, x) => s + (x - epsMean) ** 2, 0) / epsValues.length) : null;
   const epsCoefVar = epsMean && epsStdev ? Math.abs(epsStdev / epsMean) : null;
@@ -296,6 +354,10 @@ async function fetchTicker(t) {
   };
 
   const simonsData = candles1Y && candles1Y.length >= 50 ? computeSimonsMetrics(candles1Y) : null;
+
+  // ============ OPTIONS ============
+  const spotPrice = quote?.c ?? options?.quote?.regularMarketPrice ?? null;
+  const optionsData = options && spotPrice ? computeOptionsMetrics(options, spotPrice) : null;
 
   return {
     symbol: t.symbol,
@@ -353,6 +415,7 @@ async function fetchTicker(t) {
     analyst: analystData,
     lynch: lynchData,
     simons: simonsData,
+    options: optionsData,
     peerData,
   };
 }
@@ -413,10 +476,7 @@ function computeSimonsMetrics(candles) {
 
 async function main() {
   console.log("Initializing Yahoo Finance auth...");
-  const ok = await ensureYahooAuth();
-  if (!ok) {
-    console.warn("⚠️  Yahoo auth failed — fundamentals will be Finnhub-only");
-  }
+  await ensureYahooAuth();
 
   const config = JSON.parse(readFileSync("tickers.json", "utf8"));
   const out = { generatedAt: new Date().toISOString(), tickers: [] };
@@ -431,8 +491,8 @@ async function main() {
         price: data.quote.current, change: data.quote.change, changePct: data.quote.changePct,
       });
       const fwd = data.fundamentals.fwdPe;
-      const tgt = data.analyst?.targetMean;
-      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwd ? fwd.toFixed(1) : "—"}  tgt=${tgt ? "$" + tgt.toFixed(0) : "—"}  ${t.holding ? "★" : ""}`);
+      const pcr = data.options?.pcrVolume;
+      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwd ? fwd.toFixed(1) : "—"}  PCR=${pcr != null ? pcr.toFixed(2) : "—"}  ${t.holding ? "★" : ""}`);
     } catch (e) {
       console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
     }
