@@ -1037,54 +1037,106 @@ function OptionsFlowPanel({ op, isMobile }) {
         )}
 
         <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
-            <div className="panel-title" style={{ fontSize: 10 }}>Most Active Strikes Today</div>
-            <div className="mono" style={{ fontSize: 10, color: "#5a6573" }}>
-              All contracts below expire on <strong style={{ color: "#1a1f2c" }}>{op.expiry || "—"}</strong>
-              {op.daysToExpiry != null && <span> ({op.daysToExpiry > 0 ? `${op.daysToExpiry} days from now` : op.daysToExpiry === 0 ? "TODAY" : "expired"})</span>}
-            </div>
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 640 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #e6e3db" }}>
-                  <th style={{ padding: "6px 8px", textAlign: "left", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="CALL = bet stock goes UP. PUT = bet stock goes DOWN.">Type</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="The target price. For a call, you win if the stock goes above this. For a put, below.">Strike</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Stock price needed at expiry to break even (covers what you paid for the option).">Breakeven</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Number of contracts traded today.">Volume</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Open Interest. Total existing contracts in the market.">OI</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Implied Volatility. How big a move the market expects. Higher = pricier option.">IV %</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Cost per share. Multiply by 100 for one contract.">Last</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Cost of one contract (Last × 100). One contract = 100 shares.">Cost/contract</th>
-                  <th style={{ padding: "6px 8px", textAlign: "center", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>Flag</th>
-                </tr>
-              </thead>
-              <tbody>
-                {op.topStrikes.map((s, i) => {
-                  const breakeven = s.lastPrice != null ? (s.type === "CALL" ? s.strike + s.lastPrice : s.strike - s.lastPrice) : null;
-                  const contractCost = s.lastPrice != null ? s.lastPrice * 100 : null;
-                  return (
-                    <tr key={i} style={{ borderBottom: "1px dotted #efece5" }}>
-                      <td style={{ padding: "5px 8px" }}><span className="mono" style={{ fontWeight: 600, color: s.type === "CALL" ? "#0a8554" : "#c4314b" }}>{s.type}</span></td>
-                      <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>${fmt(s.strike, 0)}</td>
-                      <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: "#5a6573" }}>${fmt(breakeven, 2)}</td>
-                      <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>{formatMcap(s.volume)}</td>
-                      <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: "#8a93a3" }}>{formatMcap(s.openInterest)}</td>
-                      <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>{fmt(s.iv, 0)}</td>
-                      <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>${fmt(s.lastPrice, 2)}</td>
-                      <td className="mono" style={{ padding: "5px 8px", textAlign: "right", fontWeight: 500 }}>${contractCost != null ? formatMcap(contractCost) : "—"}</td>
-                      <td style={{ padding: "5px 8px", textAlign: "center" }}>
-                        {s.unusual && <span className="pill" style={{ background: "#d4a017", color: "#1a1f2c" }}>UNUSUAL</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div style={{ marginTop: 10 }}>
-            <ExplainBox text={`How to read each row: "CALL $225 expiring ${op.expiry || "soon"} costs $X per contract (100 shares). For this bet to make money at expiry, the stock needs to be above the breakeven price shown. PUTs are the opposite — they pay off if the stock goes BELOW the strike. The UNUSUAL flag means today's volume is more than 2x the existing open interest — fresh positions being opened, sometimes by informed buyers, sometimes just retail gambling.`} />
-          </div>
+          {(() => {
+            // Calculate dollar flow for each row and find the highlights
+            const enrichedStrikes = op.topStrikes.map((s) => ({
+              ...s,
+              dollarFlow: (s.lastPrice != null && s.volume) ? s.lastPrice * 100 * s.volume : 0,
+              breakeven: s.lastPrice != null ? (s.type === "CALL" ? s.strike + s.lastPrice : s.strike - s.lastPrice) : null,
+              contractCost: s.lastPrice != null ? s.lastPrice * 100 : null,
+            }));
+            const mostVolume = [...enrichedStrikes].sort((a, b) => b.volume - a.volume)[0];
+            const mostDollars = [...enrichedStrikes].sort((a, b) => b.dollarFlow - a.dollarFlow)[0];
+            const biggestFresh = [...enrichedStrikes].filter((x) => x.unusual).sort((a, b) => b.dollarFlow - a.dollarFlow)[0];
+            const totalCallDollars = enrichedStrikes.filter((x) => x.type === "CALL").reduce((s, x) => s + x.dollarFlow, 0);
+            const totalPutDollars = enrichedStrikes.filter((x) => x.type === "PUT").reduce((s, x) => s + x.dollarFlow, 0);
+            const callPutBias = totalCallDollars + totalPutDollars > 0 ? totalCallDollars / (totalCallDollars + totalPutDollars) * 100 : 50;
+
+            const HighlightCard = ({ label, item, color }) => (
+              <div style={{ flex: 1, minWidth: isMobile ? "100%" : 180, padding: "10px 12px", background: "#fff", border: `1px solid ${color}`, borderRadius: 2, borderLeft: `4px solid ${color}` }}>
+                <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>{label}</div>
+                {item ? (
+                  <>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: item.type === "CALL" ? "#0a8554" : "#c4314b" }}>
+                      {item.type} ${fmt(item.strike, 0)}
+                    </div>
+                    <div className="mono" style={{ fontSize: 11, color: "#5a6573", marginTop: 2 }}>
+                      {formatMcap(item.volume)} contracts · <strong>${formatMcap(item.dollarFlow)} flow</strong>
+                    </div>
+                    <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4, lineHeight: 1.4 }}>
+                      {item.type === "CALL" ? "Bet stock rises above" : "Bet stock falls below"} <strong>${fmt(item.breakeven, 2)}</strong> by {op.expiry || "expiry"}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: "#8a93a3" }}>None</div>
+                )}
+              </div>
+            );
+
+            return (
+              <>
+                <div className="panel-title" style={{ fontSize: 10, marginBottom: 10 }}>Smart Summary · The 3 Biggest Bets</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+                  <HighlightCard label="Most Contracts" item={mostVolume} color="#7ba2cc" />
+                  <HighlightCard label="Most Money Flowing" item={mostDollars} color="#d4a017" />
+                  <HighlightCard label="Biggest Fresh Bet (UNUSUAL)" item={biggestFresh} color="#0a8554" />
+                </div>
+
+                <div style={{ padding: "10px 12px", background: "#f5f3ed", borderRadius: 2, marginBottom: 14, fontSize: 11, color: "#1a1f2c", lineHeight: 1.6 }}>
+                  <strong>Dollar Bias:</strong> Of all dollars flowing into the top 8 active strikes, <strong style={{ color: "#0a8554" }}>{fmt(callPutBias, 0)}% went to CALLS</strong> and <strong style={{ color: "#c4314b" }}>{fmt(100 - callPutBias, 0)}% to PUTS</strong>. Total call dollars: <strong>${formatMcap(totalCallDollars)}</strong>. Total put dollars: <strong>${formatMcap(totalPutDollars)}</strong>.
+                  {callPutBias > 80 && <span> ⚠️ Heavily one-sided bullish positioning — contrarians watch for this as a potential local top.</span>}
+                  {callPutBias < 20 && <span> ⚠️ Heavily one-sided bearish positioning — contrarians watch for this as a potential bottom.</span>}
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+                  <div className="panel-title" style={{ fontSize: 10 }}>Most Active Strikes Today (Full Detail)</div>
+                  <div className="mono" style={{ fontSize: 10, color: "#5a6573" }}>
+                    All contracts below expire on <strong style={{ color: "#1a1f2c" }}>{op.expiry || "—"}</strong>
+                    {op.daysToExpiry != null && <span> ({op.daysToExpiry > 0 ? `${op.daysToExpiry} days from now` : op.daysToExpiry === 0 ? "TODAY" : "expired"})</span>}
+                  </div>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 720 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #e6e3db" }}>
+                        <th style={{ padding: "6px 8px", textAlign: "left", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="CALL = bet stock goes UP. PUT = bet stock goes DOWN.">Type</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="The target price.">Strike</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Stock price needed at expiry to break even.">Breakeven</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Contracts traded today.">Volume</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Open Interest.">OI</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Implied Volatility.">IV %</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="Cost per share.">Last</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }} title="One contract = 100 shares.">$/Contract</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", background: "#fff8e1" }} title="Today's dollar flow = Volume × $/Contract.">Total $ Today</th>
+                        <th style={{ padding: "6px 8px", textAlign: "center", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>Flag</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enrichedStrikes.map((s, i) => (
+                        <tr key={i} style={{ borderBottom: "1px dotted #efece5", background: s.unusual ? "#fffdf4" : "transparent" }}>
+                          <td style={{ padding: "5px 8px" }}><span className="mono" style={{ fontWeight: 600, color: s.type === "CALL" ? "#0a8554" : "#c4314b" }}>{s.type}</span></td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>${fmt(s.strike, 0)}</td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: "#5a6573" }}>${fmt(s.breakeven, 2)}</td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>{formatMcap(s.volume)}</td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: "#8a93a3" }}>{formatMcap(s.openInterest)}</td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>{fmt(s.iv, 0)}</td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>${fmt(s.lastPrice, 2)}</td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>${s.contractCost != null ? formatMcap(s.contractCost) : "—"}</td>
+                          <td className="mono" style={{ padding: "5px 8px", textAlign: "right", fontWeight: 600, background: "#fff8e1", color: s.type === "CALL" ? "#0a8554" : "#c4314b" }}>${formatMcap(s.dollarFlow)}</td>
+                          <td style={{ padding: "5px 8px", textAlign: "center" }}>
+                            {s.unusual && <span className="pill" style={{ background: "#d4a017", color: "#1a1f2c" }}>UNUSUAL</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <ExplainBox text={`Reading order: (1) Smart Summary tells you the answers. (2) The Total $ Today column shows real money flow per strike (volume × cost). (3) UNUSUAL flagged rows (yellow-tinted) are fresh positions being opened, not just existing positions being adjusted. The dollar bias percentage above tells you whether the crowd is betting up (calls) or down (puts) with their money — not just their contract count.`} />
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>
