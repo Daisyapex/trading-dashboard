@@ -396,7 +396,7 @@ async function fetchAdHoc(symbol) {
     analyst: analystData,
     lynch: lynchData,
     simons: null,
-    options: null, // Ad-hoc doesn't fetch options
+    options: null,
     isAdHoc: true,
   };
 }
@@ -454,16 +454,21 @@ export default function App() {
       .catch((e) => setError(e.message));
   }, [ticker]);
 
+  // Live-fetch candles for ALL timeframes (including 1Y) so chart is always current.
+  // Falls back to baked-in JSON data if Yahoo fails.
   useEffect(() => {
     if (!data || !ticker) return;
-    if (timeframe === "1Y") { setTfCandles(null); setTfError(null); return; }
-    if (timeframe === "5Y" && data.candles5Y?.length) { setTfCandles(data.candles5Y); setTfError(null); return; }
     const tf = TIMEFRAMES.find((t) => t.key === timeframe);
     if (!tf) return;
     setTfLoading(true); setTfError(null);
     fetchYahooCandles(ticker, tf.range, tf.interval)
       .then((c) => { setTfCandles(c); if (!c.length) setTfError("No data returned"); })
-      .catch((e) => { console.error(`Timeframe fetch failed: ${e.message}`); setTfCandles([]); setTfError(e.message); })
+      .catch((e) => {
+        console.error(`Timeframe fetch failed: ${e.message}`);
+        if (timeframe === "1Y" && data.candles?.length) { setTfCandles(data.candles); setTfError(null); }
+        else if (timeframe === "5Y" && data.candles5Y?.length) { setTfCandles(data.candles5Y); setTfError(null); }
+        else { setTfCandles([]); setTfError(e.message); }
+      })
       .finally(() => setTfLoading(false));
   }, [timeframe, ticker, data]);
 
@@ -482,10 +487,9 @@ export default function App() {
   };
 
   const activeCandles = useMemo(() => {
-    if (timeframe === "1Y") return data?.candles || [];
     if (tfCandles !== null) return tfCandles;
     return data?.candles || [];
-  }, [data, timeframe, tfCandles]);
+  }, [data, tfCandles]);
 
   const enriched = useMemo(() => {
     if (!activeCandles || activeCandles.length < 30) return null;
@@ -740,7 +744,6 @@ export default function App() {
             )}
           </div>
 
-          {/* OPTIONS FLOW PANEL */}
           {op && <OptionsFlowPanel op={op} isMobile={isMobile} />}
 
           {ly && <LynchPanel ly={ly} f={f} isMobile={isMobile} />}
@@ -918,7 +921,6 @@ export default function App() {
 // OPTIONS FLOW PANEL
 // ============================================================
 function OptionsFlowPanel({ op, isMobile }) {
-  // Interpret PCR volume
   const pcrV = op.pcrVolume;
   let pcrInterp = "—"; let pcrColor = "#5a6573"; let pcrPlain = "—";
   if (pcrV != null) {
@@ -934,7 +936,6 @@ function OptionsFlowPanel({ op, isMobile }) {
     }
   }
 
-  // Skew interpretation
   const skew = op.skew;
   let skewInterp = "—"; let skewColor = "#5a6573"; let skewPlain = "—";
   if (skew != null) {
@@ -950,7 +951,6 @@ function OptionsFlowPanel({ op, isMobile }) {
     }
   }
 
-  // ATM IV interpretation
   const ivATM = op.ivATM;
   let ivPlain = "—";
   if (ivATM != null) {
@@ -971,7 +971,6 @@ function OptionsFlowPanel({ op, isMobile }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 0 }}>
-        {/* PUT/CALL RATIO */}
         <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #efece5", borderBottom: "1px solid #efece5" }}>
           <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Put / Call Ratio</div>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
@@ -991,7 +990,6 @@ function OptionsFlowPanel({ op, isMobile }) {
           </div>
         </div>
 
-        {/* IV & SKEW */}
         <div style={{ padding: "14px 16px", borderBottom: "1px solid #efece5" }}>
           <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Implied Volatility & Skew</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
@@ -1018,7 +1016,6 @@ function OptionsFlowPanel({ op, isMobile }) {
           </div>
         </div>
 
-        {/* SKEW CURVE (full width) */}
         {op.skewCurve?.length >= 3 && (
           <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1", borderBottom: "1px solid #efece5" }}>
             <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Volatility Smile (IV across strikes)</div>
@@ -1039,7 +1036,6 @@ function OptionsFlowPanel({ op, isMobile }) {
           </div>
         )}
 
-        {/* TOP STRIKES */}
         <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1" }}>
           <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Most Active Strikes Today</div>
           <div style={{ overflowX: "auto" }}>
