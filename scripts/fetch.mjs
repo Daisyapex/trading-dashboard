@@ -117,27 +117,48 @@ async function yahooSummary(symbol) {
 }
 
 // ============ OPTIONS CHAIN ============
+// Yahoo's /v7/finance/options/{symbol} default returns NEAREST expiry — which is
+// often 0DTE (expires same day). 0DTE data has near-zero IV and garbage skew.
+// We fetch the expirationDates list, pick the first one >=3 days out, then fetch that.
 async function yahooOptions(symbol) {
   if (!YAHOO_CRUMB) await initYahooAuth();
   if (!YAHOO_CRUMB) return null;
-  const url = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}?crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
-  try {
+
+  const fetchChain = async (urlSuffix = "") => {
+    const url = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}?crumb=${encodeURIComponent(YAHOO_CRUMB)}${urlSuffix}`;
     let res = await fetch(url, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE || "" } });
     if (res.status === 401) {
-      // Re-authenticate once and retry
       YAHOO_COOKIE = null; YAHOO_CRUMB = null;
       await initYahooAuth();
-      if (YAHOO_CRUMB) {
-        const url2 = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}?crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
-        res = await fetch(url2, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE } });
-      }
+      if (!YAHOO_CRUMB) return null;
+      const url2 = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}?crumb=${encodeURIComponent(YAHOO_CRUMB)}${urlSuffix}`;
+      res = await fetch(url2, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE } });
     }
     if (!res.ok) {
       console.warn(`yahoo options ${symbol}: HTTP ${res.status}`);
       return null;
     }
-    const data = await res.json();
-    return data?.optionChain?.result?.[0] || null;
+    return (await res.json())?.optionChain?.result?.[0] || null;
+  };
+
+  try {
+    // Step 1: fetch the default chain to discover all expirationDates
+    const first = await fetchChain();
+    if (!first) return null;
+    const dates = first.expirationDates || [];
+    if (!dates.length) return first; // No date list — return what we got
+
+    // Step 2: find first expiry >= 3 days out (skip 0DTE / next-day)
+    const minTs = Math.floor(Date.now() / 1000) + 3 * 24 * 3600;
+    const targetTs = dates.find((d) => d >= minTs) || dates[dates.length - 1];
+
+    // If default chain is already that expiry, reuse it
+    const defaultExpiry = first.options?.[0]?.expirationDate;
+    if (defaultExpiry === targetTs) return first;
+
+    // Step 3: re-fetch chain for that specific expiry
+    const targeted = await fetchChain(`&date=${targetTs}`);
+    return targeted || first;
   } catch (e) {
     console.warn(`yahoo options ${symbol}: ${e.message}`);
     return null;
@@ -151,7 +172,17 @@ function computeOptionsMetrics(optChain, spotPrice) {
   const puts = expiry.puts || [];
   if (!calls.length && !puts.length) return null;
 
-  // Put/Call ratios
+  // ---- IV filter: drop garbage values ----
+  // Yahoo returns IV=0, IV=0.0001, or exactly IV=0.5 (50.0%) when it has no
+  // real data. Real IV for liquid US equity options is typically 0.10–2.00.
+  const validIV = (iv) => {
+    if (iv == null || typeof iv !== "number" || !isFinite(iv)) return false;
+    if (iv < 0.02 || iv > 4.0) return false;        // unrealistic range
+    if (Math.abs(iv - 0.5) < 0.0001) return false;  // Yahoo's "no data" sentinel
+    return true;
+  };
+
+  // Put/Call ratios — use volume / OI regardless of IV
   const callVolTotal = calls.reduce((s, x) => s + (x.volume || 0), 0);
   const putVolTotal = puts.reduce((s, x) => s + (x.volume || 0), 0);
   const callOITotal = calls.reduce((s, x) => s + (x.openInterest || 0), 0);
@@ -170,43 +201,48 @@ function computeOptionsMetrics(optChain, spotPrice) {
     strike: c.strike,
     volume: c.volume || 0,
     openInterest: c.openInterest || 0,
-    iv: c.impliedVolatility ? +(c.impliedVolatility * 100).toFixed(1) : null,
+    iv: validIV(c.impliedVolatility) ? +(c.impliedVolatility * 100).toFixed(1) : null,
     lastPrice: c.lastPrice ?? null,
-    // "Unusual" = volume > 2x open interest (signals new positions opening)
     unusual: c.openInterest > 0 ? c.volume > 2 * c.openInterest : c.volume > 1000,
   }));
 
-  // Volatility skew — IV at OTM strikes
-  // Find roughly 10-15% OTM put and call
+  // Volatility skew — IV at ~10% OTM strikes using ONLY valid IV data
   const targetOTMPct = 0.10;
   const otmCallTarget = spotPrice * (1 + targetOTMPct);
   const otmPutTarget = spotPrice * (1 - targetOTMPct);
 
-  const closestCall = calls.filter((c) => c.impliedVolatility && c.strike >= spotPrice)
-    .reduce((closest, c) => !closest || Math.abs(c.strike - otmCallTarget) < Math.abs(closest.strike - otmCallTarget) ? c : closest, null);
-  const closestPut = puts.filter((p) => p.impliedVolatility && p.strike <= spotPrice)
-    .reduce((closest, p) => !closest || Math.abs(p.strike - otmPutTarget) < Math.abs(closest.strike - otmPutTarget) ? p : closest, null);
-  // ATM IV — closest strike to spot
-  const atmCall = calls.filter((c) => c.impliedVolatility)
-    .reduce((closest, c) => !closest || Math.abs(c.strike - spotPrice) < Math.abs(closest.strike - spotPrice) ? c : closest, null);
+  const callsWithIV = calls.filter((c) => validIV(c.impliedVolatility) && c.strike);
+  const putsWithIV = puts.filter((p) => validIV(p.impliedVolatility) && p.strike);
 
-  const ivATM = atmCall?.impliedVolatility ? +(atmCall.impliedVolatility * 100).toFixed(1) : null;
-  const ivOTMPut = closestPut?.impliedVolatility ? +(closestPut.impliedVolatility * 100).toFixed(1) : null;
-  const ivOTMCall = closestCall?.impliedVolatility ? +(closestCall.impliedVolatility * 100).toFixed(1) : null;
-  // Skew = OTM put IV - OTM call IV. Positive = fear pricing (puts more expensive).
+  const closestCall = callsWithIV.filter((c) => c.strike >= spotPrice)
+    .reduce((closest, c) => !closest || Math.abs(c.strike - otmCallTarget) < Math.abs(closest.strike - otmCallTarget) ? c : closest, null);
+  const closestPut = putsWithIV.filter((p) => p.strike <= spotPrice)
+    .reduce((closest, p) => !closest || Math.abs(p.strike - otmPutTarget) < Math.abs(closest.strike - otmPutTarget) ? p : closest, null);
+  // ATM IV — average of ATM call + put if both available, else whichever exists
+  const atmCall = callsWithIV.reduce((closest, c) => !closest || Math.abs(c.strike - spotPrice) < Math.abs(closest.strike - spotPrice) ? c : closest, null);
+  const atmPut = putsWithIV.reduce((closest, p) => !closest || Math.abs(p.strike - spotPrice) < Math.abs(closest.strike - spotPrice) ? p : closest, null);
+
+  let ivATM = null;
+  if (atmCall && atmPut) ivATM = +(((atmCall.impliedVolatility + atmPut.impliedVolatility) / 2) * 100).toFixed(1);
+  else if (atmCall) ivATM = +(atmCall.impliedVolatility * 100).toFixed(1);
+  else if (atmPut) ivATM = +(atmPut.impliedVolatility * 100).toFixed(1);
+
+  const ivOTMPut = closestPut ? +(closestPut.impliedVolatility * 100).toFixed(1) : null;
+  const ivOTMCall = closestCall ? +(closestCall.impliedVolatility * 100).toFixed(1) : null;
   const skew = (ivOTMPut != null && ivOTMCall != null) ? +(ivOTMPut - ivOTMCall).toFixed(1) : null;
 
-  // Skew curve data for visualization (every strike with IV)
-  const skewCurve = [...calls, ...puts]
-    .filter((c) => c.impliedVolatility && c.strike)
+  // Skew curve data — use ONLY puts on the left side of spot and ONLY calls on the right.
+  // This avoids the zig-zag where put-IV and call-IV at the same strike overlap.
+  const putsLeft = putsWithIV.filter((p) => p.strike < spotPrice);
+  const callsRight = callsWithIV.filter((c) => c.strike >= spotPrice);
+  const skewCurve = [...putsLeft, ...callsRight]
     .map((c) => ({
       strike: c.strike,
       iv: +(c.impliedVolatility * 100).toFixed(1),
-      moneyness: +((c.strike / spotPrice - 1) * 100).toFixed(1), // % away from spot
+      moneyness: +((c.strike / spotPrice - 1) * 100).toFixed(1),
     }))
     .sort((a, b) => a.strike - b.strike);
 
-  // Expiry date
   const expiryDate = expiry.expirationDate ? new Date(expiry.expirationDate * 1000).toISOString().slice(0, 10) : null;
   const daysToExpiry = expiry.expirationDate ? Math.round((expiry.expirationDate * 1000 - Date.now()) / (1000 * 60 * 60 * 24)) : null;
 
