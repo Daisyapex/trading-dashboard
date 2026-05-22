@@ -781,8 +781,7 @@ export default function App() {
               </div>
             </div>
           )}
-          
-          {op && <OptionsFlowPanel op={op} isMobile={isMobile} />}
+
           {sm && <SimonsPanel sm={sm} isMobile={isMobile} />}
 
           {peerRows.length > 1 && !data.isAdHoc && (
@@ -1070,7 +1069,7 @@ function OptionsFlowPanel({ op, isMobile }) {
             </table>
           </div>
           <div style={{ marginTop: 10 }}>
-            <ExplainBox text={`"UNUSUAL" means today's volume is more than 2x the existing open interest — fresh positions being opened in size. This is the kind of activity that often precedes big moves (sometimes informed buying, sometimes a coincidence). Worth investigating but not a guaranteed signal.`} />
+            <ExplainBox text='"UNUSUAL" means today\'s volume is more than 2x the existing open interest — fresh positions being opened in size. This is the kind of activity that often precedes big moves (sometimes informed buying, sometimes a coincidence). Worth investigating but not a guaranteed signal.' />
           </div>
         </div>
       </div>
