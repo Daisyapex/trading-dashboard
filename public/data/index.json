@@ -1,113 +1,113 @@
 {
-  "generatedAt": "2026-05-21T10:53:00.207Z",
+  "generatedAt": "2026-05-22T10:29:33.535Z",
   "tickers": [
     {
       "symbol": "NVDA",
       "name": "NVIDIA Corp.",
       "sector": "Technology",
       "holding": true,
-      "price": 223.47,
-      "change": 2.86,
-      "changePct": 1.2964
+      "price": 219.51,
+      "change": -3.96,
+      "changePct": -1.772
     },
     {
       "symbol": "NOW",
       "name": "ServiceNow",
       "sector": "Technology",
       "holding": true,
-      "price": 103.3,
-      "change": 1.47,
-      "changePct": 1.4436
+      "price": 99.69,
+      "change": -3.61,
+      "changePct": -3.4947
     },
     {
       "symbol": "MSFT",
       "name": "Microsoft Corp.",
       "sector": "Technology",
       "holding": true,
-      "price": 421.06,
-      "change": 3.64,
-      "changePct": 0.872
+      "price": 419.09,
+      "change": -1.97,
+      "changePct": -0.4679
     },
     {
       "symbol": "MU",
       "name": "Micron Technology",
       "sector": "Technology",
       "holding": true,
-      "price": 731.99,
-      "change": 33.25,
-      "changePct": 4.7586
+      "price": 762.1,
+      "change": 30.11,
+      "changePct": 4.1134
     },
     {
       "symbol": "AMD",
       "name": "Advanced Micro Dev",
       "sector": "Technology",
       "holding": true,
-      "price": 447.58,
-      "change": 33.53,
-      "changePct": 8.0981
+      "price": 449.59,
+      "change": 2.01,
+      "changePct": 0.4491
     },
     {
       "symbol": "TSM",
       "name": "Taiwan Semiconductor",
       "sector": "Technology",
       "holding": true,
-      "price": 401.62,
-      "change": 9.01,
-      "changePct": 2.2949
+      "price": 407.15,
+      "change": 5.53,
+      "changePct": 1.3769
     },
     {
       "symbol": "ASML",
       "name": "ASML Holding",
       "sector": "Technology",
       "holding": true,
-      "price": 1550.13,
-      "change": 90.69,
-      "changePct": 6.214
+      "price": 1592,
+      "change": 41.87,
+      "changePct": 2.7011
     },
     {
       "symbol": "AAPL",
       "name": "Apple Inc.",
       "sector": "Technology",
       "holding": false,
-      "price": 302.25,
-      "change": 3.28,
-      "changePct": 1.0971
+      "price": 304.99,
+      "change": 2.74,
+      "changePct": 0.9065
     },
     {
       "symbol": "GOOGL",
       "name": "Alphabet Inc.",
       "sector": "Communication Services",
       "holding": false,
-      "price": 388.91,
-      "change": 1.25,
-      "changePct": 0.3224
+      "price": 387.66,
+      "change": -1.25,
+      "changePct": -0.3214
     },
     {
       "symbol": "META",
       "name": "Meta Platforms",
       "sector": "Communication Services",
       "holding": false,
-      "price": 605.06,
-      "change": 2.45,
-      "changePct": 0.4066
+      "price": 607.38,
+      "change": 2.32,
+      "changePct": 0.3834
     },
     {
       "symbol": "AMZN",
       "name": "Amazon.com",
       "sector": "Consumer Discretionary",
       "holding": false,
-      "price": 265.01,
-      "change": 5.67,
-      "changePct": 2.1863
+      "price": 268.46,
+      "change": 3.45,
+      "changePct": 1.3018
     },
     {
       "symbol": "TSLA",
       "name": "Tesla, Inc.",
       "sector": "Consumer Discretionary",
       "holding": false,
-      "price": 417.26,
-      "change": 13.15,
-      "changePct": 3.2541
+      "price": 417.85,
+      "change": 0.59,
+      "changePct": 0.1414
     },
     {
       "symbol": "NFLX",
