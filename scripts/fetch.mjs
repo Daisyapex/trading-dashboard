@@ -118,9 +118,20 @@ async function yahooSummary(symbol) {
 
 // ============ OPTIONS CHAIN ============
 async function yahooOptions(symbol) {
-  const url = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}`;
+  if (!YAHOO_CRUMB) await initYahooAuth();
+  if (!YAHOO_CRUMB) return null;
+  const url = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}?crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
   try {
-    const res = await fetch(url, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE || "" } });
+    let res = await fetch(url, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE || "" } });
+    if (res.status === 401) {
+      // Re-authenticate once and retry
+      YAHOO_COOKIE = null; YAHOO_CRUMB = null;
+      await initYahooAuth();
+      if (YAHOO_CRUMB) {
+        const url2 = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}?crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
+        res = await fetch(url2, { headers: { ...BROWSER_HEADERS, "Cookie": YAHOO_COOKIE } });
+      }
+    }
     if (!res.ok) {
       console.warn(`yahoo options ${symbol}: HTTP ${res.status}`);
       return null;
@@ -492,7 +503,9 @@ async function main() {
       });
       const fwd = data.fundamentals.fwdPe;
       const pcr = data.options?.pcrVolume;
-      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwd ? fwd.toFixed(1) : "—"}  PCR=${pcr != null ? pcr.toFixed(2) : "—"}  ${t.holding ? "★" : ""}`);
+      const fwdStr = (typeof fwd === "number" && isFinite(fwd)) ? fwd.toFixed(1) : "—";
+      const pcrStr = (typeof pcr === "number" && isFinite(pcr)) ? pcr.toFixed(2) : "—";
+      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwdStr}  PCR=${pcrStr}  ${t.holding ? "★" : ""}`);
     } catch (e) {
       console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
     }
