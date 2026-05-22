@@ -6,7 +6,7 @@ import {
 import {
   Activity, DollarSign, Users, MessageSquare, AlertCircle,
   Search, ChevronRight, Sigma, GitCompare, Briefcase, Loader2,
-  Menu, X, TrendingUp, TrendingDown, BarChart3,
+  Menu, X, TrendingUp, TrendingDown, BarChart3, Zap,
 } from "lucide-react";
 import { createChart } from "lightweight-charts";
 
@@ -249,7 +249,6 @@ async function fetchYahooCandles(symbol, range, interval) {
   return candles;
 }
 
-// Yahoo quoteSummary via CORS proxy (browser can't hit Yahoo directly)
 async function yahooSummaryProxied(sym) {
   const modules = "financialData,defaultKeyStatistics,summaryDetail,price,recommendationTrend,upgradeDowngradeHistory,earningsTrend,earningsHistory,insiderTransactions";
   const target = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${sym}?modules=${modules}`;
@@ -343,8 +342,7 @@ async function fetchAdHoc(symbol) {
     category: lynchCategory,
     epsGrowthNextYr: yvAdHoc(nextYrTrend, "growth") != null ? yvAdHoc(nextYrTrend, "growth") * 100 : null,
     epsGrowth5Yr: yvAdHoc(fiveYrTrend, "growth") != null ? yvAdHoc(fiveYrTrend, "growth") * 100 : null,
-    epsCoefVar: null,
-    epsHistory: [],
+    epsCoefVar: null, epsHistory: [],
     insiderBuys, insiderSells,
     insiderBuyValue: Math.round(insiderBuyValue),
     insiderSellValue: Math.round(insiderSellValue),
@@ -398,6 +396,7 @@ async function fetchAdHoc(symbol) {
     analyst: analystData,
     lynch: lynchData,
     simons: null,
+    options: null, // Ad-hoc doesn't fetch options
     isAdHoc: true,
   };
 }
@@ -414,6 +413,7 @@ const formatMcap = (raw) => {
   if (raw >= 1e12) return `${(raw / 1e12).toFixed(2)}T`;
   if (raw >= 1e9) return `${(raw / 1e9).toFixed(2)}B`;
   if (raw >= 1e6) return `${(raw / 1e6).toFixed(2)}M`;
+  if (raw >= 1e3) return `${(raw / 1e3).toFixed(1)}K`;
   return raw.toString();
 };
 
@@ -507,6 +507,7 @@ export default function App() {
   const a = data.analyst;
   const ly = data.lynch;
   const sm = data.simons;
+  const op = data.options;
 
   let last, lastRsi, lastZ, sqzActive, hurst, rv30, rv90, chartData,
       trendSignal, momentumSignal, reversionSignal, regimeSignal;
@@ -739,6 +740,9 @@ export default function App() {
             )}
           </div>
 
+          {/* OPTIONS FLOW PANEL */}
+          {op && <OptionsFlowPanel op={op} isMobile={isMobile} />}
+
           {ly && <LynchPanel ly={ly} f={f} isMobile={isMobile} />}
 
           {enriched && (
@@ -909,6 +913,179 @@ export default function App() {
     </div>
   );
 }
+
+// ============================================================
+// OPTIONS FLOW PANEL
+// ============================================================
+function OptionsFlowPanel({ op, isMobile }) {
+  // Interpret PCR volume
+  const pcrV = op.pcrVolume;
+  let pcrInterp = "—"; let pcrColor = "#5a6573"; let pcrPlain = "—";
+  if (pcrV != null) {
+    if (pcrV < 0.7) {
+      pcrInterp = "BULLISH (calls dominating)"; pcrColor = "#0a8554";
+      pcrPlain = "Traders are buying many more calls than puts. Often a bullish signal, but extremely low values (PCR < 0.5) can be a contrarian warning that the crowd is too euphoric.";
+    } else if (pcrV > 1.2) {
+      pcrInterp = "BEARISH (puts dominating)"; pcrColor = "#c4314b";
+      pcrPlain = "Traders are buying many more puts than calls. Could mean fear, but contrarians watch for extremes (PCR > 1.5) as a buy signal — when everyone is hedged, the worst is often priced in.";
+    } else {
+      pcrInterp = "Neutral"; pcrColor = "#5a6573";
+      pcrPlain = "Roughly balanced put and call activity. No strong directional signal from options flow.";
+    }
+  }
+
+  // Skew interpretation
+  const skew = op.skew;
+  let skewInterp = "—"; let skewColor = "#5a6573"; let skewPlain = "—";
+  if (skew != null) {
+    if (skew > 5) {
+      skewInterp = "FEAR pricing"; skewColor = "#c4314b";
+      skewPlain = "OTM puts are much more expensive than OTM calls. The market is pricing in downside risk. This is normal for indices and large caps; very high skew can signal heightened tail-risk worry.";
+    } else if (skew < -2) {
+      skewInterp = "GREED pricing"; skewColor = "#0a8554";
+      skewPlain = "OTM calls cost more than OTM puts. Rare and bullish — speculators are paying up for upside, often seen in hot growth names.";
+    } else {
+      skewInterp = "Normal"; skewColor = "#1a1f2c";
+      skewPlain = "Moderate fear premium typical of most US stocks. No unusual positioning.";
+    }
+  }
+
+  // ATM IV interpretation
+  const ivATM = op.ivATM;
+  let ivPlain = "—";
+  if (ivATM != null) {
+    if (ivATM > 60) ivPlain = "Very high implied volatility — options are expensive. Often happens before earnings or after big moves. Good for sellers, bad for buyers.";
+    else if (ivATM > 35) ivPlain = "Elevated implied volatility. Market expects bigger-than-normal moves.";
+    else if (ivATM < 20) ivPlain = "Low implied volatility — options are cheap. Market expects calm. Good time to buy options if you expect a move.";
+    else ivPlain = "Normal implied volatility for a US large cap.";
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Options Flow · What Traders Are Betting</span>
+        <span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>
+          {op.expiry ? `Expiry ${op.expiry} (${op.daysToExpiry}d)` : ""}
+          <Zap size={11} color="#d4a017" style={{ display: "inline", marginLeft: 6, verticalAlign: "middle" }} />
+        </span>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 0 }}>
+        {/* PUT/CALL RATIO */}
+        <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #efece5", borderBottom: "1px solid #efece5" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Put / Call Ratio</div>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+            <span className="mono" style={{ fontSize: 24, fontWeight: 600, color: pcrColor }}>{fmt(pcrV, 2)}</span>
+            <span className="pill" style={{ background: pcrColor, color: "#fff" }}>{pcrInterp}</span>
+          </div>
+          <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 10, display: "flex", justifyContent: "space-between" }}>
+            <span><span style={{ color: "#0a8554" }}>●</span> Call vol: {formatMcap(op.callVolTotal)}</span>
+            <span><span style={{ color: "#c4314b" }}>●</span> Put vol: {formatMcap(op.putVolTotal)}</span>
+          </div>
+          <ExplainBox text={pcrPlain} />
+          <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px dotted #e6e3db" }}>
+            <StatRow label="P/C Ratio (Open Interest)" value={<span className="mono">{fmt(op.pcrOI, 2)}</span>} />
+            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4, lineHeight: 1.4 }}>
+              <em>Open interest counts all existing contracts (positioning over time), volume counts today's trades (today's intent).</em>
+            </div>
+          </div>
+        </div>
+
+        {/* IV & SKEW */}
+        <div style={{ padding: "14px 16px", borderBottom: "1px solid #efece5" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Implied Volatility & Skew</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 2 }}>ATM IV</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(ivATM, 1)}%</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 2 }}>OTM Put IV</div>
+              <div className="mono" style={{ fontSize: 16, color: "#c4314b" }}>{fmt(op.ivOTMPut, 1)}%</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 2 }}>OTM Call IV</div>
+              <div className="mono" style={{ fontSize: 16, color: "#0a8554" }}>{fmt(op.ivOTMCall, 1)}%</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, color: "#5a6573" }}>Skew (Put IV − Call IV):</span>
+            <span className="pill" style={{ background: skewColor, color: "#fff" }}>{fmt(skew, 1)} pts · {skewInterp}</span>
+          </div>
+          <ExplainBox text={skewPlain} />
+          <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px dotted #e6e3db" }}>
+            <ExplainBox text={`Implied Volatility = "${ivPlain}"`} />
+          </div>
+        </div>
+
+        {/* SKEW CURVE (full width) */}
+        {op.skewCurve?.length >= 3 && (
+          <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1", borderBottom: "1px solid #efece5" }}>
+            <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Volatility Smile (IV across strikes)</div>
+            <ResponsiveContainer width="100%" height={isMobile ? 140 : 180}>
+              <LineChart data={op.skewCurve} margin={{ top: 8, right: 30, left: 0, bottom: 4 }}>
+                <XAxis dataKey="moneyness" tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db"
+                  label={{ value: "% from current price", position: "insideBottom", offset: -2, fontSize: 10, fill: "#5a6573" }} />
+                <YAxis tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={40}
+                  label={{ value: "IV %", angle: 0, position: "insideTopRight", fontSize: 9, fill: "#5a6573" }} />
+                <ReferenceLine x={0} stroke="#1a1f2c" strokeDasharray="3 3" strokeWidth={0.8} label={{ value: "ATM", fontSize: 9, fill: "#1a1f2c" }} />
+                <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }}
+                  formatter={(value, name) => [`${value}%`, "IV"]}
+                  labelFormatter={(label) => `${label > 0 ? "+" : ""}${label}% from spot`} />
+                <Line type="monotone" dataKey="iv" stroke="#d4a017" strokeWidth={2} dot={{ fill: "#d4a017", r: 2 }} />
+              </LineChart>
+            </ResponsiveContainer>
+            <ExplainBox text="Each dot is an option strike. A U-shape ('smile') means OTM options on both sides cost more — typical. A downward slope to the right ('smirk') means puts are pricier than calls — the market is pricing fear of downside." />
+          </div>
+        )}
+
+        {/* TOP STRIKES */}
+        <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1" }}>
+          <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Most Active Strikes Today</div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, minWidth: 500 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e6e3db" }}>
+                  <th style={{ padding: "6px 8px", textAlign: "left", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>Type</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>Strike</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>Volume</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>OI</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>IV %</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>Last</th>
+                  <th style={{ padding: "6px 8px", textAlign: "center", color: "#8a93a3", fontWeight: 500, fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase" }}>Flag</th>
+                </tr>
+              </thead>
+              <tbody>
+                {op.topStrikes.map((s, i) => (
+                  <tr key={i} style={{ borderBottom: "1px dotted #efece5" }}>
+                    <td style={{ padding: "5px 8px" }}><span className="mono" style={{ fontWeight: 600, color: s.type === "CALL" ? "#0a8554" : "#c4314b" }}>{s.type}</span></td>
+                    <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>${fmt(s.strike, 0)}</td>
+                    <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>{formatMcap(s.volume)}</td>
+                    <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: "#8a93a3" }}>{formatMcap(s.openInterest)}</td>
+                    <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>{fmt(s.iv, 0)}</td>
+                    <td className="mono" style={{ padding: "5px 8px", textAlign: "right" }}>${fmt(s.lastPrice, 2)}</td>
+                    <td style={{ padding: "5px 8px", textAlign: "center" }}>
+                      {s.unusual && <span className="pill" style={{ background: "#d4a017", color: "#1a1f2c" }}>UNUSUAL</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <ExplainBox text='"UNUSUAL" means today\'s volume is more than 2x the existing open interest — fresh positions being opened in size. This is the kind of activity that often precedes big moves (sometimes informed buying, sometimes a coincidence). Worth investigating but not a guaranteed signal.' />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ExplainBox = ({ text }) => (
+  <div style={{ padding: 8, background: "#fff8e1", borderLeft: "3px solid #d4a017", borderRadius: 2, fontSize: 11, color: "#5a6573", lineHeight: 1.5 }}>
+    {text}
+  </div>
+);
 
 // ============================================================
 // LYNCH PANEL
