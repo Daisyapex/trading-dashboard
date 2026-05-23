@@ -455,12 +455,13 @@ const pct = (n) => (n == null || isNaN(n) ? "—" : `${n > 0 ? "+" : ""}${Number
 const colorFor = (n) => (n > 0 ? "#0a8554" : n < 0 ? "#c4314b" : "#5a6573");
 const labelFromDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 const formatMcap = (raw) => {
-  if (!raw) return "—";
+  if (!raw && raw !== 0) return "—";
+  if (raw === 0) return "0";
   if (raw >= 1e12) return `${(raw / 1e12).toFixed(2)}T`;
   if (raw >= 1e9) return `${(raw / 1e9).toFixed(2)}B`;
   if (raw >= 1e6) return `${(raw / 1e6).toFixed(2)}M`;
   if (raw >= 1e3) return `${(raw / 1e3).toFixed(1)}K`;
-  return raw.toString();
+  return Math.round(raw).toString();
 };
 
 // ============================================================
@@ -1540,7 +1541,12 @@ function RiskHelper({ isMobile }) {
             </div>
             <div>
               <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Unrealized P/L</div>
-              <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600, color: totalGain >= 0 ? "#0a8554" : "#c4314b" }}>{totalGain >= 0 ? "+" : ""}${formatMcap(Math.abs(totalGain))}</div>
+              {(() => {
+                const hasAnyCostBasis = enriched.some((p) => p.costBasis);
+                if (!hasAnyCostBasis) return <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600, color: "#8a93a3" }}>—</div>;
+                return <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600, color: totalGain >= 0 ? "#0a8554" : "#c4314b" }}>{totalGain >= 0 ? "+" : "-"}${formatMcap(Math.abs(totalGain))}</div>;
+              })()}
+              {!enriched.some((p) => p.costBasis) && <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 2 }}>Add cost basis to see P/L</div>}
             </div>
             <div title="On a typical bad day (worst 5% of days historically), you could lose this much.">
               <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Bad day loss (95% VaR)</div>
@@ -1567,6 +1573,13 @@ function RiskHelper({ isMobile }) {
           {portfolioVarPct != null && portfolioVarPct > 5 && (
             <div style={{ padding: "10px 14px", background: "#fdf3f3", borderTop: "1px solid #efece5", fontSize: 11, color: "#1a1f2c", lineHeight: 1.5 }}>
               ⚠️ Your 1-day VaR is over 5% of your account. That's aggressive. A bad week could draw down 15-25%.
+            </div>
+          )}
+          {enriched.length > 0 && enriched.every((p) => p.var95 == null) && (
+            <div style={{ padding: "10px 14px", background: "#fff8e1", borderTop: "1px solid #efece5", fontSize: 11, color: "#1a1f2c", lineHeight: 1.5 }}>
+              ⚠️ VaR data not yet available. Run the fetch workflow to compute these:{" "}
+              <a href="https://github.com/Daisyapex/trading-dashboard/actions/workflows/fetch-data.yml" target="_blank" rel="noopener noreferrer" style={{ color: "#1a4c80", textDecoration: "underline" }}>Run workflow</a>
+              {" "}— then click "Refresh prices" above. The Historical Worst Case is shown using older data that was already fetched.
             </div>
           )}
         </div>
