@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-23T12:16:45.667Z",
+  "generatedAt": "2026-05-23T12:21:15.838Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -114,126 +114,126 @@
       "name": "Micron Technology",
       "sector": "Semiconductors",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 751,
+      "change": -11.1,
+      "changePct": -1.4565
     },
     {
       "symbol": "ASML",
       "name": "ASML Holding",
       "sector": "Semiconductors",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 1632.9,
+      "change": 40.9,
+      "changePct": 2.5691
     },
     {
       "symbol": "MRVL",
       "name": "Marvell Technology",
       "sector": "Semiconductors",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 196.33,
+      "change": 5.64,
+      "changePct": 2.9577
     },
     {
       "symbol": "ARM",
       "name": "Arm Holdings",
       "sector": "Semiconductors",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 306.51,
+      "change": 8.28,
+      "changePct": 2.7764
     },
     {
       "symbol": "QCOM",
       "name": "Qualcomm",
       "sector": "Semiconductors",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 238.16,
+      "change": 24.75,
+      "changePct": 11.5974
     },
     {
       "symbol": "INTC",
       "name": "Intel Corp.",
       "sector": "Semiconductors",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 119.84,
+      "change": 1.34,
+      "changePct": 1.1308
     },
     {
       "symbol": "SMCI",
       "name": "Super Micro Computer",
       "sector": "AI Hardware",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 35.58,
+      "change": 2.12,
+      "changePct": 6.3359
     },
     {
       "symbol": "ANET",
       "name": "Arista Networks",
       "sector": "AI Hardware",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 154.03,
+      "change": 5.44,
+      "changePct": 3.6611
     },
     {
       "symbol": "DELL",
       "name": "Dell Technologies",
       "sector": "AI Hardware",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 295.19,
+      "change": 42.39,
+      "changePct": 16.7682
     },
     {
       "symbol": "VRT",
       "name": "Vertiv Holdings",
       "sector": "AI Hardware",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 327.46,
+      "change": 4.06,
+      "changePct": 1.2554
     },
     {
       "symbol": "PLTR",
       "name": "Palantir Technologies",
       "sector": "AI Software",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 136.88,
+      "change": -0.535,
+      "changePct": -0.3893
     },
     {
       "symbol": "ORCL",
       "name": "Oracle",
       "sector": "Hyperscaler",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 192.08,
+      "change": 2.31,
+      "changePct": 1.2173
     },
     {
       "symbol": "CRWD",
       "name": "CrowdStrike",
       "sector": "Cybersecurity",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 663.46,
+      "change": 15.23,
+      "changePct": 2.3495
     },
     {
       "symbol": "PANW",
       "name": "Palo Alto Networks",
       "sector": "Cybersecurity",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 260.58,
+      "change": 7.66,
+      "changePct": 3.0286
     },
     {
       "symbol": "NBIS",
@@ -348,117 +348,117 @@
       "name": "Meta Platforms",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 610.26,
+      "change": 2.88,
+      "changePct": 0.4742
     },
     {
       "symbol": "AMZN",
       "name": "Amazon.com",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 266.32,
+      "change": -2.14,
+      "changePct": -0.7971
     },
     {
       "symbol": "TSLA",
       "name": "Tesla, Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 426.01,
+      "change": 8.16,
+      "changePct": 1.9529
     },
     {
       "symbol": "NFLX",
       "name": "Netflix",
       "sector": "Streaming",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 88.6,
+      "change": -0.7,
+      "changePct": -0.7839
     },
     {
       "symbol": "RDDT",
       "name": "Reddit Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 141.67,
+      "change": -8.37,
+      "changePct": -5.5785
     },
     {
       "symbol": "OPEN",
       "name": "Opendoor Technologies",
       "sector": "Active Retail",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 4.53,
+      "change": -0.04,
+      "changePct": -0.8753
     },
     {
       "symbol": "HOOD",
       "name": "Robinhood Markets",
       "sector": "Fintech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 73.64,
+      "change": -2.28,
+      "changePct": -3.0032
     },
     {
       "symbol": "COIN",
       "name": "Coinbase Global",
       "sector": "Crypto/Fintech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 184.99,
+      "change": -8.57,
+      "changePct": -4.4276
     },
     {
       "symbol": "MSTR",
       "name": "Strategy (MicroStrat)",
       "sector": "Crypto/Fintech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 159.89,
+      "change": -4.96,
+      "changePct": -3.0088
     },
     {
       "symbol": "SOFI",
       "name": "SoFi Technologies",
       "sector": "Fintech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 15.62,
+      "change": -0.03,
+      "changePct": -0.1917
     },
     {
       "symbol": "HIMS",
       "name": "Hims & Hers Health",
       "sector": "Active Retail",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 23.75,
+      "change": -0.26,
+      "changePct": -1.0829
     },
     {
       "symbol": "AXP",
       "name": "American Express",
       "sector": "Buffett",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 311.78,
+      "change": 2.08,
+      "changePct": 0.6716
     },
     {
       "symbol": "CVX",
       "name": "Chevron",
       "sector": "Buffett",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 191.43,
+      "change": 0.42,
+      "changePct": 0.2199
     },
     {
       "symbol": "OXY",
