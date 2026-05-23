@@ -6,7 +6,7 @@ import {
 import {
   Activity, DollarSign, Users, MessageSquare, AlertCircle,
   Search, ChevronRight, Sigma, GitCompare, Briefcase, Loader2,
-  Menu, X, TrendingUp, TrendingDown, BarChart3, Zap,
+  Menu, X, TrendingUp, TrendingDown, BarChart3, Zap, Target,
 } from "lucide-react";
 import { createChart } from "lightweight-charts";
 
@@ -633,7 +633,7 @@ export default function App() {
       {showBehavior ? (
         <BehaviorTracker isMobile={isMobile} />
       ) : showRisk ? (
-        <RiskHelper isMobile={isMobile} />
+        <RiskHelper isMobile={isMobile} macro={macro} />
       ) : (
       <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: isMobile ? undefined : "240px 1fr", position: "relative" }}>
         {sidebarVisible && (
@@ -1387,7 +1387,7 @@ function BehaviorTracker({ isMobile }) {
 // ============================================================
 // RISK HELPER — Portfolio risk calculator using VaR
 // ============================================================
-function RiskHelper({ isMobile }) {
+function RiskHelper({ isMobile, macro }) {
   const [positions, setPositions] = useState([]); // {symbol, shares, costBasis, currentPrice, var95, var955day, cvar95, maxDD}
   const [form, setForm] = useState({ symbol: "", shares: "", costBasis: "" });
   const [accountSize, setAccountSize] = useState("");
@@ -1585,7 +1585,9 @@ function RiskHelper({ isMobile }) {
   const totalAccountValue = explicitCash ? (totalValue + cashNum) : (parseFloat(accountSize) || 0);
   const acctNum = totalAccountValue || 0;
   const cashRemaining = explicitCash ? cashNum : Math.max(0, acctNum - totalValue);
-  const portfolioVarPct = acctNum > 0 ? (totalVar95 / acctNum) * 100 : null;
+  // VaR as % — uses portfolio value (not account size) since that's the relevant base.
+  // Account size matters separately for "% of account" framing in snapshot.
+  const portfolioVarPct = totalValue > 0 ? (totalVar95 / totalValue) * 100 : null;
 
   // ============ POSITION SIZING ============
   // Risk per trade = riskPct% of account. Suggested max position uses 95% VaR.
@@ -1594,9 +1596,20 @@ function RiskHelper({ isMobile }) {
   return (
     <div style={{ padding: isMobile ? 12 : 20, maxWidth: 1200, margin: "0 auto" }}>
       <h2 className="serif" style={{ fontSize: isMobile ? 22 : 28, fontWeight: 600, letterSpacing: "-0.02em", margin: "0 0 4px" }}>Portfolio Risk Calculator</h2>
-      <p style={{ fontSize: 13, color: "#5a6573", margin: "0 0 20px", lineHeight: 1.5 }}>
-        Enter your positions to see how much you could lose on a bad day or a bad month. Uses historical 1-year volatility for each stock to estimate Value-at-Risk.
+      <p style={{ fontSize: 13, color: "#5a6573", margin: "0 0 16px", lineHeight: 1.5 }}>
+        Enter your positions to see your real risk in dollars. Click any panel header to expand details.
       </p>
+
+      {/* ===== RISK SNAPSHOT — the 3 numbers that matter most ===== */}
+      {positions.length > 0 && totalValue > 0 && (
+        <RiskSnapshot
+          totalValue={totalValue}
+          totalVar95={totalVar95}
+          totalDD={totalDD}
+          portfolioVarPct={portfolioVarPct}
+          isMobile={isMobile}
+        />
+      )}
 
       {/* Account size + risk tolerance + cash */}
       <div className="panel" style={{ marginBottom: 16 }}>
@@ -1679,24 +1692,39 @@ function RiskHelper({ isMobile }) {
         </div>
       )}
 
-      {/* Risk Spectrum reference */}
+      {/* Risk Spectrum — always open, visual snapshot of where you sit */}
       {positions.length > 0 && portfolioVarPct != null && (
-        <RiskSpectrumPanel portfolioVarPct={portfolioVarPct} isMobile={isMobile} />
+        <CollapsibleSection title="Risk Spectrum · Where You Sit vs Benchmarks" subtitle={`~${portfolioVarPct.toFixed(1)}% daily`} defaultOpen={true}>
+          <RiskSpectrumPanel portfolioVarPct={portfolioVarPct} isMobile={isMobile} embedded macro={macro} />
+        </CollapsibleSection>
       )}
 
-      {/* Valuation Risk — multiple compression scenarios */}
-      {enriched.length > 0 && enriched.some((p) => p.pe != null) && (
-        <ValuationRiskPanel positions={enriched} isMobile={isMobile} />
-      )}
-
-      {/* Concentration Risk */}
+      {/* Concentration Risk — always open, the diversification reality check */}
       {enriched.length > 0 && (
-        <ConcentrationRiskPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} />
+        <CollapsibleSection title="Concentration Risk · How Diversified Are You Really" subtitle={`${enriched.length} positions`} defaultOpen={true}>
+          <ConcentrationRiskPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded macro={macro} />
+        </CollapsibleSection>
       )}
 
-      {/* Macro Stress Test */}
+      {/* Valuation Risk — collapsed, deep dive on PE compression */}
+      {enriched.length > 0 && enriched.some((p) => p.pe != null) && (
+        <CollapsibleSection title="Valuation Risk · If P/E Compresses" subtitle="3 sector-aware scenarios" defaultOpen={false}>
+          <ValuationRiskPanel positions={enriched} isMobile={isMobile} embedded />
+        </CollapsibleSection>
+      )}
+
+      {/* Dalio-Style Diversification Suggestions */}
+      {enriched.length > 0 && macro?.benchmarks?.length > 0 && (
+        <CollapsibleSection title="Diversification Suggestions · Equity-Focused" subtitle="Stock-only · Holy Grail principle" defaultOpen={true}>
+          <DalioSuggestionsPanel positions={enriched} totalValue={totalValue} cashRemaining={cashRemaining} macro={macro} isMobile={isMobile} embedded />
+        </CollapsibleSection>
+      )}
+
+      {/* Macro Stress Test — collapsed */}
       {enriched.length > 0 && enriched.some((p) => p.correlations && Object.keys(p.correlations).length > 0) && (
-        <MacroStressPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} />
+        <CollapsibleSection title="Macro Stress Test · Scripted Scenarios" subtitle="5 macro shocks" defaultOpen={false}>
+          <MacroStressPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
+        </CollapsibleSection>
       )}
 
       {/* Position list */}
@@ -1816,20 +1844,38 @@ function RiskHelper({ isMobile }) {
 // ============================================================
 // RISK SPECTRUM — visual reference of where portfolio sits vs benchmarks
 // ============================================================
-function RiskSpectrumPanel({ portfolioVarPct, isMobile }) {
-  // Each item: label, daily VaR % approximation, position on the spectrum
-  const refs = [
-    { label: "Cash / T-bills", var: 0.05, color: "#5a6573" },
-    { label: "Bonds (TLT)",   var: 0.6,  color: "#5a6573" },
-    { label: "S&P 500",       var: 1.0,  color: "#86b09c" },
-    { label: "Nasdaq 100",    var: 1.3,  color: "#86b09c" },
-    { label: "NVDA solo",     var: 3.2,  color: "#d4a017" },
-    { label: "Bitcoin",       var: 3.5,  color: "#d4a017" },
-    { label: "TQQQ (3x ETF)", var: 4.2,  color: "#d4a017" },
-    { label: "Meme stocks",   var: 6.5,  color: "#c4314b" },
-    { label: "Crypto microcap", var: 12, color: "#c4314b" },
+function RiskSpectrumPanel({ portfolioVarPct, isMobile, embedded, macro }) {
+  // Build reference markers from REAL ETF data in macro.benchmarks.
+  // Fallback to hardcoded approximations only if macro data isn't available yet.
+  const benchmarks = macro?.benchmarks || [];
+  const find = (sym) => benchmarks.find((b) => b.symbol === sym);
+  // Convert daily vol % → daily 95% VaR % (multiply by 1.645)
+  const volToVar = (vol) => vol != null ? vol * 1.645 : null;
+
+  const realRefs = [
+    { label: "Cash / T-bills",    var: 0.05, color: "#5a6573", source: "static" },
+    { label: "Bonds (TLT)",       var: volToVar(find("TLT")?.dailyVol),  color: "#5a6573", source: "real" },
+    { label: "S&P 500",           var: volToVar(find("SPY")?.dailyVol),  color: "#86b09c", source: "real" },
+    { label: "Nasdaq-100",        var: volToVar(find("QQQ")?.dailyVol),  color: "#86b09c", source: "real" },
+    { label: "Mega cap",          var: volToVar(find("OEF")?.dailyVol),  color: "#86b09c", source: "real" },
+    { label: "Healthcare",        var: volToVar(find("XLV")?.dailyVol),  color: "#86b09c", source: "real" },
+    { label: "Financials",        var: volToVar(find("XLF")?.dailyVol),  color: "#86b09c", source: "real" },
+    { label: "Tech (XLK)",        var: volToVar(find("XLK")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Mid cap",           var: volToVar(find("MDY")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Semis (SMH)",       var: volToVar(find("SMH")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Memory (HBM)",      var: volToVar(find("HBM")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Software (IGV)",    var: volToVar(find("IGV")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Cyber (CIBR)",      var: volToVar(find("CIBR")?.dailyVol), color: "#d4a017", source: "real" },
+    { label: "AI Infra (ARTY)",   var: volToVar(find("ARTY")?.dailyVol), color: "#d4a017", source: "real" },
+    { label: "Small cap (IWM)",   var: volToVar(find("IWM")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Energy",            var: volToVar(find("XLE")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Bitcoin (IBIT)",    var: volToVar(find("IBIT")?.dailyVol), color: "#c4314b", source: "real" },
+    { label: "Crypto cos (BITQ)", var: volToVar(find("BITQ")?.dailyVol), color: "#c4314b", source: "real" },
   ];
-  // Bucket ranges (matching the screenshot's bands)
+  // Drop refs without data, dedupe by similar vol so the labels don't overlap (keep first if within 0.2% of another)
+  const refs = realRefs.filter((r) => r.var != null && r.var > 0).sort((a, b) => a.var - b.var);
+
+  // Bucket ranges
   const bands = [
     { label: "Cash",          min: 0,   max: 0.5, color: "#dcefe6" },
     { label: "Conservative",  min: 0.5, max: 1.5, color: "#daf0d0" },
@@ -1838,17 +1884,13 @@ function RiskSpectrumPanel({ portfolioVarPct, isMobile }) {
     { label: "Speculative",   min: 4.5, max: 7,   color: "#f7d8db" },
     { label: "Extreme / Casino", min: 7, max: 100, color: "#fde6e6" },
   ];
-  const maxScale = 10; // visual cap at 10% VaR
+  // Visual cap scales to max of (10%, the biggest ref + 1)
+  const maxScale = Math.max(10, ...refs.map((r) => r.var + 1));
   const xFor = (v) => Math.min(99, (v / maxScale) * 100);
   const yourBand = bands.find((b) => portfolioVarPct >= b.min && portfolioVarPct < b.max) || bands[bands.length - 1];
 
-  return (
-    <div className="panel" style={{ marginBottom: 16, background: "#1a1f2c", color: "#fff", borderColor: "#1a1f2c" }}>
-      <div className="panel-head" style={{ background: "#0f131a", borderBottom: "1px solid #2a2f3c" }}>
-        <span className="panel-title" style={{ color: "#fff" }}>Risk Spectrum · Where Your Portfolio Sits</span>
-        <span className="pill" style={{ background: yourBand.color, color: "#1a1f2c" }}>{yourBand.label}</span>
-      </div>
-      <div style={{ padding: "20px 16px 12px" }}>
+  const content = (
+      <div style={{ padding: "20px 16px 12px", background: "#1a1f2c", color: "#fff" }}>
         {/* Bands strip */}
         <div style={{ position: "relative", height: 32, display: "flex", borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
           {bands.map((b, i) => {
@@ -1885,94 +1927,196 @@ function RiskSpectrumPanel({ portfolioVarPct, isMobile }) {
             <div className="mono" style={{ fontSize: 10, color: "#fff", fontWeight: 600 }}>~{portfolioVarPct.toFixed(1)}%</div>
           </div>
         </div>
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #2a2f3c", fontSize: 11, color: "#8a93a3", lineHeight: 1.5 }}>
+          Daily VaR as % of total account. Your portfolio's bad-day risk shown alongside common asset classes. Anything green-yellow is normal retail. Red implies you can lose 10%+ in a week without anything unusual happening. Bucket: <strong style={{ color: yourBand.color }}>{yourBand.label}</strong>.
+        </div>
       </div>
-      <div style={{ padding: "10px 16px", background: "#0f131a", borderTop: "1px solid #2a2f3c", fontSize: 11, color: "#8a93a3", lineHeight: 1.5 }}>
-        Daily VaR as % of total account. Your portfolio's bad-day risk is shown alongside common asset classes for context. Anything in green-yellow is normal retail. Red zones imply you can lose 10%+ in a week without anything unusual happening.
+  );
+
+  if (embedded) return content;
+  return (
+    <div className="panel" style={{ marginBottom: 16, background: "#1a1f2c", color: "#fff", borderColor: "#1a1f2c" }}>
+      <div className="panel-head" style={{ background: "#0f131a", borderBottom: "1px solid #2a2f3c" }}>
+        <span className="panel-title" style={{ color: "#fff" }}>Risk Spectrum · Where Your Portfolio Sits</span>
+        <span className="pill" style={{ background: yourBand.color, color: "#1a1f2c" }}>{yourBand.label}</span>
       </div>
+      {content}
     </div>
   );
 }
 
 // ============================================================
-// VALUATION RISK — multiple compression scenarios
+// RISK SNAPSHOT — the 3 numbers that matter most, at top of page
 // ============================================================
-function ValuationRiskPanel({ positions, isMobile }) {
-  // For each position compute "what if PE compresses to peer avg / -25% from current / -50% from current"
-  const HISTORICAL_AVG_PE = 18; // approximate broad-market historical avg
+function RiskSnapshot({ totalValue, totalVar95, totalDD, portfolioVarPct, isMobile }) {
+  const ddPct = totalValue > 0 ? (totalDD / totalValue) * 100 : 0;
+  // The single number to remember: max sustainable drawdown
+  const stomachLevel = ddPct < 15 ? "comfortable" : ddPct < 25 ? "moderate" : ddPct < 35 ? "stretched" : "uncomfortable";
+  const stomachColor = ddPct < 15 ? "#0a8554" : ddPct < 25 ? "#86b09c" : ddPct < 35 ? "#d4a017" : "#c4314b";
+  return (
+    <div style={{ marginBottom: 16, padding: isMobile ? 14 : 18, background: "#1a1f2c", color: "#fff", borderRadius: 4 }}>
+      <div style={{ fontSize: 10, color: "#d4a017", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600, marginBottom: 8 }}>Risk Snapshot</div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 20, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Typical bad day</div>
+          <div className="mono" style={{ fontSize: isMobile ? 24 : 28, fontWeight: 600, lineHeight: 1, color: "#fff", marginTop: 6 }}>-${formatMcap(totalVar95)}</div>
+          <div style={{ fontSize: 11, color: "#8a93a3", marginTop: 2 }}>{portfolioVarPct?.toFixed(1)}% of portfolio · happens ~12 days/year</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Historical worst case</div>
+          <div className="mono" style={{ fontSize: isMobile ? 24 : 28, fontWeight: 600, lineHeight: 1, color: "#fff", marginTop: 6 }}>-${formatMcap(totalDD)}</div>
+          <div style={{ fontSize: 11, color: "#8a93a3", marginTop: 2 }}>{ddPct.toFixed(0)}% drawdown · happened once in past year</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Stomach test</div>
+          <div className="mono" style={{ fontSize: isMobile ? 24 : 28, fontWeight: 600, lineHeight: 1, color: stomachColor, marginTop: 6 }}>{stomachLevel}</div>
+          <div style={{ fontSize: 11, color: "#8a93a3", marginTop: 2 }}>Can you handle losing ${formatMcap(totalDD)} without panic-selling?</div>
+        </div>
+      </div>
+      <div style={{ paddingTop: 10, borderTop: "1px solid #2a2f3c", fontSize: 11, color: "#8a93a3", lineHeight: 1.5 }}>
+        The number that matters most: <strong style={{ color: "#fff" }}>historical worst case</strong>. If you'd panic-sell at <strong style={{ color: stomachColor }}>-${formatMcap(totalDD)}</strong>, you're oversized. If you'd happily buy more, you might be undersized. Detail panels below.
+      </div>
+    </div>
+  );
+}
+
+// Reusable collapsible wrapper for panels
+function CollapsibleSection({ title, subtitle, defaultOpen, children, icon, marginBottom = 16 }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <div className="panel" style={{ marginBottom }}>
+      <div className="panel-head" style={{ cursor: "pointer", userSelect: "none" }} onClick={() => setOpen(!open)}>
+        <span className="panel-title">
+          <span style={{ marginRight: 6, fontSize: 10, color: "#8a93a3", display: "inline-block", width: 10 }}>{open ? "▼" : "▶"}</span>
+          {title}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {subtitle && <span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>{subtitle}</span>}
+          {icon}
+        </div>
+      </div>
+      {open && <div>{children}</div>}
+    </div>
+  );
+}
+
+// ============================================================
+// VALUATION RISK — multiple compression scenarios (sector-aware)
+// ============================================================
+function ValuationRiskPanel({ positions, isMobile, embedded }) {
+  // Each stock has its OWN realistic bear-case PE, based on sector norms
+  // Format: { sectorKeyword: { typical, bear, severe } }
+  const SECTOR_PE_HISTORY = {
+    "Semiconductor": { typical: 25, bear: 18, severe: 14, desc: "Semi sector typical PE 22-28. 2022 bottomed near 14x." },
+    "Hyperscaler":   { typical: 28, bear: 22, severe: 18, desc: "Mega-cap tech typical PE 25-30. 2022 lows around 18x." },
+    "AI Software":   { typical: 45, bear: 30, severe: 22, desc: "Growth SaaS typical PE 40-60. 2022 SaaS bear bottomed at 22x." },
+    "Software":      { typical: 40, bear: 28, severe: 20, desc: "Software typical PE 30-45. Bear case 20-28x." },
+    "Healthcare":    { typical: 22, bear: 17, severe: 14, desc: "Healthcare typical PE 18-25. Bear case 14-17x." },
+    "Financial":     { typical: 14, bear: 10, severe: 7,  desc: "Banks typical PE 11-15. Bear case 7-10x." },
+    "Energy":        { typical: 14, bear: 9,  severe: 6,  desc: "Energy cyclical. Bear case 6-9x." },
+    "Consumer":      { typical: 22, bear: 16, severe: 12, desc: "Consumer typical PE 18-25. Bear case 12-16x." },
+    "Default":       { typical: 20, bear: 15, severe: 12, desc: "S&P 500 historical average ~18x. Bear ~15x. Severe ~12x." },
+  };
+  const getSectorAnchors = (sectorRaw) => {
+    if (!sectorRaw) return SECTOR_PE_HISTORY.Default;
+    const s = sectorRaw.toLowerCase();
+    if (s.includes("semi")) return { ...SECTOR_PE_HISTORY.Semiconductor, label: "Semiconductors" };
+    if (s.includes("hyperscaler") || s.includes("internet content")) return { ...SECTOR_PE_HISTORY.Hyperscaler, label: "Mega-Cap Tech" };
+    if (s.includes("ai") || s.includes("software")) return { ...SECTOR_PE_HISTORY["AI Software"], label: "Software" };
+    if (s.includes("health")) return { ...SECTOR_PE_HISTORY.Healthcare, label: "Healthcare" };
+    if (s.includes("financ") || s.includes("bank") || s.includes("insur")) return { ...SECTOR_PE_HISTORY.Financial, label: "Financials" };
+    if (s.includes("energ") || s.includes("oil")) return { ...SECTOR_PE_HISTORY.Energy, label: "Energy" };
+    if (s.includes("consumer") || s.includes("retail")) return { ...SECTOR_PE_HISTORY.Consumer, label: "Consumer" };
+    return { ...SECTOR_PE_HISTORY.Default, label: "Diversified" };
+  };
+
   const rows = positions.filter((p) => p.pe != null && p.pe > 0).map((p) => {
-    const peerAvgPE = p.peerAvgPE;
-    const compressToPeer = peerAvgPE && p.pe > peerAvgPE ? ((peerAvgPE / p.pe) - 1) * 100 : 0;
-    const compress25 = -25; // bear case: 25% multiple compression
-    const compressHistorical = ((HISTORICAL_AVG_PE / p.pe) - 1) * 100;
+    const anchors = getSectorAnchors(p.sector);
+    // For each anchor PE, compute price implied: newPrice = currentPrice × (anchorPE / currentPE)
+    // Then total $ impact = (newPrice - currentPrice) × shares = value × (anchorPE/currentPE - 1)
+    const impactPct = (anchor) => p.pe > 0 ? ((anchor / p.pe) - 1) * 100 : 0;
     return {
       ...p,
-      peerAvgPE,
-      compressToPeerPct: compressToPeer,
-      dollarLossToPeer: p.value * (compressToPeer / 100),
-      dollarLoss25: p.value * (compress25 / 100),
-      dollarLossHistorical: p.value * (compressHistorical / 100),
+      sectorAnchors: anchors,
+      pctToTypical: impactPct(anchors.typical),
+      pctToBear: impactPct(anchors.bear),
+      pctToSevere: impactPct(anchors.severe),
+      dollarToTypical: p.value * (impactPct(anchors.typical) / 100),
+      dollarToBear: p.value * (impactPct(anchors.bear) / 100),
+      dollarToSevere: p.value * (impactPct(anchors.severe) / 100),
     };
   });
   if (!rows.length) return null;
   const totalValue = rows.reduce((s, r) => s + r.value, 0);
-  const totalLossToPeer = rows.reduce((s, r) => s + r.dollarLossToPeer, 0);
-  const totalLoss25 = rows.reduce((s, r) => s + r.dollarLoss25, 0);
-  const totalLossHistorical = rows.reduce((s, r) => s + r.dollarLossHistorical, 0);
-  return (
-    <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="panel-head">
-        <span className="panel-title">Valuation Risk · Multiple Compression Scenarios</span>
-        <DollarSign size={13} color="#d4a017" />
-      </div>
-      <div style={{ padding: "12px 14px" }}>
-        <div style={{ fontSize: 12, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 12 }}>
-          Stocks can drop sharply <strong>without earnings changing</strong> — just because investors are willing to pay less per dollar of earnings. These scenarios show what happens to your portfolio if multiples compress.
+  const totalToTypical = rows.reduce((s, r) => s + r.dollarToTypical, 0);
+  const totalToBear = rows.reduce((s, r) => s + r.dollarToBear, 0);
+  const totalToSevere = rows.reduce((s, r) => s + r.dollarToSevere, 0);
+
+  const inner = (
+      <div style={{ padding: "14px 16px" }}>
+        <div style={{ fontSize: 12, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 16 }}>
+          What if investors decide to pay less per dollar of earnings? Each stock is compared against its <strong>own sector's historical P/E range</strong> — not an unrealistic broad-market average.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
-          <div style={{ padding: "10px 12px", background: "#f0f7f1", borderLeft: "3px solid #0a8554", borderRadius: 2 }}>
-            <div style={{ fontSize: 10, color: "#0a8554", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>If multiples → peer average</div>
-            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: totalLossToPeer >= 0 ? "#0a8554" : "#c4314b", marginTop: 4 }}>
-              {totalLossToPeer >= 0 ? "+" : "-"}${formatMcap(Math.abs(totalLossToPeer))}
-            </div>
-            <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{totalValue > 0 ? `${(totalLossToPeer / totalValue * 100).toFixed(1)}% of portfolio` : ""}</div>
-          </div>
-          <div style={{ padding: "10px 12px", background: "#fff8e1", borderLeft: "3px solid #d4a017", borderRadius: 2 }}>
-            <div style={{ fontSize: 10, color: "#8b6914", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Mild bear: PE -25%</div>
-            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "#c4314b", marginTop: 4 }}>-${formatMcap(Math.abs(totalLoss25))}</div>
-            <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{totalValue > 0 ? `${(Math.abs(totalLoss25) / totalValue * 100).toFixed(0)}% of portfolio` : ""}</div>
-          </div>
-          <div style={{ padding: "10px 12px", background: "#fdf3f3", borderLeft: "3px solid #c4314b", borderRadius: 2 }}>
-            <div style={{ fontSize: 10, color: "#c4314b", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Severe: PE → 18× (avg)</div>
-            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: totalLossHistorical >= 0 ? "#0a8554" : "#c4314b", marginTop: 4 }}>
-              {totalLossHistorical >= 0 ? "+" : "-"}${formatMcap(Math.abs(totalLossHistorical))}
-            </div>
-            <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{totalValue > 0 ? `${(totalLossHistorical / totalValue * 100).toFixed(0)}% of portfolio` : ""}</div>
-          </div>
+
+        {/* Big number cards */}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
+          <ScenarioCard
+            label="Sector typical PE"
+            sub="If valuations normalize to sector norm"
+            dollarImpact={totalToTypical}
+            totalValue={totalValue}
+            color={totalToTypical >= 0 ? "#0a8554" : "#d4a017"}
+            isMobile={isMobile}
+          />
+          <ScenarioCard
+            label="Sector bear case"
+            sub="2022-style sentiment shift"
+            dollarImpact={totalToBear}
+            totalValue={totalValue}
+            color="#d4a017"
+            isMobile={isMobile}
+          />
+          <ScenarioCard
+            label="Sector severe"
+            sub="Like 2008/2022 trough"
+            dollarImpact={totalToSevere}
+            totalValue={totalValue}
+            color="#c4314b"
+            isMobile={isMobile}
+          />
         </div>
+
+        {/* Per-stock breakdown - compact, single line each */}
+        <div className="panel-title" style={{ fontSize: 10, marginBottom: 6 }}>Per-Position Detail</div>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 560 }}>
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 600 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
-                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
-                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Current PE</th>
-                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Peer Avg</th>
-                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>→ Peer ($)</th>
-                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>-25% ($)</th>
-                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>→ 18× ($)</th>
+                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Now PE</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Typical</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Bear</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Severe</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
-                  <td className="mono" style={{ padding: "6px 10px", fontWeight: 600 }}>{r.symbol}</td>
-                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>{fmt(r.pe, 1)}</td>
-                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: r.peerAvgPE ? "#1a1f2c" : "#8a93a3" }}>{r.peerAvgPE ? fmt(r.peerAvgPE, 1) : "—"}</td>
-                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: r.dollarLossToPeer >= 0 ? "#0a8554" : "#c4314b" }}>
-                    {r.dollarLossToPeer >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarLossToPeer))}
+                  <td className="mono" style={{ padding: "6px 8px", fontWeight: 600 }}>{r.symbol}</td>
+                  <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sectorAnchors.label}</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(r.pe, 1)}×</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: r.dollarToTypical >= 0 ? "#0a8554" : "#c4314b" }}>
+                    <div>{r.sectorAnchors.typical}×</div>
+                    <div style={{ fontSize: 9 }}>{r.dollarToTypical >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarToTypical))}</div>
                   </td>
-                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(Math.abs(r.dollarLoss25))}</td>
-                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: r.dollarLossHistorical >= 0 ? "#0a8554" : "#c4314b" }}>
-                    {r.dollarLossHistorical >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarLossHistorical))}
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>
+                    <div>{r.sectorAnchors.bear}×</div>
+                    <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToBear))}</div>
+                  </td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>
+                    <div>{r.sectorAnchors.severe}×</div>
+                    <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToSevere))}</div>
                   </td>
                 </tr>
               ))}
@@ -1980,9 +2124,37 @@ function ValuationRiskPanel({ positions, isMobile }) {
           </table>
         </div>
         <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
-          <strong>How to read this:</strong> Earnings can stay flat while the stock falls because investors decide the same earnings deserve a lower P/E. This happened to tech in 2022 (PE compression of ~40%), to growth stocks in 2008 (~50%), and to FAANG in late 2018. The "18×" scenario is roughly the historical S&P 500 average — what these stocks would trade at if AI enthusiasm fully evaporated.
+          <strong>How to read:</strong> "Bear" = your stock's PE falls to its sector's typical 2022-bear-low. "Severe" = like a full sector crash. Tech rarely goes below ~14x (semis) or ~22x (software) even in crashes. NVDA at 18x like the broad market isn't realistic — it would re-rate to ~14-18x in a true semi crash.
         </div>
       </div>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Valuation Risk · If P/E Compresses</span>
+        <DollarSign size={13} color="#d4a017" />
+      </div>
+      {inner}
+    </div>
+  );
+}
+
+// Helper card component used by ValuationRiskPanel
+function ScenarioCard({ label, sub, dollarImpact, totalValue, color, isMobile }) {
+  const pctImpact = totalValue > 0 ? (dollarImpact / totalValue) * 100 : 0;
+  const isLoss = dollarImpact < 0;
+  return (
+    <div style={{ padding: "12px 14px", background: "#fff", border: `1px solid ${color}`, borderLeft: `4px solid ${color}`, borderRadius: 2 }}>
+      <div style={{ fontSize: 10, color, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>{label}</div>
+      <div className="mono" style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: isLoss ? "#c4314b" : "#0a8554", marginTop: 6, lineHeight: 1 }}>
+        {dollarImpact === 0 ? "~$0" : (isLoss ? "-" : "+") + "$" + formatMcap(Math.abs(dollarImpact))}
+      </div>
+      <div style={{ fontSize: 11, color: isLoss ? "#c4314b" : "#0a8554", marginTop: 2, fontWeight: 600 }}>
+        {pctImpact >= 0 ? "+" : ""}{pctImpact.toFixed(1)}% of portfolio
+      </div>
+      <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 6, lineHeight: 1.4 }}>{sub}</div>
     </div>
   );
 }
@@ -1990,7 +2162,7 @@ function ValuationRiskPanel({ positions, isMobile }) {
 // ============================================================
 // CONCENTRATION RISK — single-stock, sector, effective diversification
 // ============================================================
-function ConcentrationRiskPanel({ positions, totalValue, isMobile }) {
+function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, macro }) {
   if (!totalValue) return null;
   // Single stock concentration
   const sorted = [...positions].sort((a, b) => b.value - a.value);
@@ -2030,12 +2202,7 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile }) {
   else if (dominantSector.pct > 40) concentrationFlags.push({ level: "yellow", msg: `${dominantSector.pct.toFixed(0)}% of portfolio is ${dominantSector.sector}. Sector concentration is high.` });
   if (avgSoxxCorr > 0.7) concentrationFlags.push({ level: "yellow", msg: `Average correlation with semis is ${avgSoxxCorr.toFixed(2)}. Your positions move together — limited diversification benefit.` });
 
-  return (
-    <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="panel-head">
-        <span className="panel-title">Concentration Risk · How Diversified Are You Really</span>
-        <AlertCircle size={13} color="#d4a017" />
-      </div>
+  const inner = (
       <div style={{ padding: "12px 14px" }}>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
           <div title="The largest single position as % of portfolio.">
@@ -2083,10 +2250,344 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile }) {
           </div>
         )}
 
+        {/* ===== Per-position Volatility Table with Industry Benchmarks ===== */}
+        <div className="panel-title" style={{ fontSize: 10, marginTop: 18, marginBottom: 8 }}>Volatility vs Industry Benchmarks</div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 600 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Daily expected move based on 1-year historical volatility.">Daily Vol</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector Norm</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>vs S&P 500 (1%)</th>
+                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Assessment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                // Build lookups from macro.benchmarks (real ETF daily vol data)
+                const benchmarks = macro?.benchmarks || [];
+                const spy = benchmarks.find((b) => b.symbol === "SPY");
+                const spyVol = spy?.dailyVol || 1.0;
+                // Per-ticker manual map for cases where stock has specific best-fit benchmark
+                const TICKER_BENCHMARK = {
+                  // Memory stocks
+                  "MU": "HBM",
+                  // Logic semis
+                  "NVDA": "SMH", "AMD": "SMH", "TSM": "SMH", "AVGO": "SMH", "ASML": "SMH",
+                  "ARM": "SMH", "MRVL": "SMH", "QCOM": "SMH", "INTC": "SMH",
+                  // AI infrastructure hardware
+                  "SMCI": "ARTY", "ANET": "ARTY", "VRT": "ARTY", "DELL": "ARTY", "NBIS": "ARTY",
+                  // Software/SaaS
+                  "NOW": "IGV", "ORCL": "IGV", "PLTR": "IGV", "TEM": "IGV", "PATH": "IGV",
+                  // Cybersecurity
+                  "CRWD": "CIBR", "PANW": "CIBR",
+                  // Mega cap tech
+                  "MSFT": "OEF", "AAPL": "OEF", "GOOGL": "OEF", "AMZN": "OEF", "META": "OEF",
+                  // Crypto-related
+                  "MSTR": "BITQ", "COIN": "BITQ",
+                  // Power for AI
+                  "VST": "XLK", "CEG": "XLK",
+                  // Energy
+                  "CVX": "XLE", "OXY": "XLE",
+                  // Healthcare
+                  "LLY": "XLV", "UNH": "XLV", "HIMS": "XLV",
+                  // Financials
+                  "JPM": "XLF", "GS": "XLF", "AXP": "XLF", "SOFI": "XLF", "HOOD": "XLF",
+                  // Consumer
+                  "TSLA": "XLY", "NFLX": "XLY", "RDDT": "XLY", "CMG": "XLY", "DIS": "XLY",
+                  "AMD2": "XLY", // placeholder
+                  // Small-cap special situations
+                  "RKLB": "IWM", "ASTS": "IWM", "OPEN": "IWM",
+                };
+                // Sector-keyword fallback for tickers not in manual map
+                const sectorMatch = (sectorRaw) => {
+                  if (!sectorRaw) return "SPY";
+                  const s = sectorRaw.toLowerCase();
+                  if (s.includes("semi")) return "SMH";
+                  if (s.includes("hyperscaler") || s.includes("internet content")) return "OEF";
+                  if (s.includes("ai infrastructure")) return "ARTY";
+                  if (s.includes("ai software") || s.includes("software")) return "IGV";
+                  if (s.includes("cyber")) return "CIBR";
+                  if (s.includes("health")) return "XLV";
+                  if (s.includes("financ") || s.includes("bank") || s.includes("payment")) return "XLF";
+                  if (s.includes("energ") || s.includes("oil")) return "XLE";
+                  if (s.includes("consumer") || s.includes("retail") || s.includes("entertain")) return "XLY";
+                  if (s.includes("crypto")) return "BITQ";
+                  return "SPY";
+                };
+
+                return positions.map((p) => {
+                  const dailyVol = p.var95 != null ? p.var95 / 1.645 : (p.atr14 && p.currentPrice ? (p.atr14 / p.currentPrice) * 100 : null);
+                  if (dailyVol == null) return null;
+                  // Find best benchmark
+                  const benchmarkSym = TICKER_BENCHMARK[p.symbol] || sectorMatch(p.sector);
+                  const bench = benchmarks.find((b) => b.symbol === benchmarkSym);
+                  const benchVol = bench?.dailyVol || spyVol;
+                  const benchLabel = bench?.vol_label || "S&P 500";
+                  const vsSP500 = dailyVol / spyVol;
+                  const vsBench = dailyVol / benchVol;
+                  const assessment = vsBench > 1.4 ? { text: "Well above sector", color: "#c4314b" }
+                                   : vsBench > 1.15 ? { text: "Above sector", color: "#d4a017" }
+                                   : vsBench > 0.85 ? { text: "Normal for sector", color: "#0a8554" }
+                                   : { text: "Below sector", color: "#0a8554" };
+                  return (
+                    <tr key={p.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
+                      <td className="mono" style={{ padding: "6px 8px", fontWeight: 600 }}>{p.symbol}</td>
+                      <td className="mono" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{dailyVol.toFixed(2)}%</td>
+                      <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#5a6573" }}>
+                        {bench ? bench.dailyVol.toFixed(2) + "%" : "—"} <span style={{ fontSize: 9, color: "#8a93a3" }}>{benchLabel}</span>
+                      </td>
+                      <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: vsSP500 > 2 ? "#c4314b" : vsSP500 > 1.5 ? "#d4a017" : "#1a1f2c" }}>{vsSP500.toFixed(1)}×</td>
+                      <td style={{ padding: "6px 8px", fontSize: 10, color: assessment.color, fontWeight: 600 }}>{assessment.text}</td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: 8, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
+          <strong>Daily Vol</strong> = the typical 1-day price move (std dev from last 90 days). <strong>Benchmark</strong> = the volatility of the sector ETF most relevant to that stock (e.g., NVDA → SMH, MU → HBM, NOW → IGV, MSFT → OEF). Benchmark numbers are <strong>computed from real market data</strong>, not hardcoded. S&P 500 (SPY) is the baseline for "average stock."
+        </div>
+
         <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
           <strong>Effective bets vs nominal count:</strong> Holding 4 tech stocks isn't 4 bets — it's closer to 1.5 because they all rise and fall together. True diversification comes from owning things that move <em>differently</em>: stocks + bonds + gold + international, or tech + utilities + healthcare + energy.
         </div>
       </div>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Concentration Risk · How Diversified Are You Really</span>
+        <AlertCircle size={13} color="#d4a017" />
+      </div>
+      {inner}
+    </div>
+  );
+}
+
+// ============================================================
+// DIVERSIFICATION SUGGESTIONS — equity-focused (not Dalio All Weather)
+// Uses Dalio's "Holy Grail" principle (uncorrelated bets) but applied to stocks
+// since user prefers equity-only diversification with cash as the tactical reserve.
+// ============================================================
+function DalioSuggestionsPanel({ positions, totalValue, cashRemaining, macro, isMobile, embedded }) {
+  // Candidate diversifiers — ALL equity. Cash is treated separately.
+  const CANDIDATES = [
+    // Geographic diversification
+    { symbol: "VEA",  name: "Developed Markets ex-US (VEA)", category: "Geographic", desc: "Europe, Japan, UK, Australia. Different economic cycles than the US. Currently trades at much lower P/E than the US — Europe ~14× vs US ~22×.", targetPct: 12 },
+    { symbol: "VWO",  name: "Emerging Markets (VWO)",         category: "Geographic", desc: "China, India, Taiwan, Brazil, S Korea. Lower valuations, higher growth potential, but more political risk. Often inversely correlated with US dollar strength.", targetPct: 8 },
+    { symbol: "INDA", name: "India (INDA)",                   category: "Geographic", desc: "Fastest-growing major economy. Trades on different fundamentals than US tech. Demographic tailwind for decades.", targetPct: 5 },
+    { symbol: "EWJ",  name: "Japan (EWJ)",                    category: "Geographic", desc: "Decades of underperformance, now in early bull market. Different rate cycle from US.", targetPct: 5 },
+    { symbol: "VGK",  name: "Europe (VGK)",                   category: "Geographic", desc: "European banks, industrials, luxury, healthcare. Cheap relative to US (P/E ~14×).", targetPct: 5 },
+    // Sector diversification (US, but uncorrelated with tech)
+    { symbol: "XLV",  name: "Healthcare (XLV)",               category: "Sector",     desc: "Defensive sector with aging-demographics tailwind. Pharma, biotech, hospitals, insurance. Low correlation with tech.", targetPct: 8 },
+    { symbol: "XLF",  name: "Financials (XLF)",               category: "Sector",     desc: "Banks and insurance. Benefits from higher rates (opposite of tech). Cyclical but cheap relative to broad market.", targetPct: 7 },
+    { symbol: "XLE",  name: "Energy (XLE)",                   category: "Sector",     desc: "Oil & gas. Often inversely correlated with tech. Inflation hedge AND geopolitical hedge. Pays dividends.", targetPct: 5 },
+    { symbol: "XLY",  name: "Consumer Discretionary (XLY)",   category: "Sector",     desc: "Includes Amazon, Tesla, but also auto, retail, hotels. More cyclical than tech but different drivers.", targetPct: 5 },
+    { symbol: "XLP",  name: "Consumer Staples (XLP)",         category: "Sector",     desc: "Coca-Cola, P&G, Walmart. Recession-resistant. Low growth but very low volatility.", targetPct: 5 },
+    // Market cap diversification
+    { symbol: "IWM",  name: "Small Cap (IWM)",                category: "Market Cap", desc: "Russell 2000. Different cycle than mega-cap tech — often runs when rates fall and risk-on resumes. Higher growth potential, higher vol.", targetPct: 7 },
+    { symbol: "AVUV", name: "Small Cap Value (AVUV)",         category: "Market Cap", desc: "The factor that has outperformed historically. Cheap small companies — Buffett's hunting ground.", targetPct: 5 },
+    { symbol: "MDY",  name: "Mid Cap (MDY)",                  category: "Market Cap", desc: "S&P 400. The 'sweet spot' — too big to fail, small enough to grow. Often outperforms large caps over long periods.", targetPct: 7 },
+    // Style/factor diversification
+    { symbol: "VYM",  name: "Dividend Value (VYM)",           category: "Style",      desc: "Mature companies with stable dividends. Low correlation with growth stocks. Generates income.", targetPct: 6 },
+    { symbol: "VNQ",  name: "Real Estate REITs (VNQ)",        category: "Style",      desc: "Real estate as a stock. Pays dividends from rents. Different drivers than operating companies.", targetPct: 5 },
+  ];
+
+  // Find each candidate's actual data + correlation with portfolio
+  const benchmarks = macro?.benchmarks || [];
+
+  // Compute portfolio-weighted correlation with a target symbol.
+  const portfolioCorrWith = (sym) => {
+    let weightedSum = 0;
+    let totalWeight = 0;
+    for (const p of positions) {
+      const corr = p.correlations?.[sym];
+      if (corr == null || !p.value) continue;
+      weightedSum += corr * p.value;
+      totalWeight += p.value;
+    }
+    return totalWeight > 0 ? weightedSum / totalWeight : null;
+  };
+
+  // Score each candidate by Dalio's principle: low correlation = high impact
+  const candidatesScored = CANDIDATES.map((c) => {
+    const bench = benchmarks.find((b) => b.symbol === c.symbol);
+    if (!bench) return null;
+    const corr = portfolioCorrWith(c.symbol);
+    const candidateVol = bench.dailyVol ?? 1.0;
+    // Score: -1 corr = 100, 0 = 50, +1 = 0
+    const diversificationScore = corr != null ? 50 * (1 - corr) : 50;
+    // Estimate risk reduction from a 10% reallocation
+    const portVol = positions.reduce((s, p) => s + (p.var95 || 0) / 1.645 * p.value, 0) / totalValue || 2.0;
+    const w = 0.10;
+    const newVol = Math.sqrt(
+      Math.pow((1 - w) * portVol, 2) +
+      Math.pow(w * candidateVol, 2) +
+      2 * (1 - w) * w * (corr || 0) * portVol * candidateVol
+    );
+    const riskReductionPct = portVol > 0 ? ((portVol - newVol) / portVol) * 100 : 0;
+    return { ...c, bench, corr, candidateVol, diversificationScore, riskReductionPct };
+  }).filter(Boolean).sort((a, b) => b.diversificationScore - a.diversificationScore);
+
+  const topPicks = candidatesScored.slice(0, 4);
+
+  // Compute current diversification breakdown of the user's portfolio
+  // Bucket each position by category (using sector field)
+  const categorize = (sector) => {
+    if (!sector) return "Other";
+    const s = sector.toLowerCase();
+    if (s.includes("semi")) return "US Semis";
+    if (s.includes("hyperscaler") || s.includes("internet content")) return "US Mega Cap Tech";
+    if (s.includes("ai infrastructure")) return "US AI Hardware";
+    if (s.includes("ai software") || s.includes("software")) return "US Software";
+    if (s.includes("cyber")) return "US Cybersecurity";
+    if (s.includes("health")) return "US Healthcare";
+    if (s.includes("financ")) return "US Financials";
+    if (s.includes("energ")) return "US Energy";
+    return "US Other";
+  };
+
+  const userBuckets = {};
+  for (const p of positions) {
+    const cat = categorize(p.sector);
+    userBuckets[cat] = (userBuckets[cat] || 0) + p.value;
+  }
+  const userBucketArray = Object.entries(userBuckets)
+    .map(([cat, val]) => ({ category: cat, value: val, pct: (val / totalValue) * 100 }))
+    .sort((a, b) => b.pct - a.pct);
+
+  // Cash percentage
+  const totalAccount = totalValue + (cashRemaining || 0);
+  const cashPct = totalAccount > 0 ? ((cashRemaining || 0) / totalAccount) * 100 : 0;
+  const stocksPct = totalAccount > 0 ? (totalValue / totalAccount) * 100 : 0;
+
+  // Equity-only "ideal" framework. This is more aggressive than All Weather since user
+  // explicitly wants stock-only diversification with cash as tactical reserve.
+  const EQUITY_DIVERSIFIED_TARGET = [
+    { name: "Cash (tactical reserve)",     symbol: "cash",  target: 15, current: cashPct,    note: "For opportunities & sleep-well-at-night money" },
+    { name: "US Mega Cap Tech (MSFT, etc)", symbol: "USTech", target: 25, current: userBuckets["US Mega Cap Tech"] ? userBuckets["US Mega Cap Tech"] / totalAccount * 100 : 0, note: "Your highest-conviction core" },
+    { name: "US Semis & AI Hardware",       symbol: "USSemi", target: 15, current: ((userBuckets["US Semis"] || 0) + (userBuckets["US AI Hardware"] || 0)) / totalAccount * 100, note: "AI cycle exposure" },
+    { name: "US Other Sectors (XLV, XLF, XLE, XLP)", symbol: "USOther", target: 15, current: ((userBuckets["US Healthcare"] || 0) + (userBuckets["US Financials"] || 0) + (userBuckets["US Energy"] || 0)) / totalAccount * 100, note: "Sector diversification within US" },
+    { name: "International Developed (VEA, EWJ, VGK)", symbol: "Intl",   target: 15, current: 0, note: "Different cycles, cheaper valuations" },
+    { name: "Emerging Markets (VWO, INDA)",  symbol: "EM",    target: 8,  current: 0, note: "Higher growth, different macro" },
+    { name: "Small/Mid Cap (IWM, MDY)",      symbol: "SmallMid", target: 7, current: 0, note: "Size factor diversification" },
+  ];
+
+  const inner = (
+    <div style={{ padding: "14px 16px" }}>
+      <div style={{ padding: "10px 12px", background: "#fff8e1", borderLeft: "3px solid #d4a017", marginBottom: 16, borderRadius: 2 }}>
+        <div style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.6 }}>
+          <strong>Dalio's Holy Grail (equity-focused):</strong> "By owning 15-20 uncorrelated bets, you can reduce risk by 80% without sacrificing return." Below are <strong>stock-only diversifiers</strong> (no bonds, no gold) — ranked by how much they would actually reduce YOUR risk based on real correlation data.
+        </div>
+      </div>
+
+      {/* Top 4 picks */}
+      <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Top 4 Stock Diversifiers for Your Portfolio</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+        {topPicks.map((c, i) => (
+          <div key={c.symbol} style={{ padding: "12px 14px", background: "#fff", border: "1px solid #efece5", borderRadius: 2, borderLeft: `4px solid ${i === 0 ? "#0a8554" : i === 1 ? "#7ba2cc" : "#86b09c"}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: i === 0 ? "#0a8554" : "#1a1f2c" }}>#{i + 1}: {c.name}</span>
+                  <span className="pill" style={{ background: "#f5f3ed", color: "#5a6573", fontSize: 9 }}>{c.category}</span>
+                </div>
+                <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5 }}>{c.desc}</div>
+              </div>
+              <div style={{ textAlign: "right", minWidth: isMobile ? "100%" : 140 }}>
+                <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Correlation w/ you</div>
+                <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: c.corr < 0 ? "#0a8554" : c.corr < 0.4 ? "#86b09c" : c.corr < 0.65 ? "#d4a017" : "#c4314b", marginTop: 2 }}>
+                  {c.corr != null ? (c.corr >= 0 ? "+" : "") + c.corr.toFixed(2) : "—"}
+                </div>
+                <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{c.corr < 0 ? "Inversely tied 🎯" : c.corr < 0.4 ? "Low correlation ✓" : c.corr < 0.65 ? "Some correlation" : "High correlation"}</div>
+                <div style={{ fontSize: 10, color: "#0a8554", marginTop: 4, fontWeight: 600 }}>~{c.riskReductionPct.toFixed(0)}% risk reduction</div>
+                <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 1 }}>(at 10% allocation)</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dotted #efece5", fontSize: 11, color: "#5a6573" }}>
+              <strong style={{ color: "#1a1f2c" }}>Suggested allocation:</strong> ~{c.targetPct}% = <span className="mono">${formatMcap(totalAccount * c.targetPct / 100)}</span>
+              {cashRemaining > 0 && <span> · You have <span className="mono">${formatMcap(cashRemaining)}</span> in cash</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* All candidates table (compact) */}
+      <details style={{ marginBottom: 16 }}>
+        <summary style={{ cursor: "pointer", fontSize: 11, color: "#5a6573", fontWeight: 600, padding: "6px 0" }}>Show all {candidatesScored.length} ranked candidates</summary>
+        <div style={{ overflowX: "auto", marginTop: 8 }}>
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 540 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                <th style={{ padding: "5px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>ETF</th>
+                <th style={{ padding: "5px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Category</th>
+                <th style={{ padding: "5px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Corr w/ you</th>
+                <th style={{ padding: "5px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Risk ↓</th>
+                <th style={{ padding: "5px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Daily Vol</th>
+              </tr>
+            </thead>
+            <tbody>
+              {candidatesScored.map((c) => (
+                <tr key={c.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
+                  <td className="mono" style={{ padding: "5px 8px", fontWeight: 600 }}>{c.symbol}</td>
+                  <td style={{ padding: "5px 8px", fontSize: 10, color: "#5a6573" }}>{c.category}</td>
+                  <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: c.corr < 0.4 ? "#0a8554" : c.corr < 0.65 ? "#d4a017" : "#c4314b" }}>{c.corr != null ? (c.corr >= 0 ? "+" : "") + c.corr.toFixed(2) : "—"}</td>
+                  <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: c.riskReductionPct > 10 ? "#0a8554" : "#1a1f2c" }}>{c.riskReductionPct.toFixed(0)}%</td>
+                  <td className="mono" style={{ padding: "5px 8px", textAlign: "right", color: "#5a6573" }}>{c.candidateVol.toFixed(2)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      {/* Diversified Equity Framework comparison */}
+      <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Your Allocation vs Diversified Equity Framework</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 12 }}>
+        {EQUITY_DIVERSIFIED_TARGET.map((row) => {
+          const gap = row.target - row.current;
+          const overTarget = row.current > row.target;
+          return (
+            <div key={row.symbol}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: isMobile ? 140 : 220, fontSize: 11, color: "#5a6573", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</span>
+                <div style={{ flex: 1, height: 16, background: "#efece5", borderRadius: 2, position: "relative" }}>
+                  <div style={{ width: `${Math.min(row.target, 100)}%`, height: "100%", background: "#d6d2c7", borderRadius: 2 }} />
+                  <div style={{ position: "absolute", top: 0, left: 0, width: `${Math.min(row.current, 100)}%`, height: "100%", background: overTarget ? "#c4314b" : "#0a8554", borderRadius: 2, opacity: 0.85 }} />
+                </div>
+                <span className="mono" style={{ width: 90, textAlign: "right", fontSize: 10, color: "#5a6573", flexShrink: 0 }}>
+                  <span style={{ color: overTarget ? "#c4314b" : "#0a8554", fontWeight: 600 }}>{row.current.toFixed(0)}%</span> / <span style={{ color: "#8a93a3" }}>{row.target}%</span>
+                </span>
+              </div>
+              <div style={{ marginLeft: isMobile ? 0 : 220, fontSize: 9, color: "#8a93a3", marginTop: 1, marginBottom: 3 }}>{row.note}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
+        <strong>The framework:</strong> Equity-only diversification with cash as the tactical reserve. Gray bar = target. Color = your current. Green = below target (room to add). Red = above target (consider trimming). This framework is more aggressive than Dalio's All Weather — designed for someone with 10+ year horizon who wants growth but with proper geographic & sector spread.
+      </div>
+
+      <div style={{ marginTop: 12, padding: 10, background: "#fff8e1", borderLeft: "3px solid #d4a017", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
+        <strong>Practical note:</strong> You don't have to hit every target. Even adding ONE uncorrelated piece (say, 10% in VEA international) reduces portfolio risk meaningfully. The "Holy Grail" effect is steepest with the first few additions — the 10th uncorrelated asset adds less than the 2nd. Start with the top pick above and see how your dashboard's risk numbers change.
+      </div>
+    </div>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Diversification Suggestions · Stock-Focused</span>
+        <Target size={13} color="#d4a017" />
+      </div>
+      {inner}
     </div>
   );
 }
@@ -2094,7 +2595,7 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile }) {
 // ============================================================
 // MACRO STRESS TEST — what happens to portfolio in scripted scenarios
 // ============================================================
-function MacroStressPanel({ positions, totalValue, isMobile }) {
+function MacroStressPanel({ positions, totalValue, isMobile, embedded }) {
   if (!totalValue) return null;
   // Scenarios: each defines a shock to a macro asset and we use stock correlations to estimate impact
   const scenarios = [
@@ -2160,12 +2661,7 @@ function MacroStressPanel({ positions, totalValue, isMobile }) {
     return { ...sc, dollarImpact: totalImpact, pctImpact: totalValue > 0 ? (totalImpact / totalValue) * 100 : 0, coveragePct };
   });
 
-  return (
-    <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="panel-head">
-        <span className="panel-title">Macro Stress Test · How Your Portfolio Reacts to Shocks</span>
-        <Activity size={13} color="#d4a017" />
-      </div>
+  const inner = (
       <div style={{ padding: "12px 14px" }}>
         <div style={{ fontSize: 12, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 14 }}>
           Estimated portfolio impact in different stress scenarios. Uses each position's 30-day correlation with macro assets. <strong>Approximate, not exact</strong> — actual market events vary.
@@ -2196,6 +2692,16 @@ function MacroStressPanel({ positions, totalValue, isMobile }) {
           <strong>Caveats:</strong> These are linear approximations based on recent correlations. Real shocks can be non-linear — when VIX spikes 60%, correlations between stocks themselves spike too ("everything goes down together"), making losses larger than this model suggests. Use as a rough sanity check, not as a forecast.
         </div>
       </div>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Macro Stress Test · How Your Portfolio Reacts to Shocks</span>
+        <Activity size={13} color="#d4a017" />
+      </div>
+      {inner}
     </div>
   );
 }
