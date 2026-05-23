@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-23T12:00:26.774Z",
+  "generatedAt": "2026-05-23T12:16:45.667Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -114,54 +114,54 @@
       "name": "Micron Technology",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 751,
-      "change": -11.1,
-      "changePct": -1.4565
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "ASML",
       "name": "ASML Holding",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 1632.9,
-      "change": 40.9,
-      "changePct": 2.5691
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "MRVL",
       "name": "Marvell Technology",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 196.33,
-      "change": 5.64,
-      "changePct": 2.9577
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "ARM",
       "name": "Arm Holdings",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 306.51,
-      "change": 8.28,
-      "changePct": 2.7764
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "QCOM",
       "name": "Qualcomm",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 238.16,
-      "change": 24.75,
-      "changePct": 11.5974
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "INTC",
       "name": "Intel Corp.",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 119.84,
-      "change": 1.34,
-      "changePct": 1.1308
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "SMCI",
@@ -240,27 +240,27 @@
       "name": "Nebius Group",
       "sector": "AI Cloud",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 214.77,
+      "change": -5.16,
+      "changePct": -2.3462
     },
     {
       "symbol": "TEM",
       "name": "Tempus AI",
       "sector": "AI Software",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 46.18,
+      "change": -0.31,
+      "changePct": -0.6668
     },
     {
       "symbol": "PATH",
       "name": "UiPath",
       "sector": "AI Software",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 10.93,
+      "change": 0.36,
+      "changePct": 3.4059
     },
     {
       "symbol": "VST",
@@ -299,6 +299,33 @@
       "changePct": 10.0073
     },
     {
+      "symbol": "IBM",
+      "name": "IBM (Quantum + AI)",
+      "sector": "Quantum/Mega Tech",
+      "holding": false,
+      "price": 253.84,
+      "change": 0.87,
+      "changePct": 0.3439
+    },
+    {
+      "symbol": "GFS",
+      "name": "GlobalFoundries",
+      "sector": "Semiconductors",
+      "holding": false,
+      "price": 85.64,
+      "change": 4.29,
+      "changePct": 5.2735
+    },
+    {
+      "symbol": "RGTI",
+      "name": "Rigetti Computing",
+      "sector": "Quantum Pure-Play",
+      "holding": false,
+      "price": 26.42,
+      "change": 4.38,
+      "changePct": 19.873
+    },
+    {
       "symbol": "AAPL",
       "name": "Apple Inc.",
       "sector": "Mega Cap Tech",
@@ -321,54 +348,54 @@
       "name": "Meta Platforms",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 610.26,
-      "change": 2.88,
-      "changePct": 0.4742
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "AMZN",
       "name": "Amazon.com",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 266.32,
-      "change": -2.14,
-      "changePct": -0.7971
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "TSLA",
       "name": "Tesla, Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": 426.01,
-      "change": 8.16,
-      "changePct": 1.9529
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "NFLX",
       "name": "Netflix",
       "sector": "Streaming",
       "holding": false,
-      "price": 88.6,
-      "change": -0.7,
-      "changePct": -0.7839
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "RDDT",
       "name": "Reddit Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": 141.67,
-      "change": -8.37,
-      "changePct": -5.5785
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "OPEN",
       "name": "Opendoor Technologies",
       "sector": "Active Retail",
       "holding": false,
-      "price": 4.53,
-      "change": -0.04,
-      "changePct": -0.8753
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "HOOD",
@@ -438,45 +465,45 @@
       "name": "Occidental Petroleum",
       "sector": "Buffett",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 58.81,
+      "change": -0.02,
+      "changePct": -0.034
     },
     {
       "symbol": "CMG",
       "name": "Chipotle Mexican Grill",
       "sector": "Ackman",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 32.89,
+      "change": 0.09,
+      "changePct": 0.2744
     },
     {
       "symbol": "PYPL",
       "name": "PayPal Holdings",
       "sector": "Fintech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 44.23,
+      "change": -0.07,
+      "changePct": -0.158
     },
     {
       "symbol": "JPM",
       "name": "JPMorgan Chase",
       "sector": "Financials",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 306.38,
+      "change": 3.38,
+      "changePct": 1.1155
     },
     {
       "symbol": "GS",
       "name": "Goldman Sachs",
       "sector": "Financials",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 996.73,
+      "change": 8.56,
+      "changePct": 0.8662
     },
     {
       "symbol": "LLY",
