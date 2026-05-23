@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-23T10:55:37.316Z",
+  "generatedAt": "2026-05-23T11:47:59.203Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -114,9 +114,9 @@
       "name": "Micron Technology",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 751,
-      "change": -11.1,
-      "changePct": -1.4565
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "ASML",
@@ -186,54 +186,54 @@
       "name": "Dell Technologies",
       "sector": "AI Hardware",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 295.19,
+      "change": 42.39,
+      "changePct": 16.7682
     },
     {
       "symbol": "VRT",
       "name": "Vertiv Holdings",
       "sector": "AI Hardware",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 327.46,
+      "change": 4.06,
+      "changePct": 1.2554
     },
     {
       "symbol": "PLTR",
       "name": "Palantir Technologies",
       "sector": "AI Software",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 136.88,
+      "change": -0.535,
+      "changePct": -0.3893
     },
     {
       "symbol": "ORCL",
       "name": "Oracle",
       "sector": "Hyperscaler",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 192.08,
+      "change": 2.31,
+      "changePct": 1.2173
     },
     {
       "symbol": "CRWD",
       "name": "CrowdStrike",
       "sector": "Cybersecurity",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 663.46,
+      "change": 15.23,
+      "changePct": 2.3495
     },
     {
       "symbol": "PANW",
       "name": "Palo Alto Networks",
       "sector": "Cybersecurity",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 260.58,
+      "change": 7.66,
+      "changePct": 3.0286
     },
     {
       "symbol": "NBIS",
@@ -294,54 +294,54 @@
       "name": "AST SpaceMobile",
       "sector": "Space",
       "holding": false,
-      "price": 105.86,
-      "change": 9.63,
-      "changePct": 10.0073
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "AAPL",
       "name": "Apple Inc.",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 308.82,
-      "change": 3.83,
-      "changePct": 1.2558
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "GOOGL",
       "name": "Alphabet Inc.",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 382.97,
-      "change": -4.69,
-      "changePct": -1.2098
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "META",
       "name": "Meta Platforms",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 610.26,
-      "change": 2.88,
-      "changePct": 0.4742
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "AMZN",
       "name": "Amazon.com",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 266.32,
-      "change": -2.14,
-      "changePct": -0.7971
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "TSLA",
       "name": "Tesla, Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": 426.01,
-      "change": 8.16,
-      "changePct": 1.9529
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "NFLX",
@@ -420,36 +420,36 @@
       "name": "American Express",
       "sector": "Buffett",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 311.78,
+      "change": 2.08,
+      "changePct": 0.6716
     },
     {
       "symbol": "CVX",
       "name": "Chevron",
       "sector": "Buffett",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 191.43,
+      "change": 0.42,
+      "changePct": 0.2199
     },
     {
       "symbol": "OXY",
       "name": "Occidental Petroleum",
       "sector": "Buffett",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 58.81,
+      "change": -0.02,
+      "changePct": -0.034
     },
     {
       "symbol": "CMG",
       "name": "Chipotle Mexican Grill",
       "sector": "Ackman",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 32.89,
+      "change": 0.09,
+      "changePct": 0.2744
     },
     {
       "symbol": "PYPL",
