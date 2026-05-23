@@ -2901,21 +2901,24 @@ function OptionsFlowPanel({ op, isMobile }) {
         )}
 
         {op.skewCurve?.length >= 3 && (
-          <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1", borderBottom: "1px solid #efece5" }}>
+          <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1", borderBottom: "1px solid #efece5", minWidth: 0 }}>
             <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Volatility Smile (IV across strikes)</div>
-            <ResponsiveContainer width="100%" height={isMobile ? 140 : 180}>
-              <LineChart data={op.skewCurve} margin={{ top: 8, right: 30, left: 0, bottom: 4 }}>
-                <XAxis dataKey="moneyness" tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db"
-                  label={{ value: isMobile ? "% from spot" : "% from current price", position: "insideBottom", offset: -2, fontSize: 10, fill: "#5a6573" }} />
-                <YAxis tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={40}
-                  label={{ value: "IV %", angle: 0, position: "insideTopRight", fontSize: 9, fill: "#5a6573" }} />
-                <ReferenceLine x={0} stroke="#1a1f2c" strokeDasharray="3 3" strokeWidth={0.8} label={{ value: "ATM", fontSize: 9, fill: "#1a1f2c" }} />
-                <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }}
-                  formatter={(value, name) => [`${value}%`, "IV"]}
-                  labelFormatter={(label) => `${label > 0 ? "+" : ""}${label}% from spot`} />
-                <Line type="monotone" dataKey="iv" stroke="#d4a017" strokeWidth={2} dot={{ fill: "#d4a017", r: 2 }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <div style={{ width: "100%", overflow: "hidden" }}>
+              <ResponsiveContainer width="100%" height={isMobile ? 140 : 180}>
+                <LineChart data={op.skewCurve} margin={{ top: 8, right: isMobile ? 8 : 30, left: isMobile ? 0 : 0, bottom: 4 }}>
+                  <XAxis dataKey="moneyness" tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db"
+                    interval={isMobile ? "preserveStartEnd" : "preserveEnd"}
+                    label={{ value: isMobile ? "% from spot" : "% from current price", position: "insideBottom", offset: -2, fontSize: 10, fill: "#5a6573" }} />
+                  <YAxis tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={isMobile ? 32 : 40}
+                    label={{ value: "IV %", angle: 0, position: "insideTopRight", fontSize: 9, fill: "#5a6573" }} />
+                  <ReferenceLine x={0} stroke="#1a1f2c" strokeDasharray="3 3" strokeWidth={0.8} label={{ value: "ATM", fontSize: 9, fill: "#1a1f2c" }} />
+                  <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }}
+                    formatter={(value, name) => [`${value}%`, "IV"]}
+                    labelFormatter={(label) => `${label > 0 ? "+" : ""}${label}% from spot`} />
+                  <Line type="monotone" dataKey="iv" stroke="#d4a017" strokeWidth={2} dot={{ fill: "#d4a017", r: 2 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
             <ExplainBox text="Each dot is an option strike. A U-shape ('smile') means OTM options on both sides cost more — typical. A downward slope to the right ('smirk') means puts are pricier than calls — the market is pricing fear of downside." />
           </div>
         )}
@@ -2937,8 +2940,8 @@ function OptionsFlowPanel({ op, isMobile }) {
             const callPutBias = totalCallDollars + totalPutDollars > 0 ? totalCallDollars / (totalCallDollars + totalPutDollars) * 100 : 50;
 
             const HighlightCard = ({ label, item, color }) => (
-              <div style={{ flex: 1, minWidth: isMobile ? "100%" : 180, padding: "10px 12px", background: "#fff", border: `1px solid ${color}`, borderRadius: 2, borderLeft: `4px solid ${color}` }}>
-                <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4, fontWeight: 600 }}>{label}</div>
+              <div style={{ flex: isMobile ? "1 1 100%" : "1 1 180px", minWidth: 0, padding: "10px 12px", background: "#fff", border: `1px solid ${color}`, borderRadius: 2, borderLeft: `4px solid ${color}` }}>
+                <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4, fontWeight: 600, wordBreak: "break-word" }}>{label}</div>
                 {item ? (
                   <>
                     <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: item.type === "CALL" ? "#0a8554" : "#c4314b" }}>
@@ -3370,6 +3373,8 @@ const Styles = () => (
     .panel { min-width: 0; max-width: 100%; overflow-wrap: break-word; }
     .panel-head > * { min-width: 0; max-width: 100%; }
     .panel-head { word-break: break-word; }
+    /* Grid and flex items must allow shrink below their natural content size */
+    .panel > div, .panel > div > div { min-width: 0; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spin { animation: spin 0.8s linear infinite; }
