@@ -96,6 +96,7 @@ async function yahooSummary(symbol) {
     "earningsTrend", "earningsHistory",
     "insiderTransactions", "majorHoldersBreakdown",
     "calendarEvents",
+    "cashflowStatementHistory", "incomeStatementHistory",
   ].join(",");
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
   try {
@@ -275,6 +276,22 @@ function computeOptionsMetrics(optChain, spotPrice) {
   const expiryDate = expiry.expirationDate ? new Date(expiry.expirationDate * 1000).toISOString().slice(0, 10) : null;
   const daysToExpiry = expiry.expirationDate ? Math.round((expiry.expirationDate * 1000 - Date.now()) / (1000 * 60 * 60 * 24)) : null;
 
+  // Expected move (1 standard deviation) = spot × IV × sqrt(days/365)
+  // Uses long-dated IV (more reliable). Falls back to short-dated.
+  const ivForMove = ivATMLong ?? ivATM;
+  const daysForMove = ivATMLong != null ? ivATMLongDays : daysToExpiry;
+  let expectedMove = null;
+  if (ivForMove != null && daysForMove != null && daysForMove > 0 && spotPrice) {
+    const moveDollar = spotPrice * (ivForMove / 100) * Math.sqrt(daysForMove / 365);
+    expectedMove = {
+      dollar: +moveDollar.toFixed(2),
+      pct: +((moveDollar / spotPrice) * 100).toFixed(2),
+      low: +(spotPrice - moveDollar).toFixed(2),
+      high: +(spotPrice + moveDollar).toFixed(2),
+      days: daysForMove,
+    };
+  }
+
   return {
     expiry: expiryDate,
     daysToExpiry,
@@ -293,6 +310,7 @@ function computeOptionsMetrics(optChain, spotPrice) {
     skew,
     skewCurve,
     topStrikes,
+    expectedMove,
   };
 }
 
@@ -414,6 +432,14 @@ async function fetchTicker(t) {
     else lynchCategory = "Stalwart";
   }
 
+  // Stock-based compensation as % of revenue. Buffett's pet metric.
+  // Yahoo's cashflowStatementHistory has stockBasedCompensation in the most recent annual.
+  const cashflows = summary?.cashflowStatementHistory?.cashflowStatements || [];
+  const income = summary?.incomeStatementHistory?.incomeStatementHistory || [];
+  const sbcRaw = cashflows.length ? v(cashflows[0], "stockBasedCompensation") : null;
+  const revAnnual = income.length ? v(income[0], "totalRevenue") : null;
+  const sbcPctRev = (sbcRaw != null && revAnnual && revAnnual > 0) ? +((sbcRaw / revAnnual) * 100).toFixed(2) : null;
+
   const lynchData = {
     category: lynchCategory,
     epsGrowthNextYr: epsGrowthNext != null ? epsGrowthNext * 100 : null,
@@ -429,6 +455,8 @@ async function fetchTicker(t) {
     shortRatio: v(ks, "shortRatio"),
     shortPctFloat: v(ks, "shortPercentOfFloat"),
     pegRatio: v(ks, "pegRatio") ?? v(ks, "trailingPegRatio") ?? m.pegRatio ?? null,
+    sbcPctRevenue: sbcPctRev,
+    sbcRaw,
   };
 
   const simonsData = candles1Y && candles1Y.length >= 50 ? computeSimonsMetrics(candles1Y) : null;
@@ -776,6 +804,15 @@ function computeSimonsMetrics(candles) {
   const meanR = returns.reduce((s, x) => s + x, 0) / returns.length;
   const sdR = Math.sqrt(returns.reduce((s, x) => s + (x - meanR) ** 2, 0) / returns.length);
   const sharpe = sdR ? +(meanR / sdR * Math.sqrt(252)).toFixed(2) : null;
+  // Sortino: like Sharpe but only counts downside volatility (returns < 0).
+  // Better metric for assets with big upside moves (e.g., NVDA).
+  const downside = returns.filter((r) => r < 0);
+  const sortino = (() => {
+    if (downside.length < 5) return null;
+    const dsq = downside.reduce((s, x) => s + x * x, 0) / downside.length;
+    const downsd = Math.sqrt(dsq);
+    return downsd ? +(meanR / downsd * Math.sqrt(252)).toFixed(2) : null;
+  })();
   const obv = [0];
   for (let i = 1; i < candles.length; i++) {
     const prev = obv[i - 1];
@@ -795,7 +832,7 @@ function computeSimonsMetrics(candles) {
   return {
     autocorrLag1: autocorr(1), autocorrLag5: autocorr(5), autocorrLag20: autocorr(20),
     atr14: atr, maxDrawdown: +(mdd * 100).toFixed(2),
-    sharpe1Y: sharpe, obvTrend, dowAvgReturns: dowAvg,
+    sharpe1Y: sharpe, sortino1Y: sortino, obvTrend, dowAvgReturns: dowAvg,
   };
 }
 
@@ -806,29 +843,8 @@ async function main() {
   const config = JSON.parse(readFileSync("tickers.json", "utf8"));
   const out = { generatedAt: new Date().toISOString(), tickers: [] };
 
-  for (const t of config.tickers) {
-    try {
-      const data = await fetchTicker(t);
-      writeFileSync(`public/data/${t.symbol}.json`, JSON.stringify(data));
-      out.tickers.push({
-        symbol: t.symbol, name: t.name, sector: t.sector,
-        holding: !!t.holding,
-        price: data.quote.current, change: data.quote.change, changePct: data.quote.changePct,
-      });
-      const fwd = data.fundamentals.fwdPe;
-      const pcr = data.options?.pcrVolume;
-      const fwdStr = (typeof fwd === "number" && isFinite(fwd)) ? fwd.toFixed(1) : "—";
-      const pcrStr = (typeof pcr === "number" && isFinite(pcr)) ? pcr.toFixed(2) : "—";
-      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwdStr}  PCR=${pcrStr}  ${t.holding ? "★" : ""}`);
-    } catch (e) {
-      console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
-    }
-    await sleep(800);
-  }
-
-  // ============ MACRO LAYER ============
-  // Fetch market-wide context: rates, fear, dollar, market, semis.
-  console.log("\nFetching macro context...");
+  // ============ MACRO LAYER (fetched FIRST, used for correlations) ============
+  console.log("\nFetching macro context (used for correlations)...");
   const MACRO_TICKERS = [
     { symbol: "^TNX",     name: "10Y Treasury Yield", explain: "When this rises, growth stocks usually fall. >4.5% is restrictive." },
     { symbol: "^VIX",     name: "Volatility Index",   explain: "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear." },
@@ -836,15 +852,19 @@ async function main() {
     { symbol: "SPY",      name: "S&P 500 ETF",        explain: "Overall US market direction." },
     { symbol: "SOXX",     name: "Semiconductor ETF",  explain: "Sector context — moves NVDA, AMD, TSM, etc together." },
     { symbol: "QQQ",      name: "NASDAQ-100 ETF",     explain: "Tech-heavy index. Growth stock proxy." },
+    { symbol: "TLT",      name: "20Y Treasury ETF",   explain: "Bond proxy. Negative correlation with growth stocks." },
   ];
   const macroData = { fetchedAt: new Date().toISOString(), items: [] };
+  // Store macro candles in memory so each ticker can compute correlations
+  const macroCandles = {};
   for (const m of MACRO_TICKERS) {
     try {
-      const candles = await yahooCandles(m.symbol, "1mo", "1d");
+      const candles = await yahooCandles(m.symbol, "3mo", "1d");
       if (!candles || candles.length < 2) continue;
+      macroCandles[m.symbol] = candles;
       const last = candles[candles.length - 1];
       const prev = candles[candles.length - 2];
-      const monthStart = candles[0];
+      const monthStart = candles[Math.max(0, candles.length - 22)];
       const dayChange = ((last.close - prev.close) / prev.close) * 100;
       const monthChange = ((last.close - monthStart.close) / monthStart.close) * 100;
       macroData.items.push({
@@ -863,8 +883,69 @@ async function main() {
   }
   writeFileSync("public/data/macro.json", JSON.stringify(macroData, null, 2));
 
+  console.log("\nFetching tickers...");
+  for (const t of config.tickers) {
+    try {
+      const data = await fetchTicker(t);
+      // Compute correlations vs macro tickers using candles1Y (last 30 trading days)
+      data.correlations = computeCorrelations(data.candles, macroCandles);
+      writeFileSync(`public/data/${t.symbol}.json`, JSON.stringify(data));
+      out.tickers.push({
+        symbol: t.symbol, name: t.name, sector: t.sector,
+        holding: !!t.holding,
+        price: data.quote.current, change: data.quote.change, changePct: data.quote.changePct,
+      });
+      const fwd = data.fundamentals.fwdPe;
+      const pcr = data.options?.pcrVolume;
+      const fwdStr = (typeof fwd === "number" && isFinite(fwd)) ? fwd.toFixed(1) : "—";
+      const pcrStr = (typeof pcr === "number" && isFinite(pcr)) ? pcr.toFixed(2) : "—";
+      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwdStr}  PCR=${pcrStr}  ${t.holding ? "★" : ""}`);
+    } catch (e) {
+      console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
+    }
+    await sleep(800);
+  }
+
   writeFileSync("public/data/index.json", JSON.stringify(out, null, 2));
   console.log(`\nDone. Wrote ${out.tickers.length} tickers (${out.tickers.filter(x=>x.holding).length} holdings) + macro snapshot.`);
+}
+
+// Compute 30-day correlation between this ticker's returns and each macro asset.
+function computeCorrelations(candles, macroCandles) {
+  if (!candles || candles.length < 30) return null;
+  const tickerReturns = computeReturns(candles.slice(-31));
+  const out = {};
+  for (const [sym, mc] of Object.entries(macroCandles)) {
+    if (!mc || mc.length < 31) continue;
+    const macroReturns = computeReturns(mc.slice(-31));
+    // Align by length (take minimum)
+    const n = Math.min(tickerReturns.length, macroReturns.length);
+    if (n < 20) continue;
+    const a = tickerReturns.slice(-n);
+    const b = macroReturns.slice(-n);
+    const corr = pearson(a, b);
+    if (corr != null) out[sym] = +corr.toFixed(2);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function computeReturns(candles) {
+  const closes = candles.map((c) => c.close).filter((c) => c != null);
+  return closes.slice(1).map((c, i) => Math.log(c / closes[i]));
+}
+
+function pearson(a, b) {
+  if (a.length !== b.length || a.length < 5) return null;
+  const n = a.length;
+  const meanA = a.reduce((s, x) => s + x, 0) / n;
+  const meanB = b.reduce((s, x) => s + x, 0) / n;
+  let num = 0, dA = 0, dB = 0;
+  for (let i = 0; i < n; i++) {
+    num += (a[i] - meanA) * (b[i] - meanB);
+    dA += (a[i] - meanA) ** 2;
+    dB += (b[i] - meanB) ** 2;
+  }
+  return dA && dB ? num / Math.sqrt(dA * dB) : null;
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
