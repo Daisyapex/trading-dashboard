@@ -1392,6 +1392,9 @@ function RiskHelper({ isMobile }) {
   const [form, setForm] = useState({ symbol: "", shares: "", costBasis: "" });
   const [accountSize, setAccountSize] = useState("");
   const [riskPct, setRiskPct] = useState(1); // % of account willing to lose per trade
+  const [cash, setCash] = useState("");
+  const [bulkText, setBulkText] = useState("");
+  const [showBulk, setShowBulk] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -1404,6 +1407,8 @@ function RiskHelper({ isMobile }) {
       if (acct) setAccountSize(acct);
       const rpct = localStorage.getItem("trading-dashboard-risk-pct");
       if (rpct) setRiskPct(parseFloat(rpct));
+      const c = localStorage.getItem("trading-dashboard-cash");
+      if (c) setCash(c);
     } catch (e) {}
   }, []);
 
@@ -1419,6 +1424,73 @@ function RiskHelper({ isMobile }) {
     setRiskPct(v);
     try { localStorage.setItem("trading-dashboard-risk-pct", String(v)); } catch (e) {}
   };
+  const saveCash = (v) => {
+    setCash(v);
+    try { localStorage.setItem("trading-dashboard-cash", v); } catch (e) {}
+  };
+
+  // Parse bulk text in flexible formats:
+  // "NVDA:7.4, MSFT:6, TSM:3"
+  // "NVDA 7.4\nMSFT 6\nTSM 3"
+  // JSON: {"NVDA": 7.4, "MSFT": 6}
+  // JSON array: [{"symbol":"NVDA","shares":7.4}]
+  const parseBulk = (txt) => {
+    if (!txt || !txt.trim()) return [];
+    const t = txt.trim();
+    // Try JSON object first
+    try {
+      const obj = JSON.parse(t);
+      if (Array.isArray(obj)) {
+        return obj.map((x) => ({
+          symbol: (x.symbol || x.ticker || "").toUpperCase(),
+          shares: parseFloat(x.shares ?? x.qty ?? x.quantity),
+          costBasis: x.costBasis ?? x.cost ?? null,
+        })).filter((x) => x.symbol && !isNaN(x.shares));
+      }
+      if (typeof obj === "object" && obj !== null) {
+        return Object.entries(obj).map(([sym, val]) => ({
+          symbol: sym.toUpperCase(),
+          shares: typeof val === "number" ? val : parseFloat(val.shares ?? val),
+          costBasis: typeof val === "object" ? val.costBasis : null,
+        })).filter((x) => !isNaN(x.shares));
+      }
+    } catch (e) {}
+    // Fall back to "SYMBOL:NUM, SYMBOL NUM" parsing
+    const out = [];
+    // Split by comma, newline, or semicolon
+    const items = t.split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+    for (const item of items) {
+      // Match SYMBOL followed by colon/space/equals, then number
+      const m = item.match(/^([A-Za-z][\w\.\-]*)[\s:=]+([\d.]+)/);
+      if (m) {
+        const shares = parseFloat(m[2]);
+        if (!isNaN(shares) && shares > 0) {
+          out.push({ symbol: m[1].toUpperCase(), shares, costBasis: null });
+        }
+      }
+    }
+    return out;
+  };
+
+  const applyBulk = async () => {
+    const parsed = parseBulk(bulkText);
+    if (!parsed.length) { setError("Couldn't parse anything. Try format like 'NVDA:7.4, MSFT:6' or JSON."); return; }
+    setLoading(true);
+    setError(null);
+    const next = [];
+    for (const p of parsed) {
+      const risk = await fetchRiskFor(p.symbol);
+      if (risk) {
+        next.push({ ...p, ...risk, addedAt: new Date().toISOString().slice(0, 10) });
+      } else {
+        next.push({ ...p, currentPrice: null, var95: null, var955day: null, cvar95: null, maxDD: null, atr14: null, addedAt: new Date().toISOString().slice(0, 10) });
+      }
+    }
+    savePositions(next);  // REPLACES existing positions
+    setBulkText("");
+    setShowBulk(false);
+    setLoading(false);
+  };
 
   // Fetch position risk data from the per-ticker JSON files
   const fetchRiskFor = async (symbol) => {
@@ -1426,6 +1498,13 @@ function RiskHelper({ isMobile }) {
       const res = await fetch(`${BASE}data/${symbol}.json?v=${Date.now()}`);
       if (!res.ok) throw new Error(`No data for ${symbol}`);
       const data = await res.json();
+      // Compute peer-average PE for valuation risk
+      const peers = data.peerData || {};
+      const peerPEs = Object.entries(peers)
+        .filter(([k]) => k !== symbol)
+        .map(([, v]) => v?.pe)
+        .filter((p) => typeof p === "number" && isFinite(p) && p > 0 && p < 200);
+      const peerAvgPE = peerPEs.length ? peerPEs.reduce((s, x) => s + x, 0) / peerPEs.length : null;
       return {
         currentPrice: data.quote?.current ?? null,
         var95: data.simons?.var95daily ?? null,
@@ -1433,6 +1512,12 @@ function RiskHelper({ isMobile }) {
         cvar95: data.simons?.cvar95daily ?? null,
         maxDD: data.simons?.maxDrawdown ?? null,
         atr14: data.simons?.atr14 ?? null,
+        pe: data.fundamentals?.pe ?? null,
+        fwdPe: data.fundamentals?.fwdPe ?? null,
+        peerAvgPE,
+        sector: data.sector ?? "Unknown",
+        correlations: data.correlations ?? {},
+        beta: data.fundamentals?.beta ?? null,
       };
     } catch (e) {
       return null;
@@ -1494,8 +1579,12 @@ function RiskHelper({ isMobile }) {
   const totalCVar = enriched.reduce((s, p) => s + p.dollarCVar, 0);
   const totalDD = enriched.reduce((s, p) => s + p.dollarMaxDD, 0);
   const totalGain = enriched.reduce((s, p) => s + (p.unrealizedGain ?? 0), 0);
-  const acctNum = parseFloat(accountSize) || 0;
-  const cashRemaining = acctNum - totalValue;
+  const cashNum = parseFloat(cash) || 0;
+  // If user entered cash explicitly, use that. Otherwise derive from accountSize - invested.
+  const explicitCash = cashNum > 0;
+  const totalAccountValue = explicitCash ? (totalValue + cashNum) : (parseFloat(accountSize) || 0);
+  const acctNum = totalAccountValue || 0;
+  const cashRemaining = explicitCash ? cashNum : Math.max(0, acctNum - totalValue);
   const portfolioVarPct = acctNum > 0 ? (totalVar95 / acctNum) * 100 : null;
 
   // ============ POSITION SIZING ============
@@ -1509,19 +1598,24 @@ function RiskHelper({ isMobile }) {
         Enter your positions to see how much you could lose on a bad day or a bad month. Uses historical 1-year volatility for each stock to estimate Value-at-Risk.
       </p>
 
-      {/* Account size + risk tolerance */}
+      {/* Account size + risk tolerance + cash */}
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head"><span className="panel-title">Your Setup</span></div>
-        <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+        <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Total account size ($)</div>
-            <input type="number" value={accountSize} onChange={(e) => saveAccountSize(e.target.value)} placeholder="10000" style={{ padding: "8px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 14, fontFamily: "monospace", width: "100%" }} />
-            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>Including cash + holdings. Saved to your browser.</div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Cash ($) — Optional</div>
+            <input type="number" value={cash} onChange={(e) => saveCash(e.target.value)} placeholder="3300" style={{ padding: "8px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 14, fontFamily: "monospace", width: "100%" }} />
+            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>If set, total account = cash + positions.</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Total account size ($) — fallback</div>
+            <input type="number" value={accountSize} onChange={(e) => saveAccountSize(e.target.value)} placeholder="10000" disabled={cashNum > 0} style={{ padding: "8px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 14, fontFamily: "monospace", width: "100%", opacity: cashNum > 0 ? 0.5 : 1, background: cashNum > 0 ? "#f5f3ed" : "#fff" }} />
+            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>{cashNum > 0 ? "Using cash + positions instead." : "Used only if Cash is empty."}</div>
           </div>
           <div>
             <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Risk per trade (% of account)</div>
             <input type="number" step="0.5" value={riskPct} onChange={(e) => saveRiskPct(parseFloat(e.target.value) || 1)} style={{ padding: "8px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 14, fontFamily: "monospace", width: "100%" }} />
-            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>Standard advice: 1-2%. Aggressive: 3-5%. Suicidal: 10%+.</div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>1-2% conservative. 3-5% aggressive. 10%+ suicidal.</div>
           </div>
         </div>
       </div>
@@ -1585,6 +1679,26 @@ function RiskHelper({ isMobile }) {
         </div>
       )}
 
+      {/* Risk Spectrum reference */}
+      {positions.length > 0 && portfolioVarPct != null && (
+        <RiskSpectrumPanel portfolioVarPct={portfolioVarPct} isMobile={isMobile} />
+      )}
+
+      {/* Valuation Risk — multiple compression scenarios */}
+      {enriched.length > 0 && enriched.some((p) => p.pe != null) && (
+        <ValuationRiskPanel positions={enriched} isMobile={isMobile} />
+      )}
+
+      {/* Concentration Risk */}
+      {enriched.length > 0 && (
+        <ConcentrationRiskPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} />
+      )}
+
+      {/* Macro Stress Test */}
+      {enriched.length > 0 && enriched.some((p) => p.correlations && Object.keys(p.correlations).length > 0) && (
+        <MacroStressPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} />
+      )}
+
       {/* Position list */}
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head"><span className="panel-title">Your Positions</span><span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>{positions.length} {positions.length === 1 ? "position" : "positions"}</span></div>
@@ -1630,23 +1744,51 @@ function RiskHelper({ isMobile }) {
 
       {/* Add position form */}
       <div className="panel" style={{ marginBottom: 16 }}>
-        <div className="panel-head"><span className="panel-title">Add Position</span></div>
-        <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "auto auto auto auto", gap: 8, alignItems: "end" }}>
-          <div>
-            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Symbol</div>
-            <input value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="NVDA" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", textTransform: "uppercase", width: isMobile ? "100%" : 100 }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Shares</div>
-            <input type="number" value={form.shares} onChange={(e) => setForm({ ...form, shares: e.target.value })} placeholder="10" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 80 }} />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Cost basis ($/share, optional)</div>
-            <input type="number" step="0.01" value={form.costBasis} onChange={(e) => setForm({ ...form, costBasis: e.target.value })} placeholder="200.50" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 120 }} />
-          </div>
-          <button onClick={addPosition} disabled={loading} style={{ padding: "8px 16px", background: "#1a1f2c", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "+ ADD"}</button>
+        <div className="panel-head">
+          <span className="panel-title">{showBulk ? "Bulk Paste Positions" : "Add Position"}</span>
+          <button onClick={() => { setShowBulk(!showBulk); setError(null); }} style={{ background: "transparent", border: "1px solid #d6d2c7", padding: "3px 8px", borderRadius: 2, fontSize: 10, cursor: "pointer", letterSpacing: "0.05em" }}>
+            {showBulk ? "↶ Single entry" : "📋 Bulk paste"}
+          </button>
         </div>
-        {error && <div style={{ padding: "0 14px 12px", color: "#c4314b", fontSize: 11 }}>{error}</div>}
+        {showBulk ? (
+          <div style={{ padding: "12px 14px" }}>
+            <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 8, lineHeight: 1.5 }}>
+              Paste your positions in any of these formats. This <strong>replaces</strong> all current positions:
+            </div>
+            <textarea
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={`Examples:\nTSM:3, NVDA:7.4, NOW:14, MSFT:6\n\nOr line by line:\nTSM 3\nNVDA 7.4\nNOW 14\nMSFT 6\n\nOr JSON:\n{"NVDA": 7.4, "MSFT": 6, "TSM": 3}`}
+              rows={isMobile ? 6 : 7}
+              style={{ width: "100%", padding: 10, border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", resize: "vertical" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={applyBulk} disabled={loading || !bulkText.trim()} style={{ padding: "8px 16px", background: "#0a8554", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "✓ APPLY"}</button>
+              <button onClick={() => setBulkText("")} disabled={!bulkText} style={{ padding: "8px 14px", background: "transparent", color: "#5a6573", border: "1px solid #d6d2c7", borderRadius: 2, cursor: "pointer", fontSize: 12 }}>Clear</button>
+              <span style={{ fontSize: 10, color: "#8a93a3" }}>{parseBulk(bulkText).length} positions parsed</span>
+            </div>
+            {error && <div style={{ marginTop: 8, color: "#c4314b", fontSize: 11 }}>{error}</div>}
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "auto auto auto auto", gap: 8, alignItems: "end" }}>
+              <div>
+                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Symbol</div>
+                <input value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="NVDA" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", textTransform: "uppercase", width: isMobile ? "100%" : 100 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Shares</div>
+                <input type="number" value={form.shares} onChange={(e) => setForm({ ...form, shares: e.target.value })} placeholder="10" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 80 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Cost basis ($/share, optional)</div>
+                <input type="number" step="0.01" value={form.costBasis} onChange={(e) => setForm({ ...form, costBasis: e.target.value })} placeholder="200.50" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 120 }} />
+              </div>
+              <button onClick={addPosition} disabled={loading} style={{ padding: "8px 16px", background: "#1a1f2c", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "+ ADD"}</button>
+            </div>
+            {error && <div style={{ padding: "0 14px 12px", color: "#c4314b", fontSize: 11 }}>{error}</div>}
+          </>
+        )}
       </div>
 
       {/* Position sizing helper */}
@@ -1665,6 +1807,394 @@ function RiskHelper({ isMobile }) {
 
       <div style={{ padding: 12, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2, marginTop: 16 }}>
         <strong>How to read VaR honestly:</strong> "95% one-day VaR is $7" means: on 95% of trading days, your loss will be less than $7. On the worst 5% of days, you could lose more — sometimes a lot more. VaR assumes the future looks like the past 1 year of returns. Black swans (2008, COVID, flash crashes) are NOT captured. Use this for sanity-checking position sizes, not as a guarantee.
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================================
+// RISK SPECTRUM — visual reference of where portfolio sits vs benchmarks
+// ============================================================
+function RiskSpectrumPanel({ portfolioVarPct, isMobile }) {
+  // Each item: label, daily VaR % approximation, position on the spectrum
+  const refs = [
+    { label: "Cash / T-bills", var: 0.05, color: "#5a6573" },
+    { label: "Bonds (TLT)",   var: 0.6,  color: "#5a6573" },
+    { label: "S&P 500",       var: 1.0,  color: "#86b09c" },
+    { label: "Nasdaq 100",    var: 1.3,  color: "#86b09c" },
+    { label: "NVDA solo",     var: 3.2,  color: "#d4a017" },
+    { label: "Bitcoin",       var: 3.5,  color: "#d4a017" },
+    { label: "TQQQ (3x ETF)", var: 4.2,  color: "#d4a017" },
+    { label: "Meme stocks",   var: 6.5,  color: "#c4314b" },
+    { label: "Crypto microcap", var: 12, color: "#c4314b" },
+  ];
+  // Bucket ranges (matching the screenshot's bands)
+  const bands = [
+    { label: "Cash",          min: 0,   max: 0.5, color: "#dcefe6" },
+    { label: "Conservative",  min: 0.5, max: 1.5, color: "#daf0d0" },
+    { label: "Moderate",      min: 1.5, max: 2.5, color: "#dde5f5" },
+    { label: "Aggressive",    min: 2.5, max: 4.5, color: "#fff4d6" },
+    { label: "Speculative",   min: 4.5, max: 7,   color: "#f7d8db" },
+    { label: "Extreme / Casino", min: 7, max: 100, color: "#fde6e6" },
+  ];
+  const maxScale = 10; // visual cap at 10% VaR
+  const xFor = (v) => Math.min(99, (v / maxScale) * 100);
+  const yourBand = bands.find((b) => portfolioVarPct >= b.min && portfolioVarPct < b.max) || bands[bands.length - 1];
+
+  return (
+    <div className="panel" style={{ marginBottom: 16, background: "#1a1f2c", color: "#fff", borderColor: "#1a1f2c" }}>
+      <div className="panel-head" style={{ background: "#0f131a", borderBottom: "1px solid #2a2f3c" }}>
+        <span className="panel-title" style={{ color: "#fff" }}>Risk Spectrum · Where Your Portfolio Sits</span>
+        <span className="pill" style={{ background: yourBand.color, color: "#1a1f2c" }}>{yourBand.label}</span>
+      </div>
+      <div style={{ padding: "20px 16px 12px" }}>
+        {/* Bands strip */}
+        <div style={{ position: "relative", height: 32, display: "flex", borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
+          {bands.map((b, i) => {
+            const widthPct = ((Math.min(b.max, maxScale) - Math.max(b.min, 0)) / maxScale) * 100;
+            return (
+              <div key={i} style={{ width: `${widthPct}%`, background: b.color, display: "flex", alignItems: "center", justifyContent: "center", borderRight: i < bands.length - 1 ? "1px solid #fff" : "none" }}>
+                <span style={{ fontSize: 10, color: "#1a1f2c", fontWeight: 600, letterSpacing: "0.02em", padding: "0 4px", textAlign: "center" }}>{!isMobile || widthPct > 12 ? b.label : ""}</span>
+              </div>
+            );
+          })}
+        </div>
+        {/* Scale tick marks */}
+        <div style={{ position: "relative", height: 14, marginBottom: 24 }}>
+          {[0, 1, 2, 3, 4, 5, 7, 10].map((v) => (
+            <span key={v} className="mono" style={{ position: "absolute", left: `${xFor(v)}%`, fontSize: 9, color: "#8a93a3", transform: "translateX(-50%)" }}>{v}%</span>
+          ))}
+        </div>
+        {/* Reference markers */}
+        <div style={{ position: "relative", height: 80 }}>
+          {refs.map((r, i) => {
+            const isAlt = i % 2 === 1;
+            return (
+              <div key={i} style={{ position: "absolute", left: `${xFor(r.var)}%`, top: isAlt ? 32 : 0, transform: "translateX(-50%)", textAlign: "center", maxWidth: 70 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: r.color, margin: "0 auto 4px", border: "1px solid #fff" }} />
+                <div style={{ fontSize: 9, color: "#fff", lineHeight: 1.2, whiteSpace: "nowrap" }}>{r.label}</div>
+                <div className="mono" style={{ fontSize: 9, color: "#8a93a3" }}>~{r.var.toFixed(1)}%</div>
+              </div>
+            );
+          })}
+          {/* Your portfolio marker (large, blue) */}
+          <div style={{ position: "absolute", left: `${xFor(portfolioVarPct)}%`, top: 0, transform: "translateX(-50%)", textAlign: "center", zIndex: 5 }}>
+            <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#7ba2cc", margin: "-3px auto 2px", border: "2px solid #fff", boxShadow: "0 0 0 2px #7ba2cc44" }} />
+            <div style={{ fontSize: 10, color: "#7ba2cc", fontWeight: 700, whiteSpace: "nowrap" }}>Your portfolio</div>
+            <div className="mono" style={{ fontSize: 10, color: "#fff", fontWeight: 600 }}>~{portfolioVarPct.toFixed(1)}%</div>
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: "10px 16px", background: "#0f131a", borderTop: "1px solid #2a2f3c", fontSize: 11, color: "#8a93a3", lineHeight: 1.5 }}>
+        Daily VaR as % of total account. Your portfolio's bad-day risk is shown alongside common asset classes for context. Anything in green-yellow is normal retail. Red zones imply you can lose 10%+ in a week without anything unusual happening.
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// VALUATION RISK — multiple compression scenarios
+// ============================================================
+function ValuationRiskPanel({ positions, isMobile }) {
+  // For each position compute "what if PE compresses to peer avg / -25% from current / -50% from current"
+  const HISTORICAL_AVG_PE = 18; // approximate broad-market historical avg
+  const rows = positions.filter((p) => p.pe != null && p.pe > 0).map((p) => {
+    const peerAvgPE = p.peerAvgPE;
+    const compressToPeer = peerAvgPE && p.pe > peerAvgPE ? ((peerAvgPE / p.pe) - 1) * 100 : 0;
+    const compress25 = -25; // bear case: 25% multiple compression
+    const compressHistorical = ((HISTORICAL_AVG_PE / p.pe) - 1) * 100;
+    return {
+      ...p,
+      peerAvgPE,
+      compressToPeerPct: compressToPeer,
+      dollarLossToPeer: p.value * (compressToPeer / 100),
+      dollarLoss25: p.value * (compress25 / 100),
+      dollarLossHistorical: p.value * (compressHistorical / 100),
+    };
+  });
+  if (!rows.length) return null;
+  const totalValue = rows.reduce((s, r) => s + r.value, 0);
+  const totalLossToPeer = rows.reduce((s, r) => s + r.dollarLossToPeer, 0);
+  const totalLoss25 = rows.reduce((s, r) => s + r.dollarLoss25, 0);
+  const totalLossHistorical = rows.reduce((s, r) => s + r.dollarLossHistorical, 0);
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Valuation Risk · Multiple Compression Scenarios</span>
+        <DollarSign size={13} color="#d4a017" />
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ fontSize: 12, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 12 }}>
+          Stocks can drop sharply <strong>without earnings changing</strong> — just because investors are willing to pay less per dollar of earnings. These scenarios show what happens to your portfolio if multiples compress.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+          <div style={{ padding: "10px 12px", background: "#f0f7f1", borderLeft: "3px solid #0a8554", borderRadius: 2 }}>
+            <div style={{ fontSize: 10, color: "#0a8554", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>If multiples → peer average</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: totalLossToPeer >= 0 ? "#0a8554" : "#c4314b", marginTop: 4 }}>
+              {totalLossToPeer >= 0 ? "+" : "-"}${formatMcap(Math.abs(totalLossToPeer))}
+            </div>
+            <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{totalValue > 0 ? `${(totalLossToPeer / totalValue * 100).toFixed(1)}% of portfolio` : ""}</div>
+          </div>
+          <div style={{ padding: "10px 12px", background: "#fff8e1", borderLeft: "3px solid #d4a017", borderRadius: 2 }}>
+            <div style={{ fontSize: 10, color: "#8b6914", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Mild bear: PE -25%</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "#c4314b", marginTop: 4 }}>-${formatMcap(Math.abs(totalLoss25))}</div>
+            <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{totalValue > 0 ? `${(Math.abs(totalLoss25) / totalValue * 100).toFixed(0)}% of portfolio` : ""}</div>
+          </div>
+          <div style={{ padding: "10px 12px", background: "#fdf3f3", borderLeft: "3px solid #c4314b", borderRadius: 2 }}>
+            <div style={{ fontSize: 10, color: "#c4314b", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Severe: PE → 18× (avg)</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: totalLossHistorical >= 0 ? "#0a8554" : "#c4314b", marginTop: 4 }}>
+              {totalLossHistorical >= 0 ? "+" : "-"}${formatMcap(Math.abs(totalLossHistorical))}
+            </div>
+            <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{totalValue > 0 ? `${(totalLossHistorical / totalValue * 100).toFixed(0)}% of portfolio` : ""}</div>
+          </div>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 560 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Current PE</th>
+                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Peer Avg</th>
+                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>→ Peer ($)</th>
+                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>-25% ($)</th>
+                <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>→ 18× ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
+                  <td className="mono" style={{ padding: "6px 10px", fontWeight: 600 }}>{r.symbol}</td>
+                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>{fmt(r.pe, 1)}</td>
+                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: r.peerAvgPE ? "#1a1f2c" : "#8a93a3" }}>{r.peerAvgPE ? fmt(r.peerAvgPE, 1) : "—"}</td>
+                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: r.dollarLossToPeer >= 0 ? "#0a8554" : "#c4314b" }}>
+                    {r.dollarLossToPeer >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarLossToPeer))}
+                  </td>
+                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(Math.abs(r.dollarLoss25))}</td>
+                  <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: r.dollarLossHistorical >= 0 ? "#0a8554" : "#c4314b" }}>
+                    {r.dollarLossHistorical >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarLossHistorical))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
+          <strong>How to read this:</strong> Earnings can stay flat while the stock falls because investors decide the same earnings deserve a lower P/E. This happened to tech in 2022 (PE compression of ~40%), to growth stocks in 2008 (~50%), and to FAANG in late 2018. The "18×" scenario is roughly the historical S&P 500 average — what these stocks would trade at if AI enthusiasm fully evaporated.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// CONCENTRATION RISK — single-stock, sector, effective diversification
+// ============================================================
+function ConcentrationRiskPanel({ positions, totalValue, isMobile }) {
+  if (!totalValue) return null;
+  // Single stock concentration
+  const sorted = [...positions].sort((a, b) => b.value - a.value);
+  const top = sorted[0];
+  const topPct = (top.value / totalValue) * 100;
+  const top3Pct = sorted.slice(0, 3).reduce((s, p) => s + p.value, 0) / totalValue * 100;
+
+  // Sector concentration
+  const sectorMap = {};
+  for (const p of positions) {
+    const sector = p.sector || "Unknown";
+    sectorMap[sector] = (sectorMap[sector] || 0) + p.value;
+  }
+  const sectorRows = Object.entries(sectorMap)
+    .map(([sector, value]) => ({ sector, value, pct: (value / totalValue) * 100 }))
+    .sort((a, b) => b.value - a.value);
+  const dominantSector = sectorRows[0];
+
+  // Effective diversification using average pairwise correlation with SPY
+  // (simpler proxy: stocks with high SPY correlation are essentially the same bet)
+  const spyCorrs = positions.map((p) => p.correlations?.["SPY"]).filter((c) => c != null);
+  const avgSpyCorr = spyCorrs.length ? spyCorrs.reduce((s, x) => s + x, 0) / spyCorrs.length : null;
+  // SOXX correlation tells you tech-specific exposure
+  const soxxCorrs = positions.map((p) => p.correlations?.["SOXX"]).filter((c) => c != null);
+  const avgSoxxCorr = soxxCorrs.length ? soxxCorrs.reduce((s, x) => s + x, 0) / soxxCorrs.length : null;
+  // Effective N = N / (1 + (N-1) * avg_correlation_among_positions)
+  // For simplicity use SOXX correlation as a proxy for "how much do my stocks move together"
+  const N = positions.length;
+  const avgCorr = avgSoxxCorr ?? avgSpyCorr ?? 0;
+  const effectiveN = avgCorr > 0 && N > 1 ? N / (1 + (N - 1) * avgCorr) : N;
+
+  // Warning levels
+  const concentrationFlags = [];
+  if (topPct > 30) concentrationFlags.push({ level: "red", msg: `${top.symbol} is ${topPct.toFixed(0)}% of portfolio. Single-stock risk is extreme.` });
+  else if (topPct > 20) concentrationFlags.push({ level: "yellow", msg: `${top.symbol} is ${topPct.toFixed(0)}% of portfolio. Single-stock risk is elevated.` });
+  if (dominantSector.pct > 60) concentrationFlags.push({ level: "red", msg: `${dominantSector.pct.toFixed(0)}% of portfolio is ${dominantSector.sector}. Sector risk is extreme.` });
+  else if (dominantSector.pct > 40) concentrationFlags.push({ level: "yellow", msg: `${dominantSector.pct.toFixed(0)}% of portfolio is ${dominantSector.sector}. Sector concentration is high.` });
+  if (avgSoxxCorr > 0.7) concentrationFlags.push({ level: "yellow", msg: `Average correlation with semis is ${avgSoxxCorr.toFixed(2)}. Your positions move together — limited diversification benefit.` });
+
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Concentration Risk · How Diversified Are You Really</span>
+        <AlertCircle size={13} color="#d4a017" />
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
+          <div title="The largest single position as % of portfolio.">
+            <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Top Position</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: topPct > 30 ? "#c4314b" : topPct > 20 ? "#d4a017" : "#1a1f2c", marginTop: 4 }}>{top.symbol} · {topPct.toFixed(0)}%</div>
+          </div>
+          <div title="Top 3 positions as % of portfolio.">
+            <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Top 3 Concentration</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: top3Pct > 80 ? "#c4314b" : top3Pct > 60 ? "#d4a017" : "#1a1f2c", marginTop: 4 }}>{top3Pct.toFixed(0)}%</div>
+          </div>
+          <div title="Effective number of truly independent bets, adjusted for correlation. Lower = less diversified.">
+            <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Effective Bets</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: effectiveN < 2 ? "#c4314b" : effectiveN < 3 ? "#d4a017" : "#0a8554", marginTop: 4 }}>{effectiveN.toFixed(1)} <span style={{ color: "#8a93a3", fontWeight: 400 }}>of {N}</span></div>
+          </div>
+          <div title="Average correlation with the semiconductor ETF. >0.7 means your positions are essentially one tech bet.">
+            <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Avg corr w/ Semis</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: avgSoxxCorr > 0.7 ? "#c4314b" : avgSoxxCorr > 0.5 ? "#d4a017" : "#0a8554", marginTop: 4 }}>{avgSoxxCorr != null ? avgSoxxCorr.toFixed(2) : "—"}</div>
+          </div>
+        </div>
+
+        {/* Sector breakdown */}
+        <div className="panel-title" style={{ fontSize: 10, marginBottom: 8, marginTop: 14 }}>Sector Breakdown</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          {sectorRows.map((s, i) => {
+            const color = s.pct > 60 ? "#c4314b" : s.pct > 40 ? "#d4a017" : "#7ba2cc";
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: isMobile ? 100 : 180, fontSize: 11, color: "#5a6573", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
+                <div style={{ flex: 1, height: 16, background: "#efece5", borderRadius: 2, position: "relative" }}>
+                  <div style={{ width: `${s.pct}%`, height: "100%", background: color, borderRadius: 2 }} />
+                </div>
+                <span className="mono" style={{ width: 50, textAlign: "right", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{s.pct.toFixed(0)}%</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {concentrationFlags.length > 0 && (
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 6 }}>
+            {concentrationFlags.map((f, i) => (
+              <div key={i} style={{ padding: "8px 10px", background: f.level === "red" ? "#fdf3f3" : "#fff8e1", borderLeft: `3px solid ${f.level === "red" ? "#c4314b" : "#d4a017"}`, fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, borderRadius: 2 }}>
+                {f.level === "red" ? "🔴" : "⚠️"} {f.msg}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
+          <strong>Effective bets vs nominal count:</strong> Holding 4 tech stocks isn't 4 bets — it's closer to 1.5 because they all rise and fall together. True diversification comes from owning things that move <em>differently</em>: stocks + bonds + gold + international, or tech + utilities + healthcare + energy.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MACRO STRESS TEST — what happens to portfolio in scripted scenarios
+// ============================================================
+function MacroStressPanel({ positions, totalValue, isMobile }) {
+  if (!totalValue) return null;
+  // Scenarios: each defines a shock to a macro asset and we use stock correlations to estimate impact
+  const scenarios = [
+    {
+      key: "rates_up_100bps",
+      title: "Rates spike +100bps",
+      detail: "10Y Treasury yield rises 1 percentage point. Growth stocks typically compress as discount rates rise.",
+      macroSymbol: "^TNX",
+      // 100bps move on TNX is roughly +25% in TNX index value historically. Use simpler: assume ~5% market move down for full correlation = -1.
+      macroMovePct: 25, // ^TNX index change
+      color: "#c4314b",
+    },
+    {
+      key: "vix_spike_30",
+      title: "VIX spikes to 30",
+      detail: "From current ~18 to 30. Typically a -7% to -10% market move triggering this. Tech and high-beta sell off hardest.",
+      macroSymbol: "^VIX",
+      macroMovePct: 67,  // VIX 18 → 30 = +67%
+      color: "#c4314b",
+    },
+    {
+      key: "spy_minus_10",
+      title: "Broad market -10%",
+      detail: "S&P 500 declines 10%. Standard correction. Higher-beta stocks fall more.",
+      macroSymbol: "SPY",
+      macroMovePct: -10,
+      color: "#d4a017",
+    },
+    {
+      key: "soxx_minus_15",
+      title: "Semis crash -15%",
+      detail: "Semiconductor ETF declines 15%. Hits NVDA, AMD, TSM, MU directly. Triggered by chip cycle, China policy, or AI bubble fears.",
+      macroSymbol: "SOXX",
+      macroMovePct: -15,
+      color: "#c4314b",
+    },
+    {
+      key: "dollar_surge",
+      title: "Dollar surge +5%",
+      detail: "DXY rallies 5%. Hurts multinationals' overseas revenue. Helps domestics.",
+      macroSymbol: "DX-Y.NYB",
+      macroMovePct: 5,
+      color: "#7ba2cc",
+    },
+  ];
+
+  // For each scenario, sum across positions: position_value × correlation × macro_move
+  const results = scenarios.map((sc) => {
+    let totalImpact = 0;
+    let coveredValue = 0;
+    for (const p of positions) {
+      const corr = p.correlations?.[sc.macroSymbol];
+      if (corr == null || !p.value) continue;
+      // Beta-adjusted estimate. For ETFs ^TNX and ^VIX, we treat their pct change as a "rates/vol move".
+      // For SPY/SOXX/DXY, we treat their pct change as a price move that scales by correlation.
+      // Use a damping factor for ^TNX/^VIX because correlation isn't beta — actual transmission is partial.
+      const damping = (sc.macroSymbol === "^TNX" || sc.macroSymbol === "^VIX") ? 0.4 : 1.0;
+      const stockMovePct = corr * sc.macroMovePct * damping;
+      totalImpact += p.value * (stockMovePct / 100);
+      coveredValue += p.value;
+    }
+    const coveragePct = totalValue > 0 ? (coveredValue / totalValue) * 100 : 0;
+    return { ...sc, dollarImpact: totalImpact, pctImpact: totalValue > 0 ? (totalImpact / totalValue) * 100 : 0, coveragePct };
+  });
+
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Macro Stress Test · How Your Portfolio Reacts to Shocks</span>
+        <Activity size={13} color="#d4a017" />
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ fontSize: 12, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 14 }}>
+          Estimated portfolio impact in different stress scenarios. Uses each position's 30-day correlation with macro assets. <strong>Approximate, not exact</strong> — actual market events vary.
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {results.map((r) => {
+            const isLoss = r.dollarImpact < 0;
+            return (
+              <div key={r.key} style={{ padding: "10px 12px", background: "#fff", border: "1px solid #efece5", borderRadius: 2, borderLeft: `3px solid ${r.color}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 6 }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ fontWeight: 600, fontSize: 12, color: "#1a1f2c", marginBottom: 3 }}>{r.title}</div>
+                    <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5 }}>{r.detail}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: isLoss ? "#c4314b" : "#0a8554" }}>
+                      {isLoss ? "-" : "+"}${formatMcap(Math.abs(r.dollarImpact))}
+                    </div>
+                    <div className="mono" style={{ fontSize: 11, color: "#5a6573" }}>{r.pctImpact >= 0 ? "+" : ""}{r.pctImpact.toFixed(1)}% of portfolio</div>
+                    {r.coveragePct < 100 && <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 2 }}>{r.coveragePct.toFixed(0)}% positions covered</div>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 12, padding: 10, background: "#fff8e1", borderLeft: "3px solid #d4a017", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
+          <strong>Caveats:</strong> These are linear approximations based on recent correlations. Real shocks can be non-linear — when VIX spikes 60%, correlations between stocks themselves spike too ("everything goes down together"), making losses larger than this model suggests. Use as a rough sanity check, not as a forecast.
+        </div>
       </div>
     </div>
   );
