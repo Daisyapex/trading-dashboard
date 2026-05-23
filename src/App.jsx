@@ -3028,7 +3028,7 @@ function OptionsFlowPanel({ op, isMobile }) {
 }
 
 const ExplainBox = ({ text }) => (
-  <div style={{ padding: 8, background: "#fff8e1", borderLeft: "3px solid #d4a017", borderRadius: 2, fontSize: 11, color: "#5a6573", lineHeight: 1.5 }}>
+  <div style={{ padding: 8, background: "#fff8e1", borderLeft: "3px solid #d4a017", borderRadius: 2, fontSize: 11, color: "#5a6573", lineHeight: 1.5, wordBreak: "break-word", overflowWrap: "break-word", whiteSpace: "normal" }}>
     {text}
   </div>
 );
@@ -3366,6 +3366,10 @@ const Styles = () => (
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; overflow-x: hidden; }
     body { -webkit-text-size-adjust: 100%; }
+    /* Critical mobile overflow guards */
+    .panel { min-width: 0; max-width: 100%; overflow-wrap: break-word; }
+    .panel-head > * { min-width: 0; max-width: 100%; }
+    .panel-head { word-break: break-word; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spin { animation: spin 0.8s linear infinite; }
@@ -3373,8 +3377,8 @@ const Styles = () => (
     .serif { font-family: 'IBM Plex Serif', serif; }
     .panel { background: #fff; border: 1px solid #e6e3db; border-radius: 2px; }
     .panel-head { padding: 10px 14px; border-bottom: 1px solid #efece5; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    .panel-title { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; }
-    .section-head { display: flex; align-items: center; gap: 6px; padding: 14px 14px 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; }
+    .panel-title { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; word-break: break-word; overflow-wrap: break-word; }
+    .section-head { display: flex; align-items: center; gap: 6px; padding: 14px 14px 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: #5a6573; font-weight: 600; flex-wrap: wrap; }
     .ticker-btn { background: transparent; border: none; padding: 10px 12px; cursor: pointer; text-align: left; width: 100%; border-left: 2px solid transparent; transition: all 0.12s; min-height: 44px; }
     .ticker-btn:hover { background: #fff; }
     .ticker-btn.active { background: #1a1f2c; color: #fff; border-left-color: #d4a017; }
