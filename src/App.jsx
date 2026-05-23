@@ -203,19 +203,6 @@ function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth }) {
     addLine("sma50", "#86b09c");
     addLine("sma200", "#7ba2cc");
 
-    // ATR Trailing Stop - draw as two series (green for long-trend, red for short-trend)
-    // Plotted as thicker line with circle markers at flip points
-    const atrLongSeries = chart.addLineSeries({
-      color: "#0a8554", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, lineStyle: 0,
-    });
-    const atrShortSeries = chart.addLineSeries({
-      color: "#c4314b", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, lineStyle: 0,
-    });
-    const longData = data.filter((d) => d.atrStop != null && d.atrTrend === "long").map((d) => ({ time: d.date, value: d.atrStop }));
-    const shortData = data.filter((d) => d.atrStop != null && d.atrTrend === "short").map((d) => ({ time: d.date, value: d.atrStop }));
-    if (longData.length) atrLongSeries.setData(longData);
-    if (shortData.length) atrShortSeries.setData(shortData);
-
     chart.timeScale().fitContent();
 
     setTimeout(() => {
