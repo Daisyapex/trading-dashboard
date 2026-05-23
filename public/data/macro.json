@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-05-23T10:09:47.715Z",
+  "fetchedAt": "2026-05-23T10:55:37.316Z",
   "items": [
     {
       "symbol": "^TNX",
@@ -7,7 +7,7 @@
       "explain": "When this rises, growth stocks usually fall. >4.5% is restrictive.",
       "value": 4.56,
       "dayChange": -0.65,
-      "monthChange": 6.29
+      "monthChange": 5.56
     },
     {
       "symbol": "^VIX",
@@ -15,7 +15,7 @@
       "explain": "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear.",
       "value": 16.7,
       "dayChange": -0.36,
-      "monthChange": -11.73
+      "monthChange": -13.52
     },
     {
       "symbol": "DX-Y.NYB",
@@ -48,6 +48,14 @@
       "value": 717.54,
       "dayChange": 0.42,
       "monthChange": 10.15
+    },
+    {
+      "symbol": "TLT",
+      "name": "20Y Treasury ETF",
+      "explain": "Bond proxy. Negative correlation with growth stocks.",
+      "value": 84.68,
+      "dayChange": 0.55,
+      "monthChange": -2.16
     }
   ]
 }

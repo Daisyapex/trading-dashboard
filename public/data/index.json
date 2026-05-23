@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-23T10:07:34.602Z",
+  "generatedAt": "2026-05-23T10:55:37.316Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -114,9 +114,9 @@
       "name": "Micron Technology",
       "sector": "Semiconductors",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 751,
+      "change": -11.1,
+      "changePct": -1.4565
     },
     {
       "symbol": "ASML",
@@ -231,9 +231,9 @@
       "name": "Palo Alto Networks",
       "sector": "Cybersecurity",
       "holding": false,
-      "price": 260.58,
-      "change": 7.66,
-      "changePct": 3.0286
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "NBIS",
@@ -339,9 +339,9 @@
       "name": "Tesla, Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 426.01,
+      "change": 8.16,
+      "changePct": 1.9529
     },
     {
       "symbol": "NFLX",
@@ -456,9 +456,9 @@
       "name": "PayPal Holdings",
       "sector": "Fintech",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 44.23,
+      "change": -0.07,
+      "changePct": -0.158
     },
     {
       "symbol": "JPM",
