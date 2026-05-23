@@ -95,6 +95,7 @@ async function yahooSummary(symbol) {
     "recommendationTrend", "upgradeDowngradeHistory",
     "earningsTrend", "earningsHistory",
     "insiderTransactions", "majorHoldersBreakdown",
+    "calendarEvents",
   ].join(",");
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
   try {
@@ -148,17 +149,29 @@ async function yahooOptions(symbol) {
     const dates = first.expirationDates || [];
     if (!dates.length) return first; // No date list — return what we got
 
-    // Step 2: find first expiry >= 3 days out (skip 0DTE / next-day)
+    // Step 2: find first expiry >= 3 days out (skip 0DTE / next-day) — primary chain for flow data
     const minTs = Math.floor(Date.now() / 1000) + 3 * 24 * 3600;
     const targetTs = dates.find((d) => d >= minTs) || dates[dates.length - 1];
 
-    // If default chain is already that expiry, reuse it
+    // If default chain is already that expiry, reuse it; else fetch it
+    let primary;
     const defaultExpiry = first.options?.[0]?.expirationDate;
-    if (defaultExpiry === targetTs) return first;
+    if (defaultExpiry === targetTs) primary = first;
+    else primary = (await fetchChain(`&date=${targetTs}`)) || first;
 
-    // Step 3: re-fetch chain for that specific expiry
-    const targeted = await fetchChain(`&date=${targetTs}`);
-    return targeted || first;
+    // Step 3: also find a longer-dated expiry (~25-40 days out) for stable annualized IV.
+    // Short-dated chains have collapsed time value and produce garbage ATM IV (e.g., 3.1%).
+    const longTargetMin = Math.floor(Date.now() / 1000) + 25 * 24 * 3600;
+    const longTargetMax = Math.floor(Date.now() / 1000) + 40 * 24 * 3600;
+    const longTs = dates.find((d) => d >= longTargetMin && d <= longTargetMax) || dates.find((d) => d >= longTargetMin) || null;
+    let longChain = null;
+    if (longTs && longTs !== primary.options?.[0]?.expirationDate) {
+      longChain = await fetchChain(`&date=${longTs}`);
+    }
+
+    // Attach the long chain to primary so computeOptionsMetrics can use it for IV reading
+    if (longChain && primary) primary._longChain = longChain;
+    return primary;
   } catch (e) {
     console.warn(`yahoo options ${symbol}: ${e.message}`);
     return null;
@@ -227,6 +240,22 @@ function computeOptionsMetrics(optChain, spotPrice) {
   else if (atmCall) ivATM = +(atmCall.impliedVolatility * 100).toFixed(1);
   else if (atmPut) ivATM = +(atmPut.impliedVolatility * 100).toFixed(1);
 
+  // Stable ATM IV from a longer-dated expiry (~30 days) to avoid the IV collapse
+  // problem on very short-dated chains. This is the "real" annualized IV reading.
+  let ivATMLong = null;
+  let ivATMLongDays = null;
+  if (optChain._longChain?.options?.[0]) {
+    const longExpiry = optChain._longChain.options[0];
+    const longCalls = (longExpiry.calls || []).filter((c) => validIV(c.impliedVolatility) && c.strike);
+    const longPuts = (longExpiry.puts || []).filter((p) => validIV(p.impliedVolatility) && p.strike);
+    const longAtmCall = longCalls.reduce((closest, c) => !closest || Math.abs(c.strike - spotPrice) < Math.abs(closest.strike - spotPrice) ? c : closest, null);
+    const longAtmPut = longPuts.reduce((closest, p) => !closest || Math.abs(p.strike - spotPrice) < Math.abs(closest.strike - spotPrice) ? p : closest, null);
+    if (longAtmCall && longAtmPut) ivATMLong = +(((longAtmCall.impliedVolatility + longAtmPut.impliedVolatility) / 2) * 100).toFixed(1);
+    else if (longAtmCall) ivATMLong = +(longAtmCall.impliedVolatility * 100).toFixed(1);
+    else if (longAtmPut) ivATMLong = +(longAtmPut.impliedVolatility * 100).toFixed(1);
+    if (longExpiry.expirationDate) ivATMLongDays = Math.round((longExpiry.expirationDate * 1000 - Date.now()) / (1000 * 60 * 60 * 24));
+  }
+
   const ivOTMPut = closestPut ? +(closestPut.impliedVolatility * 100).toFixed(1) : null;
   const ivOTMCall = closestCall ? +(closestCall.impliedVolatility * 100).toFixed(1) : null;
   const skew = (ivOTMPut != null && ivOTMCall != null) ? +(ivOTMPut - ivOTMCall).toFixed(1) : null;
@@ -257,6 +286,8 @@ function computeOptionsMetrics(optChain, spotPrice) {
     callOITotal,
     putOITotal,
     ivATM,
+    ivATMLong,
+    ivATMLongDays,
     ivOTMPut,
     ivOTMCall,
     skew,
@@ -402,9 +433,105 @@ async function fetchTicker(t) {
 
   const simonsData = candles1Y && candles1Y.length >= 50 ? computeSimonsMetrics(candles1Y) : null;
 
+  // ============ DERIVED METRICS ============
+  // Yahoo returns debtToEquity as a percentage (e.g., 6.55 = 6.55%, not a ratio of 6.55).
+  // Most US financial sites express it as a decimal ratio. We normalize: if Yahoo's value
+  // is > 2 we assume percentage and divide by 100. This catches the Yahoo glitch but leaves
+  // legitimate ratios alone (most companies have D/E < 2 anyway).
+  let debtEqRaw = v(fd, "debtToEquity") ?? m["totalDebt/totalEquityAnnual"] ?? null;
+  const debtEqNormalized = (debtEqRaw != null && debtEqRaw > 2) ? +(debtEqRaw / 100).toFixed(3) : debtEqRaw;
+
+  // FCF yield = trailing 12-month FCF / market cap. Buffett's "owner earnings yield."
+  const fcfRaw = v(fd, "freeCashflow");
+  const fcfYield = (fcfRaw != null && mcapRaw && mcapRaw > 0) ? +((fcfRaw / mcapRaw) * 100).toFixed(2) : null;
+
+  // Earnings yield = 1 / P/E. Flip of P/E. Compare to bond yields.
+  const peTTM = v(sd, "trailingPE") ?? m.peBasicExclExtraTTM ?? m.peTTM ?? null;
+  const earningsYield = (peTTM != null && peTTM > 0) ? +(100 / peTTM).toFixed(2) : null;
+
+  // ROIC approximation. True ROIC = NOPAT / Invested Capital. We don't have NOPAT
+  // directly, so use Yahoo's `returnOnAssets` if present, falling back to a rough
+  // approximation: ROE * (1 - debt_share_of_capital). Not perfect but useful.
+  let roicApprox = m.roiTTM ?? null;
+  if (roicApprox == null) {
+    const roa = v(fd, "returnOnAssets");
+    if (roa != null) roicApprox = +(roa * 100).toFixed(2);
+  }
+  if (roicApprox == null) {
+    const roeRaw = v(fd, "returnOnEquity");
+    const dRatio = debtEqNormalized;
+    if (roeRaw != null && dRatio != null) {
+      const equityShare = 1 / (1 + dRatio);
+      roicApprox = +(roeRaw * 100 * equityShare).toFixed(2);
+    }
+  }
+
   // ============ OPTIONS ============
   const spotPrice = quote?.c ?? options?.quote?.regularMarketPrice ?? null;
   const optionsData = options && spotPrice ? computeOptionsMetrics(options, spotPrice) : null;
+
+  // ============ CATALYSTS ============
+  const ce = summary?.calendarEvents || {};
+  const earningsTs = v(ce, "earnings", "earningsDate", 0) ?? null;
+  const exDivTs = v(ce, "exDividendDate") ?? null;
+  const divDateTs = v(ce, "dividendDate") ?? null;
+  const HYPERSCALER_DEPS = {
+    NVDA: ["MSFT", "META", "GOOGL", "AMZN", "ORCL"],
+    AMD:  ["MSFT", "META", "GOOGL", "AMZN", "ORCL"],
+    AVGO: ["MSFT", "META", "GOOGL", "AMZN"],
+    TSM:  ["NVDA", "AAPL", "AMD", "AVGO", "QCOM"],
+    MU:   ["NVDA", "AMD", "MSFT", "META", "GOOGL"],
+    MRVL: ["AMZN", "GOOGL", "META", "MSFT"],
+    ASML: ["TSM", "NVDA", "INTC"],
+    ARM:  ["AAPL", "QCOM", "NVDA"],
+    SMCI: ["NVDA", "AMD", "MSFT", "META"],
+    ANET: ["MSFT", "META", "GOOGL", "AMZN"],
+    DELL: ["NVDA", "AMD", "MSFT"],
+    VRT:  ["MSFT", "GOOGL", "AMZN", "META"],
+    PLTR: ["MSFT", "GOOGL", "AMZN"],
+    CRWD: ["MSFT", "GOOGL", "AMZN"],
+    PANW: ["MSFT", "GOOGL", "AMZN"],
+    NBIS: ["NVDA", "MSFT"],
+    VST:  ["MSFT", "GOOGL", "AMZN", "META", "NVDA"],
+    CEG:  ["MSFT", "GOOGL", "AMZN", "META", "NVDA"],
+  };
+  const catalystsData = {
+    earningsDate: earningsTs ? new Date(earningsTs * 1000).toISOString().slice(0, 10) : null,
+    daysToEarnings: earningsTs ? Math.round((earningsTs * 1000 - Date.now()) / (1000 * 60 * 60 * 24)) : null,
+    exDividendDate: exDivTs ? new Date(exDivTs * 1000).toISOString().slice(0, 10) : null,
+    dividendPaymentDate: divDateTs ? new Date(divDateTs * 1000).toISOString().slice(0, 10) : null,
+    epsEstimate: v(ce, "earnings", "earningsAverage"),
+    epsLow: v(ce, "earnings", "earningsLow"),
+    epsHigh: v(ce, "earnings", "earningsHigh"),
+    revEstimate: v(ce, "earnings", "revenueAverage"),
+    hyperscalerWatch: HYPERSCALER_DEPS[t.symbol] || [],
+  };
+
+  // ============ AI SUMMARY ============
+  const summaryData = buildStockSummary({
+    symbol: t.symbol,
+    pe: v(sd, "trailingPE") ?? m.peBasicExclExtraTTM ?? null,
+    fwdPe: v(ks, "forwardPE") ?? v(sd, "forwardPE") ?? null,
+    pegRatio: lynchData.pegRatio,
+    revGrowthPct: v(fd, "revenueGrowth") != null ? v(fd, "revenueGrowth") * 100 : null,
+    roePct: v(fd, "returnOnEquity") != null ? v(fd, "returnOnEquity") * 100 : null,
+    fcfYield,
+    earningsYield,
+    insiderNet: lynchData.netInsiderActivity,
+    insiderBuys: lynchData.insiderBuys,
+    insiderSells: lynchData.insiderSells,
+    pcrVolume: optionsData?.pcrVolume,
+    consensusRating: rating,
+    consensusScore: score,
+    targetMean: v(fd, "targetMeanPrice"),
+    currentPrice: quote?.c ?? null,
+    week52High: v(sd, "fiftyTwoWeekHigh"),
+    week52Low: v(sd, "fiftyTwoWeekLow"),
+    daysToEarnings: catalystsData.daysToEarnings,
+    debtEq: debtEqNormalized,
+    sector: t.sector,
+    lynchCategory: lynchData.category,
+  });
 
   return {
     symbol: t.symbol,
@@ -430,10 +557,12 @@ async function fetchTicker(t) {
       qtrlyDivAmt: v(ks, "lastDividendValue"),
       payout: v(sd, "payoutRatio") != null ? v(sd, "payoutRatio") * 100 : (m.payoutRatioTTM ?? null),
       roe: v(fd, "returnOnEquity") != null ? v(fd, "returnOnEquity") * 100 : (m.roeTTM ?? null),
-      roic: m.roiTTM ?? null,
-      debtEq: v(fd, "debtToEquity") ?? m["totalDebt/totalEquityAnnual"] ?? null,
+      roic: roicApprox,
+      debtEq: debtEqNormalized,
       eps: v(ks, "trailingEps") ?? m.epsBasicExclExtraItemsTTM ?? null,
       epsForward: v(ks, "forwardEps"),
+      earningsYield,
+      fcfYield,
       revGrowth: v(fd, "revenueGrowth") != null ? v(fd, "revenueGrowth") * 100 : (m.revenueGrowthTTMYoy ?? null),
       grossMargin: v(fd, "grossMargins") != null ? v(fd, "grossMargins") * 100 : (m.grossMarginTTM ?? null),
       opMargin: v(fd, "operatingMargins") != null ? v(fd, "operatingMargins") * 100 : (m.operatingMarginTTM ?? null),
@@ -463,7 +592,123 @@ async function fetchTicker(t) {
     lynch: lynchData,
     simons: simonsData,
     options: optionsData,
+    catalysts: catalystsData,
+    summary: summaryData,
     peerData,
+  };
+}
+
+// ============ AI SUMMARY GENERATOR ============
+// Rule-based stock summary computed from already-fetched signals.
+// Categorizes the stock across 5 dimensions and writes a plain-English paragraph
+// plus actionable bullets. NOT an LLM — just smart synthesis of the existing data.
+function buildStockSummary(d) {
+  const bullets = [];
+  const flags = [];
+  const positives = [];
+  const negatives = [];
+
+  // ====== LAYER 1: Business quality ======
+  let businessGrade = "—";
+  if (d.roePct != null && d.revGrowthPct != null) {
+    if (d.roePct > 30 && d.revGrowthPct > 20) businessGrade = "Exceptional";
+    else if (d.roePct > 15 && d.revGrowthPct > 10) businessGrade = "Strong";
+    else if (d.roePct > 8 && d.revGrowthPct > 0) businessGrade = "Decent";
+    else if (d.roePct < 5 || d.revGrowthPct < -5) businessGrade = "Weak";
+    else businessGrade = "Average";
+  }
+  if (businessGrade === "Exceptional" || businessGrade === "Strong") {
+    positives.push(`${businessGrade.toLowerCase()} business quality (ROE ${d.roePct?.toFixed(0)}%, revenue ${d.revGrowthPct > 0 ? "+" : ""}${d.revGrowthPct?.toFixed(0)}%)`);
+  }
+  if (businessGrade === "Weak") {
+    negatives.push(`weak business metrics (ROE ${d.roePct?.toFixed(0)}%, revenue ${d.revGrowthPct?.toFixed(0)}%)`);
+  }
+
+  // ====== LAYER 2: Valuation ======
+  let valuationGrade = "—";
+  if (d.pegRatio != null && d.pegRatio > 0) {
+    if (d.pegRatio < 1) valuationGrade = "Cheap vs growth";
+    else if (d.pegRatio < 1.5) valuationGrade = "Fair";
+    else if (d.pegRatio < 2.5) valuationGrade = "Premium";
+    else valuationGrade = "Expensive";
+  }
+  if (valuationGrade === "Cheap vs growth") positives.push(`PEG ${d.pegRatio.toFixed(2)} (Lynch: under 1 is cheap)`);
+  if (valuationGrade === "Expensive") negatives.push(`PEG ${d.pegRatio.toFixed(2)} (expensive vs growth rate)`);
+  if (d.earningsYield != null && d.earningsYield < 4) {
+    negatives.push(`earnings yield ${d.earningsYield.toFixed(1)}% below 10Y Treasury (~4.4%)`);
+  }
+  if (d.fcfYield != null && d.fcfYield > 5) positives.push(`generous FCF yield ${d.fcfYield.toFixed(1)}%`);
+  if (d.fcfYield != null && d.fcfYield < 1.5 && d.fcfYield > 0) negatives.push(`low FCF yield ${d.fcfYield.toFixed(1)}% (paying premium for growth)`);
+
+  // ====== LAYER 3: Street sentiment ======
+  if (d.consensusScore != null) {
+    if (d.consensusScore >= 4.3) positives.push(`strong analyst conviction (${d.consensusRating}, ${d.consensusScore.toFixed(1)}/5)`);
+    else if (d.consensusScore <= 2.5) negatives.push(`weak analyst conviction (${d.consensusRating})`);
+  }
+  let upsidePct = null;
+  if (d.targetMean && d.currentPrice) {
+    upsidePct = ((d.targetMean - d.currentPrice) / d.currentPrice) * 100;
+    if (upsidePct > 20) positives.push(`${upsidePct.toFixed(0)}% upside to analyst target ($${d.targetMean.toFixed(0)})`);
+    if (upsidePct < -5) negatives.push(`trading ${Math.abs(upsidePct).toFixed(0)}% above analyst target`);
+  }
+
+  // ====== LAYER 4: Positioning / options sentiment ======
+  if (d.pcrVolume != null) {
+    if (d.pcrVolume < 0.4) {
+      flags.push(`Options crowd extremely bullish (PCR ${d.pcrVolume.toFixed(2)}) — contrarian warning`);
+    } else if (d.pcrVolume > 1.8) {
+      flags.push(`Options crowd extremely bearish (PCR ${d.pcrVolume.toFixed(2)}) — possible bottom signal`);
+    }
+  }
+
+  // ====== LAYER 5: Risks ======
+  if (d.insiderNet != null && d.insiderNet < -100e6 && (d.insiderBuys ?? 0) === 0) {
+    const m = Math.abs(d.insiderNet) >= 1e9 ? `$${(Math.abs(d.insiderNet)/1e9).toFixed(1)}B` : `$${(Math.abs(d.insiderNet)/1e6).toFixed(0)}M`;
+    flags.push(`Heavy insider selling (${m} sold, zero bought in 6 months)`);
+  }
+  if (d.debtEq != null && d.debtEq > 2) {
+    flags.push(`Elevated leverage (D/E ${d.debtEq.toFixed(2)})`);
+  }
+  if (d.week52High && d.currentPrice && (d.currentPrice / d.week52High) > 0.97) {
+    flags.push(`Trading near 52-week high (limited room to run)`);
+  }
+  if (d.daysToEarnings != null && d.daysToEarnings >= 0 && d.daysToEarnings <= 14) {
+    flags.push(`Earnings in ${d.daysToEarnings} day${d.daysToEarnings === 1 ? "" : "s"} (high volatility window)`);
+  }
+
+  // ====== Compose verdict ======
+  let stance = "Mixed";
+  let stanceColor = "neutral";
+  const pos = positives.length;
+  const neg = negatives.length + flags.length;
+  if (pos >= 3 && neg <= 1) { stance = "Constructive"; stanceColor = "positive"; }
+  else if (pos >= 2 && neg <= 2) { stance = "Cautiously positive"; stanceColor = "positive"; }
+  else if (neg >= 3 && pos <= 1) { stance = "Cautious"; stanceColor = "negative"; }
+  else if (neg >= 4) { stance = "Negative"; stanceColor = "negative"; }
+
+  // Build prose paragraph
+  let paragraph = `${d.symbol} reads as a `;
+  if (d.lynchCategory && d.lynchCategory !== "—") paragraph += `${d.lynchCategory.toLowerCase()} in ${d.sector?.toLowerCase() || "its sector"}`;
+  else paragraph += `${d.sector?.toLowerCase() || "stock"}`;
+  paragraph += `. Business quality is ${businessGrade.toLowerCase()}`;
+  if (valuationGrade !== "—") paragraph += `, valuation is ${valuationGrade.toLowerCase()}`;
+  paragraph += `. `;
+  if (d.consensusRating) paragraph += `Street is ${d.consensusRating.toLowerCase()}`;
+  if (upsidePct != null) paragraph += ` with ${upsidePct >= 0 ? "+" : ""}${upsidePct.toFixed(0)}% to consensus target`;
+  paragraph += `. `;
+  if (flags.length > 0) paragraph += `Notable risks: ${flags.length} flag${flags.length > 1 ? "s" : ""} (see below).`;
+  else paragraph += `No major risk flags.`;
+
+  return {
+    stance,
+    stanceColor,
+    paragraph,
+    businessGrade,
+    valuationGrade,
+    positives,
+    negatives,
+    flags,
+    upsidePct,
   };
 }
 
@@ -548,8 +793,45 @@ async function main() {
     await sleep(400);
   }
 
+  // ============ MACRO LAYER ============
+  // Fetch market-wide context: rates, fear, dollar, market, semis.
+  console.log("\nFetching macro context...");
+  const MACRO_TICKERS = [
+    { symbol: "^TNX",     name: "10Y Treasury Yield", explain: "When this rises, growth stocks usually fall. >4.5% is restrictive." },
+    { symbol: "^VIX",     name: "Volatility Index",   explain: "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear." },
+    { symbol: "DX-Y.NYB", name: "Dollar Index",       explain: "Strong dollar hurts US multinationals' overseas revenue." },
+    { symbol: "SPY",      name: "S&P 500 ETF",        explain: "Overall US market direction." },
+    { symbol: "SOXX",     name: "Semiconductor ETF",  explain: "Sector context — moves NVDA, AMD, TSM, etc together." },
+    { symbol: "QQQ",      name: "NASDAQ-100 ETF",     explain: "Tech-heavy index. Growth stock proxy." },
+  ];
+  const macroData = { fetchedAt: new Date().toISOString(), items: [] };
+  for (const m of MACRO_TICKERS) {
+    try {
+      const candles = await yahooCandles(m.symbol, "1mo", "1d");
+      if (!candles || candles.length < 2) continue;
+      const last = candles[candles.length - 1];
+      const prev = candles[candles.length - 2];
+      const monthStart = candles[0];
+      const dayChange = ((last.close - prev.close) / prev.close) * 100;
+      const monthChange = ((last.close - monthStart.close) / monthStart.close) * 100;
+      macroData.items.push({
+        symbol: m.symbol,
+        name: m.name,
+        explain: m.explain,
+        value: last.close,
+        dayChange: +dayChange.toFixed(2),
+        monthChange: +monthChange.toFixed(2),
+      });
+      console.log(`  ✓ ${m.symbol}  ${last.close.toFixed(2)}  ${dayChange >= 0 ? "+" : ""}${dayChange.toFixed(2)}%`);
+    } catch (e) {
+      console.warn(`  ✗ ${m.symbol} failed: ${e.message}`);
+    }
+    await sleep(300);
+  }
+  writeFileSync("public/data/macro.json", JSON.stringify(macroData, null, 2));
+
   writeFileSync("public/data/index.json", JSON.stringify(out, null, 2));
-  console.log(`\nDone. Wrote ${out.tickers.length} tickers (${out.tickers.filter(x=>x.holding).length} holdings).`);
+  console.log(`\nDone. Wrote ${out.tickers.length} tickers (${out.tickers.filter(x=>x.holding).length} holdings) + macro snapshot.`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
