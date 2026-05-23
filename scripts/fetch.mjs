@@ -472,9 +472,42 @@ async function fetchTicker(t) {
 
   // ============ CATALYSTS ============
   const ce = summary?.calendarEvents || {};
-  const earningsTs = v(ce, "earnings", "earningsDate", 0) ?? null;
-  const exDivTs = v(ce, "exDividendDate") ?? null;
-  const divDateTs = v(ce, "dividendDate") ?? null;
+  // Yahoo's earningsDate field can be an array, object, raw number, or string depending on the ticker.
+  // Safely extract a Unix timestamp (seconds) from whatever shape it is.
+  const extractTs = (obj) => {
+    if (obj == null) return null;
+    if (typeof obj === "number" && isFinite(obj) && obj > 1e8) return obj; // looks like a unix seconds timestamp
+    if (typeof obj === "string") {
+      const parsed = Date.parse(obj);
+      return isNaN(parsed) ? null : Math.floor(parsed / 1000);
+    }
+    if (Array.isArray(obj) && obj.length) return extractTs(obj[0]);
+    if (typeof obj === "object") {
+      if (obj.raw != null) return extractTs(obj.raw);
+      if (obj.fmt) return extractTs(obj.fmt);
+    }
+    return null;
+  };
+  // Convert a timestamp to "YYYY-MM-DD" — returns null if invalid (avoids the "Invalid time value" crash)
+  const tsToDate = (ts) => {
+    if (ts == null || !isFinite(ts)) return null;
+    try {
+      const d = new Date(ts * 1000);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString().slice(0, 10);
+    } catch (e) { return null; }
+  };
+  const tsToDays = (ts) => {
+    if (ts == null || !isFinite(ts)) return null;
+    try {
+      return Math.round((ts * 1000 - Date.now()) / (1000 * 60 * 60 * 24));
+    } catch (e) { return null; }
+  };
+
+  const earningsTs = extractTs(ce.earnings?.earningsDate);
+  const exDivTs = extractTs(ce.exDividendDate);
+  const divDateTs = extractTs(ce.dividendDate);
+
   const HYPERSCALER_DEPS = {
     NVDA: ["MSFT", "META", "GOOGL", "AMZN", "ORCL"],
     AMD:  ["MSFT", "META", "GOOGL", "AMZN", "ORCL"],
@@ -496,10 +529,10 @@ async function fetchTicker(t) {
     CEG:  ["MSFT", "GOOGL", "AMZN", "META", "NVDA"],
   };
   const catalystsData = {
-    earningsDate: earningsTs ? new Date(earningsTs * 1000).toISOString().slice(0, 10) : null,
-    daysToEarnings: earningsTs ? Math.round((earningsTs * 1000 - Date.now()) / (1000 * 60 * 60 * 24)) : null,
-    exDividendDate: exDivTs ? new Date(exDivTs * 1000).toISOString().slice(0, 10) : null,
-    dividendPaymentDate: divDateTs ? new Date(divDateTs * 1000).toISOString().slice(0, 10) : null,
+    earningsDate: tsToDate(earningsTs),
+    daysToEarnings: tsToDays(earningsTs),
+    exDividendDate: tsToDate(exDivTs),
+    dividendPaymentDate: tsToDate(divDateTs),
     epsEstimate: v(ce, "earnings", "earningsAverage"),
     epsLow: v(ce, "earnings", "earningsLow"),
     epsHigh: v(ce, "earnings", "earningsHigh"),
@@ -790,7 +823,7 @@ async function main() {
     } catch (e) {
       console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
     }
-    await sleep(400);
+    await sleep(800);
   }
 
   // ============ MACRO LAYER ============
