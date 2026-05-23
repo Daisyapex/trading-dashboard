@@ -48,17 +48,45 @@ async function ensureYahooAuth() {
   }
 }
 
-async function finnhub(path, params = {}) {
+async function finnhub(path, params = {}, retries = 2) {
   const qs = new URLSearchParams({ ...params, token: FINNHUB_KEY });
   const url = `${FINNHUB}${path}?${qs}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    if (res.status !== 429 && res.status !== 403) {
-      console.warn(`finnhub ${path} ${res.status} for ${params.symbol || ""}`);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        // Finnhub returns 200 + empty/null body when rate-limited silently.
+        // For quote endpoint, null current price (c=0 or null) = treat as failure.
+        if (path === "/quote" && (data == null || (data.c == null) || data.c === 0)) {
+          if (attempt < retries) {
+            await new Promise((r) => setTimeout(r, 4000 + attempt * 2000));
+            continue;
+          }
+        }
+        return data;
+      }
+      // 429 = rate limit, 403 = often rate-limit-related on Finnhub free tier
+      if ((res.status === 429 || res.status === 403) && attempt < retries) {
+        const waitMs = 5000 + attempt * 3000; // 5s, 8s
+        console.warn(`  ↻ finnhub ${path} ${res.status}, retrying in ${waitMs / 1000}s (attempt ${attempt + 1}/${retries + 1})`);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      if (res.status !== 429 && res.status !== 403) {
+        console.warn(`finnhub ${path} ${res.status} for ${params.symbol || ""}`);
+      }
+      return null;
+    } catch (e) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      console.warn(`finnhub ${path} threw ${e.message} for ${params.symbol || ""}`);
+      return null;
     }
-    return null;
   }
-  return res.json();
+  return null;
 }
 
 async function yahooCandles(symbol, range = "1y", interval = "1d") {
@@ -981,7 +1009,7 @@ async function main() {
     } catch (e) {
       console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
     }
-    await sleep(800);
+    await sleep(1200);
   }
 
   writeFileSync("public/data/index.json", JSON.stringify(out, null, 2));
