@@ -117,6 +117,50 @@ const realizedVol = (data, period = 30) => {
   return +(sd * Math.sqrt(252) * 100).toFixed(1);
 };
 
+// ATR Trailing Stop (UT Bot Alerts style).
+// Calculates ATR(period), then trails a stop line at `multiplier × ATR` below price in uptrends,
+// flipping above price in downtrends. Returns each candle augmented with atrStop + atrTrend ("long"/"short").
+const atrTrailingStop = (data, period = 10, multiplier = 2) => {
+  if (data.length < period + 1) return data.map((d) => ({ ...d, atrStop: null, atrTrend: null }));
+  // Compute true range and ATR (Wilder's smoothing)
+  const trs = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i === 0) { trs.push(data[i].high - data[i].low); continue; }
+    const p = data[i - 1].close;
+    trs.push(Math.max(data[i].high - data[i].low, Math.abs(data[i].high - p), Math.abs(data[i].low - p)));
+  }
+  const atrs = [];
+  let atrPrev = null;
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) { atrs.push(null); continue; }
+    if (i === period - 1) {
+      atrPrev = trs.slice(0, period).reduce((s, x) => s + x, 0) / period;
+      atrs.push(atrPrev);
+    } else {
+      atrPrev = (atrPrev * (period - 1) + trs[i]) / period;
+      atrs.push(atrPrev);
+    }
+  }
+  // Trail logic
+  let trend = "long";
+  let stop = null;
+  return data.map((d, i) => {
+    const atr = atrs[i];
+    if (atr == null) return { ...d, atrStop: null, atrTrend: null };
+    const longStop = d.close - multiplier * atr;
+    const shortStop = d.close + multiplier * atr;
+    if (stop == null) { stop = longStop; trend = "long"; }
+    else if (trend === "long") {
+      if (d.close < stop) { trend = "short"; stop = shortStop; }
+      else { stop = Math.max(stop, longStop); }
+    } else {
+      if (d.close > stop) { trend = "long"; stop = longStop; }
+      else { stop = Math.min(stop, shortStop); }
+    }
+    return { ...d, atrStop: +stop.toFixed(2), atrTrend: trend };
+  });
+};
+
 // ============================================================
 // CANDLESTICK CHART
 // ============================================================
@@ -158,6 +202,19 @@ function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth }) {
     addLine("sma20", "#d4a017");
     addLine("sma50", "#86b09c");
     addLine("sma200", "#7ba2cc");
+
+    // ATR Trailing Stop - draw as two series (green for long-trend, red for short-trend)
+    // Plotted as thicker line with circle markers at flip points
+    const atrLongSeries = chart.addLineSeries({
+      color: "#0a8554", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, lineStyle: 0,
+    });
+    const atrShortSeries = chart.addLineSeries({
+      color: "#c4314b", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, lineStyle: 0,
+    });
+    const longData = data.filter((d) => d.atrStop != null && d.atrTrend === "long").map((d) => ({ time: d.date, value: d.atrStop }));
+    const shortData = data.filter((d) => d.atrStop != null && d.atrTrend === "short").map((d) => ({ time: d.date, value: d.atrStop }));
+    if (longData.length) atrLongSeries.setData(longData);
+    if (shortData.length) atrShortSeries.setData(shortData);
 
     chart.timeScale().fitContent();
 
@@ -507,6 +564,7 @@ export default function App() {
     if (d.length >= 50) d = sma(d, 50);
     if (d.length >= 200) d = sma(d, 200);
     d = rsi(d); d = macd(d); d = sqzmom(d); d = zscore(d, 20);
+    d = atrTrailingStop(d, 10, 2);
     return d;
   }, [activeCandles]);
 
@@ -811,6 +869,7 @@ export default function App() {
                   )}
                   <StatRow label="Squeeze" value={<span className="mono">{sqzActive ? <span style={{ color: "#c4314b" }}>Compressed</span> : <span style={{ color: "#0a8554" }}>Released</span>}</span>} />
                   <StatRow label="50/200" value={<span className="mono">{last?.sma50 > last?.sma200 ? <span style={{ color: "#0a8554" }}>Golden</span> : <span style={{ color: "#c4314b" }}>Death</span>}</span>} />
+                  <StatRow label="ATR Trail Stop" value={<span className="mono" title="ATR(10) × 2 trailing stop. Long = green (stop below price), Short = red (stop above price). A close beyond the stop flips the trend.">{last?.atrStop != null ? <><span style={{ color: last.atrTrend === "long" ? "#0a8554" : "#c4314b" }}>${fmt(last.atrStop, 2)} {last.atrTrend === "long" ? "▲" : "▼"}</span></> : "—"}</span>} />
                   <StatRow label="Beta" value={<span className="mono">{fmt(f.beta, 2)}</span>} />
                 </div>
               </div>
