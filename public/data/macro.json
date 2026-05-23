@@ -1,0 +1,53 @@
+{
+  "fetchedAt": "2026-05-23T10:04:33.861Z",
+  "items": [
+    {
+      "symbol": "^TNX",
+      "name": "10Y Treasury Yield",
+      "explain": "When this rises, growth stocks usually fall. >4.5% is restrictive.",
+      "value": 4.56,
+      "dayChange": -0.65,
+      "monthChange": 6.29
+    },
+    {
+      "symbol": "^VIX",
+      "name": "Volatility Index",
+      "explain": "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear.",
+      "value": 16.7,
+      "dayChange": -0.36,
+      "monthChange": -11.73
+    },
+    {
+      "symbol": "DX-Y.NYB",
+      "name": "Dollar Index",
+      "explain": "Strong dollar hurts US multinationals' overseas revenue.",
+      "value": 99.32,
+      "dayChange": 0.13,
+      "monthChange": 0.53
+    },
+    {
+      "symbol": "SPY",
+      "name": "S&P 500 ETF",
+      "explain": "Overall US market direction.",
+      "value": 745.64,
+      "dayChange": 0.39,
+      "monthChange": 5.25
+    },
+    {
+      "symbol": "SOXX",
+      "name": "Semiconductor ETF",
+      "explain": "Sector context — moves NVDA, AMD, TSM, etc together.",
+      "value": 537.33,
+      "dayChange": 2.41,
+      "monthChange": 21.84
+    },
+    {
+      "symbol": "QQQ",
+      "name": "NASDAQ-100 ETF",
+      "explain": "Tech-heavy index. Growth stock proxy.",
+      "value": 717.54,
+      "dayChange": 0.42,
+      "monthChange": 10.15
+    }
+  ]
+}
