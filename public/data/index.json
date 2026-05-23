@@ -1,113 +1,113 @@
 {
-  "generatedAt": "2026-05-22T13:43:02.530Z",
+  "generatedAt": "2026-05-23T07:39:30.786Z",
   "tickers": [
     {
       "symbol": "NVDA",
       "name": "NVIDIA Corp.",
       "sector": "Semiconductors",
       "holding": true,
-      "price": 219.76,
-      "change": 0.25,
-      "changePct": 0.1139
+      "price": 215.33,
+      "change": -4.18,
+      "changePct": -1.9042
     },
     {
       "symbol": "MSFT",
       "name": "Microsoft Corp.",
       "sector": "Hyperscaler",
       "holding": true,
-      "price": 422.37,
-      "change": 3.28,
-      "changePct": 0.7826
+      "price": 418.57,
+      "change": -0.52,
+      "changePct": -0.1241
     },
     {
       "symbol": "TSM",
       "name": "Taiwan Semiconductor",
       "sector": "Semiconductors",
       "holding": true,
-      "price": 409.69,
-      "change": 2.54,
-      "changePct": 0.6238
+      "price": 404.52,
+      "change": -2.63,
+      "changePct": -0.646
     },
     {
       "symbol": "NOW",
       "name": "ServiceNow",
       "sector": "AI Software",
       "holding": true,
-      "price": 104.02,
-      "change": 4.33,
-      "changePct": 4.3435
+      "price": 102.13,
+      "change": 2.44,
+      "changePct": 2.4476
     },
     {
       "symbol": "VOO",
       "name": "Vanguard S&P 500 ETF",
       "sector": "ETF · Broad",
       "holding": false,
-      "price": 687.47,
-      "change": 4.63,
-      "changePct": 0.6781
+      "price": 685.55,
+      "change": 2.71,
+      "changePct": 0.3969
     },
     {
       "symbol": "QQQ",
       "name": "Invesco NASDAQ-100 ETF",
       "sector": "ETF · Tech",
       "holding": false,
-      "price": 720.44,
-      "change": 5.93,
-      "changePct": 0.8299
+      "price": 717.54,
+      "change": 3.03,
+      "changePct": 0.4241
     },
     {
       "symbol": "VTI",
       "name": "Vanguard Total Market",
       "sector": "ETF · Broad",
       "holding": false,
-      "price": 367.57,
-      "change": 2.48,
-      "changePct": 0.6793
+      "price": 366.79,
+      "change": 1.7,
+      "changePct": 0.4656
     },
     {
       "symbol": "VGK",
       "name": "Vanguard FTSE Europe",
       "sector": "ETF · Europe",
       "holding": false,
-      "price": 88.74,
-      "change": -0.02,
-      "changePct": -0.0225
+      "price": 88.46,
+      "change": -0.3,
+      "changePct": -0.338
     },
     {
       "symbol": "SMH",
       "name": "VanEck Semiconductor",
       "sector": "ETF · Tech",
       "holding": false,
-      "price": 574.36,
-      "change": 6.48,
-      "changePct": 1.1411
+      "price": 576.32,
+      "change": 8.44,
+      "changePct": 1.4862
     },
     {
       "symbol": "ARKK",
       "name": "ARK Innovation",
       "sector": "ETF · Innovation",
       "holding": false,
-      "price": 77.54,
-      "change": 0.92,
-      "changePct": 1.2007
+      "price": 76.4,
+      "change": -0.22,
+      "changePct": -0.2871
     },
     {
       "symbol": "AVGO",
       "name": "Broadcom Inc.",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 418.17,
-      "change": 3.6,
-      "changePct": 0.8684
+      "price": 414.14,
+      "change": -0.43,
+      "changePct": -0.1037
     },
     {
       "symbol": "AMD",
       "name": "Advanced Micro Dev",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 467.02,
-      "change": 17.43,
-      "changePct": 3.8769
+      "price": 467.51,
+      "change": 17.92,
+      "changePct": 3.9859
     },
     {
       "symbol": "MU",
@@ -240,135 +240,135 @@
       "name": "Nebius Group",
       "sector": "AI Cloud",
       "holding": false,
-      "price": 217.45,
-      "change": -2.48,
-      "changePct": -1.1276
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "TEM",
       "name": "Tempus AI",
       "sector": "AI Software",
       "holding": false,
-      "price": 47.46,
-      "change": 0.97,
-      "changePct": 2.0865
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "PATH",
       "name": "UiPath",
       "sector": "AI Software",
       "holding": false,
-      "price": 11.05,
-      "change": 0.48,
-      "changePct": 4.5412
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "VST",
       "name": "Vistra Corp.",
       "sector": "AI Power",
       "holding": false,
-      "price": 152.69,
-      "change": 3.61,
-      "changePct": 2.4215
+      "price": 156.27,
+      "change": 7.19,
+      "changePct": 4.8229
     },
     {
       "symbol": "CEG",
       "name": "Constellation Energy",
       "sector": "AI Power",
       "holding": false,
-      "price": 289.24,
-      "change": 3.41,
-      "changePct": 1.193
+      "price": 294.07,
+      "change": 8.24,
+      "changePct": 2.8828
     },
     {
       "symbol": "RKLB",
       "name": "Rocket Lab",
       "sector": "Space",
       "holding": false,
-      "price": 133.51,
-      "change": 8.06,
-      "changePct": 6.4249
+      "price": 135.76,
+      "change": 10.31,
+      "changePct": 8.2184
     },
     {
       "symbol": "ASTS",
       "name": "AST SpaceMobile",
       "sector": "Space",
       "holding": false,
-      "price": 101.46,
-      "change": 5.23,
-      "changePct": 5.4349
+      "price": 105.86,
+      "change": 9.63,
+      "changePct": 10.0073
     },
     {
       "symbol": "AAPL",
       "name": "Apple Inc.",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 307.59,
-      "change": 2.6,
-      "changePct": 0.8525
+      "price": 308.82,
+      "change": 3.83,
+      "changePct": 1.2558
     },
     {
       "symbol": "GOOGL",
       "name": "Alphabet Inc.",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 384.41,
-      "change": -3.25,
-      "changePct": -0.8384
+      "price": 382.97,
+      "change": -4.69,
+      "changePct": -1.2098
     },
     {
       "symbol": "META",
       "name": "Meta Platforms",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 612.12,
-      "change": 4.74,
-      "changePct": 0.7804
+      "price": 610.26,
+      "change": 2.88,
+      "changePct": 0.4742
     },
     {
       "symbol": "AMZN",
       "name": "Amazon.com",
       "sector": "Mega Cap Tech",
       "holding": false,
-      "price": 269.37,
-      "change": 0.91,
-      "changePct": 0.339
+      "price": 266.32,
+      "change": -2.14,
+      "changePct": -0.7971
     },
     {
       "symbol": "TSLA",
       "name": "Tesla, Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": 421.96,
-      "change": 4.11,
-      "changePct": 0.9836
+      "price": 426.01,
+      "change": 8.16,
+      "changePct": 1.9529
     },
     {
       "symbol": "NFLX",
       "name": "Netflix",
       "sector": "Streaming",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 88.6,
+      "change": -0.7,
+      "changePct": -0.7839
     },
     {
       "symbol": "RDDT",
       "name": "Reddit Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 141.67,
+      "change": -8.37,
+      "changePct": -5.5785
     },
     {
       "symbol": "OPEN",
       "name": "Opendoor Technologies",
       "sector": "Active Retail",
       "holding": false,
-      "price": null,
-      "change": null,
-      "changePct": null
+      "price": 4.53,
+      "change": -0.04,
+      "changePct": -0.8753
     },
     {
       "symbol": "HOOD",
@@ -465,45 +465,45 @@
       "name": "JPMorgan Chase",
       "sector": "Financials",
       "holding": false,
-      "price": 306.25,
-      "change": 3.25,
-      "changePct": 1.0726
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "GS",
       "name": "Goldman Sachs",
       "sector": "Financials",
       "holding": false,
-      "price": 993.51,
-      "change": 5.34,
-      "changePct": 0.5404
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "LLY",
       "name": "Eli Lilly",
       "sector": "Healthcare",
       "holding": false,
-      "price": 1064.93,
-      "change": 23.28,
-      "changePct": 2.2349
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "UNH",
       "name": "UnitedHealth",
       "sector": "Healthcare",
       "holding": false,
-      "price": 384.71,
-      "change": 2.23,
-      "changePct": 0.583
+      "price": null,
+      "change": null,
+      "changePct": null
     },
     {
       "symbol": "DIS",
       "name": "Walt Disney",
       "sector": "Streaming",
       "holding": false,
-      "price": 104.29,
-      "change": 0.71,
-      "changePct": 0.6855
+      "price": null,
+      "change": null,
+      "changePct": null
     }
   ]
 }
