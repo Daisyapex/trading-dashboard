@@ -2830,10 +2830,10 @@ function OptionsFlowPanel({ op, isMobile }) {
 
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="panel-head">
+      <div className="panel-head" style={{ flexWrap: "wrap", gap: 4 }}>
         <span className="panel-title">Options Flow · What Traders Are Betting</span>
-        <span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>
-          {op.expiry ? `Expiry ${op.expiry} (${op.daysToExpiry}d)` : ""}
+        <span className="mono" style={{ fontSize: 10, color: "#5a6573", whiteSpace: "nowrap" }}>
+          {op.expiry ? `${op.expiry} (${op.daysToExpiry}d)` : ""}
           <Zap size={11} color="#d4a017" style={{ display: "inline", marginLeft: 6, verticalAlign: "middle" }} />
         </span>
       </div>
@@ -2841,11 +2841,11 @@ function OptionsFlowPanel({ op, isMobile }) {
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 0 }}>
         <div style={{ padding: "14px 16px", borderRight: isMobile ? "none" : "1px solid #efece5", borderBottom: "1px solid #efece5" }}>
           <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Put / Call Ratio</div>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "baseline", justifyContent: "space-between", gap: 6, marginBottom: 6 }}>
             <span className="mono" style={{ fontSize: 24, fontWeight: 600, color: pcrColor }}>{fmt(pcrV, 2)}</span>
-            <span className="pill" style={{ background: pcrColor, color: "#fff" }}>{pcrInterp}</span>
+            <span className="pill" style={{ background: pcrColor, color: "#fff", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pcrInterp}</span>
           </div>
-          <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 10, display: "flex", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 10, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 4 }}>
             <span><span style={{ color: "#0a8554" }}>●</span> Call vol: {formatMcap(op.callVolTotal)}</span>
             <span><span style={{ color: "#c4314b" }}>●</span> Put vol: {formatMcap(op.putVolTotal)}</span>
           </div>
@@ -2860,8 +2860,8 @@ function OptionsFlowPanel({ op, isMobile }) {
 
         <div style={{ padding: "14px 16px", borderBottom: "1px solid #efece5" }}>
           <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Implied Volatility & Skew</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-            <div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div style={{ gridColumn: isMobile ? "1 / -1" : "auto" }}>
               <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 2 }} title="Annualized implied volatility, read from the ~30-day option chain (more stable than short-dated).">ATM IV (annualized)</div>
               <div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{fmt(ivDisplay, 1)}%</div>
               <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 2 }}>
@@ -2877,9 +2877,9 @@ function OptionsFlowPanel({ op, isMobile }) {
               <div className="mono" style={{ fontSize: 16, color: "#0a8554" }}>{fmt(op.ivOTMCall, 1)}%</div>
             </div>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", alignItems: isMobile ? "flex-start" : "center", gap: 6, marginBottom: 8 }}>
             <span style={{ fontSize: 11, color: "#5a6573" }}>Skew (Put IV − Call IV):</span>
-            <span className="pill" style={{ background: skewColor, color: "#fff" }}>{fmt(skew, 1)} pts · {skewInterp}</span>
+            <span className="pill" style={{ background: skewColor, color: "#fff", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fmt(skew, 1)} pts · {skewInterp}</span>
           </div>
           <ExplainBox text={skewPlain} />
           <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px dotted #e6e3db" }}>
@@ -2906,7 +2906,7 @@ function OptionsFlowPanel({ op, isMobile }) {
             <ResponsiveContainer width="100%" height={isMobile ? 140 : 180}>
               <LineChart data={op.skewCurve} margin={{ top: 8, right: 30, left: 0, bottom: 4 }}>
                 <XAxis dataKey="moneyness" tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db"
-                  label={{ value: "% from current price", position: "insideBottom", offset: -2, fontSize: 10, fill: "#5a6573" }} />
+                  label={{ value: isMobile ? "% from spot" : "% from current price", position: "insideBottom", offset: -2, fontSize: 10, fill: "#5a6573" }} />
                 <YAxis tick={{ fontSize: 10, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={40}
                   label={{ value: "IV %", angle: 0, position: "insideTopRight", fontSize: 9, fill: "#5a6573" }} />
                 <ReferenceLine x={0} stroke="#1a1f2c" strokeDasharray="3 3" strokeWidth={0.8} label={{ value: "ATM", fontSize: 9, fill: "#1a1f2c" }} />
