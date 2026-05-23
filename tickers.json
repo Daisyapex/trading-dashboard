@@ -40,6 +40,10 @@
     { "symbol": "RKLB",  "name": "Rocket Lab",            "sector": "Space",                   "peers": ["ASTS", "LMT", "RTX", "BA"] },
     { "symbol": "ASTS",  "name": "AST SpaceMobile",       "sector": "Space",                   "peers": ["RKLB", "IRDM", "VSAT", "GSAT"] },
 
+    { "symbol": "IBM",   "name": "IBM (Quantum + AI)",    "sector": "Quantum/Mega Tech",       "peers": ["MSFT", "ORCL", "GOOGL", "RGTI"] },
+    { "symbol": "GFS",   "name": "GlobalFoundries",       "sector": "Semiconductors",          "peers": ["TSM", "INTC", "ASML", "AVGO"] },
+    { "symbol": "RGTI",  "name": "Rigetti Computing",     "sector": "Quantum Pure-Play",       "peers": ["IBM", "GFS", "AMD", "NVDA"] },
+
     { "symbol": "AAPL",  "name": "Apple Inc.",            "sector": "Mega Cap Tech",           "peers": ["MSFT", "GOOGL", "META", "AMZN"] },
     { "symbol": "GOOGL", "name": "Alphabet Inc.",         "sector": "Mega Cap Tech",           "peers": ["META", "MSFT", "AMZN", "AAPL"] },
     { "symbol": "META",  "name": "Meta Platforms",        "sector": "Mega Cap Tech",           "peers": ["GOOGL", "SNAP", "PINS", "AMZN"] },
