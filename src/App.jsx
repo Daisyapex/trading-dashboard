@@ -1852,27 +1852,20 @@ function RiskSpectrumPanel({ portfolioVarPct, isMobile, embedded, macro }) {
   // Convert daily vol % → daily 95% VaR % (multiply by 1.645)
   const volToVar = (vol) => vol != null ? vol * 1.645 : null;
 
+  // Curated set: span the spectrum with 8-9 canonical reference points.
+  // Avoid near-duplicates (no XLK if we have SPY+QQQ; no VEA+EWJ+VGK all together).
   const realRefs = [
-    { label: "Cash / T-bills",    var: 0.05, color: "#5a6573", source: "static" },
-    { label: "Bonds (TLT)",       var: volToVar(find("TLT")?.dailyVol),  color: "#5a6573", source: "real" },
-    { label: "S&P 500",           var: volToVar(find("SPY")?.dailyVol),  color: "#86b09c", source: "real" },
-    { label: "Nasdaq-100",        var: volToVar(find("QQQ")?.dailyVol),  color: "#86b09c", source: "real" },
-    { label: "Mega cap",          var: volToVar(find("OEF")?.dailyVol),  color: "#86b09c", source: "real" },
-    { label: "Healthcare",        var: volToVar(find("XLV")?.dailyVol),  color: "#86b09c", source: "real" },
-    { label: "Financials",        var: volToVar(find("XLF")?.dailyVol),  color: "#86b09c", source: "real" },
-    { label: "Tech (XLK)",        var: volToVar(find("XLK")?.dailyVol),  color: "#d4a017", source: "real" },
-    { label: "Mid cap",           var: volToVar(find("MDY")?.dailyVol),  color: "#d4a017", source: "real" },
-    { label: "Semis (SMH)",       var: volToVar(find("SMH")?.dailyVol),  color: "#d4a017", source: "real" },
-    { label: "Memory (HBM)",      var: volToVar(find("HBM")?.dailyVol),  color: "#d4a017", source: "real" },
-    { label: "Software (IGV)",    var: volToVar(find("IGV")?.dailyVol),  color: "#d4a017", source: "real" },
-    { label: "Cyber (CIBR)",      var: volToVar(find("CIBR")?.dailyVol), color: "#d4a017", source: "real" },
-    { label: "AI Infra (ARTY)",   var: volToVar(find("ARTY")?.dailyVol), color: "#d4a017", source: "real" },
-    { label: "Small cap (IWM)",   var: volToVar(find("IWM")?.dailyVol),  color: "#d4a017", source: "real" },
-    { label: "Energy",            var: volToVar(find("XLE")?.dailyVol),  color: "#d4a017", source: "real" },
-    { label: "Bitcoin (IBIT)",    var: volToVar(find("IBIT")?.dailyVol), color: "#c4314b", source: "real" },
+    { label: "Cash / T-bills",   var: 0.05, color: "#5a6573", source: "static" },
+    { label: "Bonds (TLT)",      var: volToVar(find("TLT")?.dailyVol),  color: "#5a6573", source: "real" },
+    { label: "S&P 500",          var: volToVar(find("SPY")?.dailyVol),  color: "#86b09c", source: "real" },
+    { label: "Nasdaq-100",       var: volToVar(find("QQQ")?.dailyVol),  color: "#86b09c", source: "real" },
+    { label: "Semis (SMH)",      var: volToVar(find("SMH")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Small cap (IWM)",  var: volToVar(find("IWM")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Memory (HBM)",     var: volToVar(find("HBM")?.dailyVol),  color: "#d4a017", source: "real" },
+    { label: "Bitcoin (IBIT)",   var: volToVar(find("IBIT")?.dailyVol), color: "#c4314b", source: "real" },
     { label: "Crypto cos (BITQ)", var: volToVar(find("BITQ")?.dailyVol), color: "#c4314b", source: "real" },
   ];
-  // Drop refs without data, dedupe by similar vol so the labels don't overlap (keep first if within 0.2% of another)
+  // Drop refs without data
   const refs = realRefs.filter((r) => r.var != null && r.var > 0).sort((a, b) => a.var - b.var);
 
   // Bucket ranges
@@ -1888,6 +1881,23 @@ function RiskSpectrumPanel({ portfolioVarPct, isMobile, embedded, macro }) {
   const maxScale = Math.max(10, ...refs.map((r) => r.var + 1));
   const xFor = (v) => Math.min(99, (v / maxScale) * 100);
   const yourBand = bands.find((b) => portfolioVarPct >= b.min && portfolioVarPct < b.max) || bands[bands.length - 1];
+
+  // Smart row assignment — assign each ref to a row such that no two refs within 8% of each other share a row.
+  // We have 3 rows for variety. Rows 0, 1, 2 alternate vertical position.
+  const NUM_ROWS = 3;
+  const MIN_X_GAP = 8; // refs within this x% on adjacent rows need spacing
+  const rowAssignments = [];
+  for (const r of refs) {
+    const x = xFor(r.var);
+    // Pick the first row where no other ref is within MIN_X_GAP horizontally
+    let chosenRow = 0;
+    for (let row = 0; row < NUM_ROWS; row++) {
+      const conflict = rowAssignments.some((a) => a.row === row && Math.abs(a.x - x) < MIN_X_GAP);
+      if (!conflict) { chosenRow = row; break; }
+      if (row === NUM_ROWS - 1) chosenRow = row; // fall through to last row if all conflict
+    }
+    rowAssignments.push({ ref: r, x, row: chosenRow });
+  }
 
   const content = (
       <div style={{ padding: "20px 16px 12px", background: "#1a1f2c", color: "#fff" }}>
@@ -1908,21 +1918,23 @@ function RiskSpectrumPanel({ portfolioVarPct, isMobile, embedded, macro }) {
             <span key={v} className="mono" style={{ position: "absolute", left: `${xFor(v)}%`, fontSize: 9, color: "#8a93a3", transform: "translateX(-50%)" }}>{v}%</span>
           ))}
         </div>
-        {/* Reference markers */}
-        <div style={{ position: "relative", height: 80 }}>
-          {refs.map((r, i) => {
-            const isAlt = i % 2 === 1;
+        {/* Reference markers - 3 rows, smart-assigned to avoid label collision */}
+        <div style={{ position: "relative", height: 130 }}>
+          {rowAssignments.map((a, i) => {
+            const top = a.row * 38; // 0, 38, 76 — 3 vertical lanes
             return (
-              <div key={i} style={{ position: "absolute", left: `${xFor(r.var)}%`, top: isAlt ? 32 : 0, transform: "translateX(-50%)", textAlign: "center", maxWidth: 70 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: r.color, margin: "0 auto 4px", border: "1px solid #fff" }} />
-                <div style={{ fontSize: 9, color: "#fff", lineHeight: 1.2, whiteSpace: "nowrap" }}>{r.label}</div>
-                <div className="mono" style={{ fontSize: 9, color: "#8a93a3" }}>~{r.var.toFixed(1)}%</div>
+              <div key={i} style={{ position: "absolute", left: `${a.x}%`, top, transform: "translateX(-50%)", textAlign: "center", maxWidth: 80 }}>
+                {/* Vertical connector line from dot down to its position on the bar */}
+                <div style={{ width: 1, height: a.row === 0 ? 0 : a.row * 38, background: "#3a4050", margin: "0 auto", position: "absolute", left: "50%", top: -a.row * 38, opacity: 0.4 }} />
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: a.ref.color, margin: "0 auto 4px", border: "1px solid #fff", position: "relative", zIndex: 2 }} />
+                <div style={{ fontSize: 9, color: "#fff", lineHeight: 1.2, whiteSpace: "nowrap" }}>{a.ref.label}</div>
+                <div className="mono" style={{ fontSize: 9, color: "#8a93a3" }}>~{a.ref.var.toFixed(1)}%</div>
               </div>
             );
           })}
-          {/* Your portfolio marker (large, blue) */}
-          <div style={{ position: "absolute", left: `${xFor(portfolioVarPct)}%`, top: 0, transform: "translateX(-50%)", textAlign: "center", zIndex: 5 }}>
-            <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#7ba2cc", margin: "-3px auto 2px", border: "2px solid #fff", boxShadow: "0 0 0 2px #7ba2cc44" }} />
+          {/* Your portfolio marker (large, blue) - always on row 0 (top) for visibility */}
+          <div style={{ position: "absolute", left: `${xFor(portfolioVarPct)}%`, top: 0, transform: "translateX(-50%)", textAlign: "center", zIndex: 10 }}>
+            <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#7ba2cc", margin: "-4px auto 2px", border: "2px solid #fff", boxShadow: "0 0 0 3px #7ba2cc44" }} />
             <div style={{ fontSize: 10, color: "#7ba2cc", fontWeight: 700, whiteSpace: "nowrap" }}>Your portfolio</div>
             <div className="mono" style={{ fontSize: 10, color: "#fff", fontWeight: 600 }}>~{portfolioVarPct.toFixed(1)}%</div>
           </div>
