@@ -863,16 +863,69 @@ async function main() {
 
   // ============ MACRO LAYER (fetched FIRST, used for correlations) ============
   console.log("\nFetching macro context (used for correlations)...");
+  // STRIP_TICKERS: shown in top macro bar
+  // BENCHMARK_TICKERS: used for sector volatility comparison (not shown in strip)
   const MACRO_TICKERS = [
-    { symbol: "^TNX",     name: "10Y Treasury Yield", explain: "When this rises, growth stocks usually fall. >4.5% is restrictive." },
-    { symbol: "^VIX",     name: "Volatility Index",   explain: "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear." },
-    { symbol: "DX-Y.NYB", name: "Dollar Index",       explain: "Strong dollar hurts US multinationals' overseas revenue." },
-    { symbol: "SPY",      name: "S&P 500 ETF",        explain: "Overall US market direction." },
-    { symbol: "SOXX",     name: "Semiconductor ETF",  explain: "Sector context — moves NVDA, AMD, TSM, etc together." },
-    { symbol: "QQQ",      name: "NASDAQ-100 ETF",     explain: "Tech-heavy index. Growth stock proxy." },
-    { symbol: "TLT",      name: "20Y Treasury ETF",   explain: "Bond proxy. Negative correlation with growth stocks." },
+    // Display in strip
+    { symbol: "^TNX",     name: "10Y Treasury Yield", explain: "When this rises, growth stocks usually fall. >4.5% is restrictive.", strip: true },
+    { symbol: "^VIX",     name: "Volatility Index",   explain: "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear.", strip: true },
+    { symbol: "DX-Y.NYB", name: "Dollar Index",       explain: "Strong dollar hurts US multinationals' overseas revenue.", strip: true },
+    { symbol: "SPY",      name: "S&P 500 ETF",        explain: "Overall US market direction.", strip: true, category: "Broad market", vol_label: "S&P 500" },
+    { symbol: "QQQ",      name: "NASDAQ-100 ETF",     explain: "Tech-heavy index. Growth stock proxy.", strip: true, category: "Mega tech", vol_label: "Nasdaq-100" },
+    { symbol: "SOXX",     name: "Semiconductor ETF",  explain: "Sector context — moves NVDA, AMD, TSM, etc together.", strip: true, category: "Semis", vol_label: "Semis (SOXX)" },
+    { symbol: "TLT",      name: "20Y Treasury ETF",   explain: "Bond proxy. Negative correlation with growth stocks.", strip: true, category: "Bonds", vol_label: "Bonds (TLT)" },
+    // Used as risk benchmarks (not in strip)
+    { symbol: "SMH",      name: "Semi Logic ETF",     category: "Semi Logic",    vol_label: "Semi Logic (SMH)" },
+    { symbol: "HBM",      name: "Memory Tech ETF",    category: "Memory/DRAM",   vol_label: "Memory (HBM)" },
+    { symbol: "IGV",      name: "Software ETF",       category: "Software",      vol_label: "Software (IGV)" },
+    { symbol: "CIBR",     name: "Cybersecurity ETF",  category: "Cybersecurity", vol_label: "Cyber (CIBR)" },
+    { symbol: "ARTY",     name: "AI & Big Data ETF",  category: "AI Infra",      vol_label: "AI Infra (ARTY)" },
+    { symbol: "XLK",      name: "Technology Sector",  category: "Broad Tech",    vol_label: "Tech (XLK)" },
+    { symbol: "OEF",      name: "S&P 100 Mega Cap",   category: "Mega Cap",      vol_label: "Mega Cap (OEF)" },
+    { symbol: "MDY",      name: "Mid-Cap ETF",        category: "Mid Cap",       vol_label: "Mid Cap (MDY)" },
+    { symbol: "IWM",      name: "Russell 2000",       category: "Small Cap",     vol_label: "Small Cap (IWM)" },
+    { symbol: "BITQ",     name: "Crypto Industry",    category: "Crypto Equity", vol_label: "Crypto Cos (BITQ)" },
+    { symbol: "IBIT",     name: "iShares Bitcoin",    category: "Bitcoin",       vol_label: "Bitcoin (IBIT)" },
+    { symbol: "XLV",      name: "Healthcare Sector",  category: "Healthcare",    vol_label: "Healthcare (XLV)" },
+    { symbol: "XLF",      name: "Financial Sector",   category: "Financials",    vol_label: "Financials (XLF)" },
+    { symbol: "XLE",      name: "Energy Sector",      category: "Energy",        vol_label: "Energy (XLE)" },
+    { symbol: "XLY",      name: "Consumer Disc.",     category: "Consumer Disc", vol_label: "Cons Disc (XLY)" },
+    { symbol: "XLP",      name: "Consumer Staples",   category: "Consumer Stpl", vol_label: "Cons Stpl (XLP)" },
+    // Dalio All Weather diversifiers (uncorrelated to stocks)
+    { symbol: "GLD",      name: "Gold ETF",                 category: "Gold",            vol_label: "Gold (GLD)",         dalio: "Crisis hedge, inflation, currency debasement" },
+    { symbol: "DBC",      name: "Commodities ETF",          category: "Commodities",     vol_label: "Commodities (DBC)",  dalio: "Inflation hedge" },
+    { symbol: "VEA",      name: "Developed Markets ex-US",  category: "Intl Developed",  vol_label: "Intl Dev (VEA)",     dalio: "Geographic diversification" },
+    { symbol: "VWO",      name: "Emerging Markets",         category: "Emerging Markets", vol_label: "Emerging (VWO)",    dalio: "Different macro cycle" },
+    { symbol: "IEF",      name: "7-10Y Treasury",           category: "Intermediate Bonds", vol_label: "7-10Y Treas (IEF)", dalio: "All Weather stability sleeve" },
+    { symbol: "VNQ",      name: "Real Estate",              category: "Real Estate",     vol_label: "REITs (VNQ)",        dalio: "Inflation hedge, different cycle" },
+    { symbol: "BIL",      name: "1-3 Month T-Bills",        category: "Cash",            vol_label: "T-Bills (BIL)",      dalio: "Dry powder, capital preservation" },
+    { symbol: "TIP",      name: "TIPS Inflation-Protected", category: "TIPS",            vol_label: "TIPS (TIP)",         dalio: "Inflation protection" },
+    // Additional equity diversifiers (for stock-only diversification)
+    { symbol: "EWJ",      name: "Japan",                    category: "Japan",           vol_label: "Japan (EWJ)" },
+    { symbol: "VGK",      name: "Europe",                   category: "Europe",          vol_label: "Europe (VGK)" },
+    { symbol: "INDA",     name: "India",                    category: "India",           vol_label: "India (INDA)" },
+    { symbol: "FXI",      name: "China Large Cap",          category: "China",           vol_label: "China (FXI)" },
+    { symbol: "VYM",      name: "US Dividend Stocks",       category: "Dividend Value",  vol_label: "Dividend (VYM)" },
+    { symbol: "AVUV",     name: "Small Cap Value",          category: "Small Cap Value", vol_label: "SC Value (AVUV)" },
   ];
-  const macroData = { fetchedAt: new Date().toISOString(), items: [] };
+
+  // Compute realized daily volatility from a candles series.
+  const computeRealizedVol = (candles) => {
+    if (!candles || candles.length < 30) return null;
+    const closes = candles.slice(-90).map((c) => c.close); // last 90 days
+    const returns = closes.slice(1).map((c, i) => Math.log(c / closes[i]));
+    if (returns.length < 20) return null;
+    const mean = returns.reduce((s, x) => s + x, 0) / returns.length;
+    const sd = Math.sqrt(returns.reduce((s, x) => s + (x - mean) ** 2, 0) / returns.length);
+    // Return daily vol % (not annualized)
+    return +(sd * 100).toFixed(2);
+  };
+
+  const macroData = {
+    fetchedAt: new Date().toISOString(),
+    items: [],       // strip items
+    benchmarks: [],  // sector vol benchmarks
+  };
   // Store macro candles in memory so each ticker can compute correlations
   const macroCandles = {};
   for (const m of MACRO_TICKERS) {
@@ -885,15 +938,22 @@ async function main() {
       const monthStart = candles[Math.max(0, candles.length - 22)];
       const dayChange = ((last.close - prev.close) / prev.close) * 100;
       const monthChange = ((last.close - monthStart.close) / monthStart.close) * 100;
-      macroData.items.push({
+      const dailyVol = computeRealizedVol(candles);
+      const entry = {
         symbol: m.symbol,
         name: m.name,
         explain: m.explain,
         value: last.close,
         dayChange: +dayChange.toFixed(2),
         monthChange: +monthChange.toFixed(2),
-      });
-      console.log(`  ✓ ${m.symbol}  ${last.close.toFixed(2)}  ${dayChange >= 0 ? "+" : ""}${dayChange.toFixed(2)}%`);
+        dailyVol,
+        category: m.category,
+        vol_label: m.vol_label,
+        dalio: m.dalio,
+      };
+      if (m.strip) macroData.items.push(entry);
+      if (m.category) macroData.benchmarks.push(entry);
+      console.log(`  ✓ ${m.symbol}  ${last.close.toFixed(2)}  ${dayChange >= 0 ? "+" : ""}${dayChange.toFixed(2)}%  vol:${dailyVol != null ? dailyVol + "%" : "—"}`);
     } catch (e) {
       console.warn(`  ✗ ${m.symbol} failed: ${e.message}`);
     }
