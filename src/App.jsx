@@ -620,7 +620,7 @@ export default function App() {
         )}
 
         <main style={{ padding: isMobile ? 12 : 16, minWidth: 0 }}>
-          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "flex-end", justifyContent: "space-between", gap: isMobile ? 8 : 0, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid #e6e3db" }}>
+          <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "flex-end", justifyContent: "space-between", gap: isMobile ? 8 : 0, marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid #e6e3db", position: "sticky", top: isMobile ? 50 : 53, background: "#fafaf7", zIndex: 30, paddingTop: 12, marginTop: -12 }}>
             <div>
               <div style={{ display: "flex", alignItems: "baseline", gap: isMobile ? 8 : 12, flexWrap: "wrap" }}>
                 <span className="serif" style={{ fontSize: isMobile ? 24 : 32, fontWeight: 600, letterSpacing: "-0.02em" }}>{data.symbol}</span>
@@ -628,6 +628,9 @@ export default function App() {
                 {!isMobile && data.sector && <span className="pill" style={{ background: "#f5f3ed", color: "#5a6573" }}>{data.sector}</span>}
                 {data.isAdHoc && <span className="pill" style={{ background: "#fff8e1", color: "#8b6914" }}>Ad-hoc</span>}
                 {holdings.find((h) => h.symbol === data.symbol) && <span className="pill" style={{ background: "#0a8554", color: "#fff" }}>Holding</span>}
+                {data.summary && (
+                  <span className="pill" style={{ background: data.summary.stanceColor === "positive" ? "#0a8554" : data.summary.stanceColor === "negative" ? "#c4314b" : "#5a6573", color: "#fff" }}>{data.summary.stance}</span>
+                )}
               </div>
               <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 4, letterSpacing: "0.1em" }}>
                 {live.status === "live" ? "● LIVE" : live.status === "closed" ? "AFTER HOURS" : "USD · DAILY"}
@@ -641,14 +644,6 @@ export default function App() {
               </div>
             </div>
           </div>
-
-          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} isMobile={isMobile} />}
-
-          {data.catalysts && <CatalystPanel catalysts={data.catalysts} symbol={data.symbol} isMobile={isMobile} />}
-
-          {a && a.targetMean && (
-            <AnalystInsightsPanel data={data} a={a} c={c} currentPrice={displayQuote.current} isMobile={isMobile} />
-          )}
 
           {enriched && (
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
@@ -765,8 +760,24 @@ export default function App() {
             )}
           </div>
 
+          {/* === REORDERED: Risk Flags directly under chart (warn first) === */}
+          <RiskFlagsPanel data={data} ly={ly} f={f} op={op} displayQuote={displayQuote} isMobile={isMobile} />
+
+          {/* === Summary as collapsible (since stance is now in sticky header) === */}
+          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} isMobile={isMobile} collapsible />}
+
+          {/* === Catalysts: what's coming up === */}
+          {data.catalysts && <CatalystPanel catalysts={data.catalysts} symbol={data.symbol} isMobile={isMobile} />}
+
+          {/* === Options flow (positioning) === */}
           {op && <OptionsFlowPanel op={op} isMobile={isMobile} />}
 
+          {/* === Analyst targets === */}
+          {a && a.targetMean && (
+            <AnalystInsightsPanel data={data} a={a} c={c} currentPrice={displayQuote.current} isMobile={isMobile} />
+          )}
+
+          {/* === Long-term lens: Lynch fundamentals === */}
           {ly && <LynchPanel ly={ly} f={f} isMobile={isMobile} />}
 
           {enriched && (
@@ -807,6 +818,10 @@ export default function App() {
           )}
 
           {sm && <SimonsPanel sm={sm} isMobile={isMobile} />}
+
+          {data.correlations && Object.keys(data.correlations).length > 0 && (
+            <CorrelationsPanel correlations={data.correlations} symbol={data.symbol} isMobile={isMobile} />
+          )}
 
           {peerRows.length > 1 && !data.isAdHoc && (
             <div className="panel" style={{ marginBottom: 16 }}>
@@ -928,83 +943,8 @@ export default function App() {
             </div>
           </div>
 
-          {(() => {
-            // Build risk flags from the data
-            const flags = [];
-            // Insider activity
-            if (ly && ly.insiderSells > 0 && (ly.insiderBuys ?? 0) === 0 && (ly.netInsiderActivity ?? 0) < -100e6) {
-              flags.push({
-                level: "yellow",
-                title: "Heavy insider selling, zero insider buying",
-                body: `Insiders sold $${formatMcap(Math.abs(ly.netInsiderActivity))} in the last 6 months across ${ly.insiderSells} transactions with no recorded purchases. Could be normal diversification, but worth noting.`,
-              });
-            }
-            // China revenue concentration
-            const chinaExposed = ["NVDA", "AMD", "TSM", "INTC", "AAPL", "QCOM", "AVGO", "ASML", "MU", "MRVL"];
-            if (chinaExposed.includes(data.symbol)) {
-              flags.push({
-                level: "yellow",
-                title: "Significant China / export-control exposure",
-                body: `${data.symbol} has material revenue tied to China or is affected by US chip export rules. Earnings can swing on policy changes outside the company's control.`,
-              });
-            }
-            // P/C ratio extreme
-            if (op && op.pcrVolume != null) {
-              if (op.pcrVolume < 0.3) flags.push({
-                level: "yellow",
-                title: "Options crowd extremely bullish (contrarian warning)",
-                body: `P/C ratio of ${fmt(op.pcrVolume, 2)} means call volume is over 3x put volume. When sentiment is this lopsided, short-term local tops sometimes follow.`,
-              });
-              else if (op.pcrVolume > 2.0) flags.push({
-                level: "yellow",
-                title: "Options crowd extremely bearish (contrarian warning)",
-                body: `P/C ratio of ${fmt(op.pcrVolume, 2)} means put volume is over 2x call volume. When everyone is hedged, the worst may already be priced in.`,
-              });
-            }
-            // High debt relative to equity
-            if (f.debtEq != null && f.debtEq > 2) flags.push({
-              level: "red",
-              title: "High leverage",
-              body: `Debt/Equity of ${fmt(f.debtEq, 2)} is well above the typical 0.5-1.0 range. Higher financial risk if business conditions deteriorate.`,
-            });
-            // Earnings yield below bond yield (rough threshold ~4% for 10Y)
-            if (f.earningsYield != null && f.earningsYield < 4) flags.push({
-              level: "yellow",
-              title: "Earnings yield below bond yield",
-              body: `${data.symbol}'s earnings yield is ${fmt(f.earningsYield, 1)}% vs ~4.4% 10-year Treasury. You're paying a premium for growth — works if growth continues, expensive if it slows.`,
-            });
-            // Stock near 52-week high
-            if (f.week52High && displayQuote.current && (displayQuote.current / f.week52High) > 0.97) flags.push({
-              level: "blue",
-              title: "Trading near 52-week high",
-              body: `Price is ${fmt((displayQuote.current / f.week52High) * 100, 0)}% of the 52-week high (${fmt(f.week52High)}). Limited room to run unless it breaks out.`,
-            });
-
-            if (flags.length === 0) return null;
-            const colorMap = { red: "#c4314b", yellow: "#d4a017", blue: "#7ba2cc" };
-
-            return (
-              <div className="panel" style={{ marginTop: 16 }}>
-                <div className="panel-head">
-                  <span className="panel-title">Risk Flags · Things Worth Knowing</span>
-                  <AlertCircle size={13} color="#d4a017" />
-                </div>
-                <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-                  {flags.map((flag, i) => (
-                    <div key={i} style={{ padding: "8px 10px", background: "#fff", borderLeft: `3px solid ${colorMap[flag.level]}`, borderRadius: 2 }}>
-                      <div style={{ fontWeight: 600, fontSize: 11, color: "#1a1f2c", marginBottom: 3 }}>
-                        {flag.level === "red" ? "🔴" : flag.level === "yellow" ? "⚠️" : "🔵"} {flag.title}
-                      </div>
-                      <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5 }}>{flag.body}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
           {enriched && (
-            <div className="panel" style={{ marginTop: 16, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, background: "#1a1f2c", color: "#fff", borderColor: "#1a1f2c" }}>
+            <div className="panel" style={{ marginTop: 16, padding: "12px 16px", display: "flex", alignItems: "center", gap: 16, background: "#1a1f2c", color: "#fff", borderColor: "#1a1f2c", position: "sticky", bottom: 0, zIndex: 30 }}>
               <AlertCircle size={16} color="#d4a017" />
               <div style={{ flex: 1, fontSize: isMobile ? 11 : 12, lineHeight: 1.6 }}>
                 <span style={{ color: "#d4a017", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", fontSize: 10 }}>Composite · </span>
@@ -1049,7 +989,8 @@ function MacroStrip({ macro, isMobile }) {
 // ============================================================
 // AI SUMMARY PANEL — the deterministic "second opinion"
 // ============================================================
-function SummaryPanel({ summary, symbol, isMobile }) {
+function SummaryPanel({ summary, symbol, isMobile, collapsible }) {
+  const [expanded, setExpanded] = useState(!collapsible);
   if (!summary) return null;
   const stanceColors = {
     positive: { bg: "#0a8554", fg: "#fff" },
@@ -1059,36 +1000,126 @@ function SummaryPanel({ summary, symbol, isMobile }) {
   const sc = stanceColors[summary.stanceColor] || stanceColors.neutral;
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="panel-head">
-        <span className="panel-title">Dashboard Summary · {symbol}</span>
+      <div className="panel-head" style={collapsible ? { cursor: "pointer", userSelect: "none" } : null} onClick={collapsible ? () => setExpanded(!expanded) : undefined}>
+        <span className="panel-title">
+          {collapsible && <span style={{ marginRight: 6, fontSize: 10, color: "#8a93a3" }}>{expanded ? "▼" : "▶"}</span>}
+          Dashboard Summary · {symbol}
+        </span>
         <span className="pill" style={{ background: sc.bg, color: sc.fg }}>{summary.stance}</span>
       </div>
-      <div style={{ padding: "12px 14px", lineHeight: 1.6 }}>
-        <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 12 }}>{summary.paragraph}</div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-          {summary.positives?.length > 0 && (
-            <div style={{ padding: "10px 12px", background: "#f0f7f1", borderLeft: "3px solid #0a8554", borderRadius: 2 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#0a8554", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>What's working</div>
-              {summary.positives.map((p, i) => (
-                <div key={i} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3 }}>✓ {p}</div>
-              ))}
-            </div>
-          )}
-          {(summary.negatives?.length > 0 || summary.flags?.length > 0) && (
-            <div style={{ padding: "10px 12px", background: "#fdf3f3", borderLeft: "3px solid #c4314b", borderRadius: 2 }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: "#c4314b", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>Watch out for</div>
-              {summary.negatives?.map((n, i) => (
-                <div key={i} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3 }}>· {n}</div>
-              ))}
-              {summary.flags?.map((f, i) => (
-                <div key={`f${i}`} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3, fontWeight: 600 }}>⚠ {f}</div>
-              ))}
-            </div>
-          )}
+      {!expanded && (
+        <div style={{ padding: "10px 14px", fontSize: 12, color: "#1a1f2c", lineHeight: 1.5 }}>
+          {summary.paragraph} <span style={{ color: "#8a93a3", fontSize: 11 }}>(click to expand)</span>
         </div>
-        <div style={{ marginTop: 10, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
-          <em>This summary is rule-based, computed from dashboard data — not AI commentary. It synthesizes the layers below for a quick read. Always do your own work before any trade.</em>
+      )}
+      {expanded && (
+        <div style={{ padding: "12px 14px", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 12 }}>{summary.paragraph}</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+            {summary.positives?.length > 0 && (
+              <div style={{ padding: "10px 12px", background: "#f0f7f1", borderLeft: "3px solid #0a8554", borderRadius: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "#0a8554", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>What's working</div>
+                {summary.positives.map((p, i) => (
+                  <div key={i} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3 }}>✓ {p}</div>
+                ))}
+              </div>
+            )}
+            {(summary.negatives?.length > 0 || summary.flags?.length > 0) && (
+              <div style={{ padding: "10px 12px", background: "#fdf3f3", borderLeft: "3px solid #c4314b", borderRadius: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "#c4314b", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>Watch out for</div>
+                {summary.negatives?.map((n, i) => (
+                  <div key={i} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3 }}>· {n}</div>
+                ))}
+                {summary.flags?.map((f, i) => (
+                  <div key={`f${i}`} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3, fontWeight: 600 }}>⚠ {f}</div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop: 10, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
+            <em>This summary is rule-based, computed from dashboard data — not AI commentary. It synthesizes the layers below for a quick read. Always do your own work before any trade.</em>
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// RISK FLAGS PANEL — extracted as component so it can sit near top
+// ============================================================
+function RiskFlagsPanel({ data, ly, f, op, displayQuote, isMobile }) {
+  const flags = [];
+  if (ly && ly.insiderSells > 0 && (ly.insiderBuys ?? 0) === 0 && (ly.netInsiderActivity ?? 0) < -100e6) {
+    flags.push({
+      level: "yellow",
+      title: "Heavy insider selling, zero insider buying",
+      body: `Insiders sold $${formatMcap(Math.abs(ly.netInsiderActivity))} in the last 6 months across ${ly.insiderSells} transactions with no recorded purchases. Could be normal diversification, but worth noting.`,
+    });
+  }
+  const chinaExposed = ["NVDA", "AMD", "TSM", "INTC", "AAPL", "QCOM", "AVGO", "ASML", "MU", "MRVL"];
+  if (chinaExposed.includes(data.symbol)) {
+    flags.push({
+      level: "yellow",
+      title: "Significant China / export-control exposure",
+      body: `${data.symbol} has material revenue tied to China or is affected by US chip export rules. Earnings can swing on policy changes outside the company's control.`,
+    });
+  }
+  if (op && op.pcrVolume != null) {
+    if (op.pcrVolume < 0.3) flags.push({
+      level: "yellow",
+      title: "Options crowd extremely bullish (contrarian warning)",
+      body: `P/C ratio of ${fmt(op.pcrVolume, 2)} means call volume is over 3x put volume. When sentiment is this lopsided, short-term local tops sometimes follow.`,
+    });
+    else if (op.pcrVolume > 2.0) flags.push({
+      level: "yellow",
+      title: "Options crowd extremely bearish (contrarian warning)",
+      body: `P/C ratio of ${fmt(op.pcrVolume, 2)} means put volume is over 2x call volume. When everyone is hedged, the worst may already be priced in.`,
+    });
+  }
+  if (f.debtEq != null && f.debtEq > 2) flags.push({
+    level: "red",
+    title: "High leverage",
+    body: `Debt/Equity of ${fmt(f.debtEq, 2)} is well above the typical 0.5-1.0 range. Higher financial risk if business conditions deteriorate.`,
+  });
+  if (f.earningsYield != null && f.earningsYield < 4) flags.push({
+    level: "yellow",
+    title: "Earnings yield below bond yield",
+    body: `${data.symbol}'s earnings yield is ${fmt(f.earningsYield, 1)}% vs ~4.4% 10-year Treasury. You're paying a premium for growth — works if growth continues, expensive if it slows.`,
+  });
+  if (f.week52High && displayQuote.current && (displayQuote.current / f.week52High) > 0.97) flags.push({
+    level: "blue",
+    title: "Trading near 52-week high",
+    body: `Price is ${fmt((displayQuote.current / f.week52High) * 100, 0)}% of the 52-week high (${fmt(f.week52High)}). Limited room to run unless it breaks out.`,
+  });
+  if (data.catalysts?.daysToEarnings != null && data.catalysts.daysToEarnings >= 0 && data.catalysts.daysToEarnings <= 14) {
+    flags.push({
+      level: "yellow",
+      title: `Earnings in ${data.catalysts.daysToEarnings} day${data.catalysts.daysToEarnings === 1 ? "" : "s"}`,
+      body: `High-volatility window. Expected move from options is the price range to watch (see Options Flow).`,
+    });
+  }
+
+  if (flags.length === 0) return null;
+  const colorMap = { red: "#c4314b", yellow: "#d4a017", blue: "#7ba2cc" };
+  const counts = { red: 0, yellow: 0, blue: 0 };
+  flags.forEach((fg) => counts[fg.level]++);
+
+  return (
+    <div className="panel" style={{ marginBottom: 16, borderColor: counts.red > 0 ? "#c4314b" : counts.yellow > 0 ? "#d4a017" : "#e6e3db", borderWidth: counts.red > 0 ? 2 : 1 }}>
+      <div className="panel-head">
+        <span className="panel-title">Risk Flags · {flags.length} {flags.length === 1 ? "item" : "items"} worth knowing</span>
+        <AlertCircle size={13} color={counts.red > 0 ? "#c4314b" : "#d4a017"} />
+      </div>
+      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {flags.map((flag, i) => (
+          <div key={i} style={{ padding: "8px 10px", background: "#fff", borderLeft: `3px solid ${colorMap[flag.level]}`, borderRadius: 2 }}>
+            <div style={{ fontWeight: 600, fontSize: 11, color: "#1a1f2c", marginBottom: 3 }}>
+              {flag.level === "red" ? "🔴" : flag.level === "yellow" ? "⚠️" : "🔵"} {flag.title}
+            </div>
+            <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5 }}>{flag.body}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1404,6 +1435,19 @@ function OptionsFlowPanel({ op, isMobile }) {
           </div>
         </div>
 
+        {op.expectedMove && (
+          <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1", borderBottom: "1px solid #efece5", background: "#fffdf4" }}>
+            <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Expected Move (1 standard deviation)</div>
+            <div style={{ fontSize: 13, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 8 }}>
+              The options market is pricing a <strong>±${fmt(op.expectedMove.dollar, 2)} (~{fmt(op.expectedMove.pct, 1)}%)</strong> move over the next <strong>{op.expectedMove.days} day{op.expectedMove.days === 1 ? "" : "s"}</strong>.
+              <br />
+              <span className="mono" style={{ fontSize: 12 }}>
+                Expected range: <span style={{ color: "#c4314b" }}>${fmt(op.expectedMove.low, 2)}</span> — <span style={{ color: "#0a8554" }}>${fmt(op.expectedMove.high, 2)}</span>
+              </span>
+            </div>
+            <ExplainBox text={`This is what the options market is "betting" on. The stock has roughly a 68% chance of finishing within this range and a 32% chance of moving more. Around earnings or big events, expected moves widen. If the stock moves more than this, you're outside what was priced in.`} /></div>
+        )}
+
         {op.skewCurve?.length >= 3 && (
           <div style={{ padding: "14px 16px", gridColumn: isMobile ? "1" : "1 / -1", borderBottom: "1px solid #efece5" }}>
             <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Volatility Smile (IV across strikes)</div>
@@ -1579,8 +1623,60 @@ function LynchPanel({ ly, f, isMobile }) {
           <StatRow label="Insider Buys (6M)" value={<span className="mono" style={{ color: ly.insiderBuys > ly.insiderSells ? "#0a8554" : "#1a1f2c" }}>{ly.insiderBuys ?? 0}</span>} />
           <StatRow label="Insider Sells (6M)" value={<span className="mono">{ly.insiderSells ?? 0}</span>} />
           <StatRow label="Net Insider $" value={<span className="mono" style={{ color: insiderColor, fontWeight: 600 }}>{ly.netInsiderActivity ? (ly.netInsiderActivity > 0 ? "+" : "") + formatMcap(Math.abs(ly.netInsiderActivity)) : "—"}</span>} />
+          <StatRow label="SBC % of Revenue" value={<span className="mono" style={{ color: ly.sbcPctRevenue == null ? "#1a1f2c" : ly.sbcPctRevenue > 10 ? "#c4314b" : ly.sbcPctRevenue > 5 ? "#d4a017" : "#0a8554" }} title="Stock-based compensation as % of revenue. <5% = lean. 5-10% = typical tech. >10% = high dilution.">{ly.sbcPctRevenue != null ? fmt(ly.sbcPctRevenue, 1) + "%" : "—"}</span>} />
           <StatRow label="Short Ratio" value={<span className="mono" style={{ color: ly.shortRatio > 5 ? "#c4314b" : "#1a1f2c" }}>{fmt(ly.shortRatio, 2)}</span>} />
           <StatRow label="Short % Float" value={<span className="mono" style={{ color: ly.shortPctFloat > 0.1 ? "#c4314b" : "#1a1f2c" }}>{ly.shortPctFloat != null ? fmt(ly.shortPctFloat * 100, 2) + "%" : "—"}</span>} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// SIMONS PANEL
+// ============================================================
+// ============================================================
+// CORRELATIONS PANEL — what's really driving this stock day-to-day
+// ============================================================
+function CorrelationsPanel({ correlations, symbol, isMobile }) {
+  const labelMap = {
+    "^TNX": "10Y Yield", "^VIX": "VIX", "DX-Y.NYB": "Dollar", "SPY": "S&P 500",
+    "QQQ": "Nasdaq-100", "SOXX": "Semis", "TLT": "Bonds (20Y)",
+  };
+  const items = Object.entries(correlations || {}).map(([k, v]) => ({ key: k, label: labelMap[k] || k, value: v }));
+  items.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  if (!items.length) return null;
+  const colorFor = (v) => v > 0.7 ? "#0a8554" : v > 0.3 ? "#86b09c" : v > -0.3 ? "#5a6573" : v > -0.7 ? "#e89aa6" : "#c4314b";
+  const interpret = (v) => v > 0.7 ? "strongly tied" : v > 0.3 ? "moves with" : v > -0.3 ? "uncorrelated" : v > -0.7 ? "inversely tied" : "strongly inverse";
+  const top = items[0];
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Cross-Asset Correlations · What Drives This Stock</span>
+        <span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>30-day</span>
+      </div>
+      <div style={{ padding: "12px 14px" }}>
+        <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 12, lineHeight: 1.5 }}>
+          Over the last 30 days, <strong>{symbol}</strong> has been most {interpret(top.value).toLowerCase()} with <strong>{top.label}</strong> ({top.value > 0 ? "+" : ""}{top.value.toFixed(2)}). This is what really moves the stock day-to-day.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 6 }}>
+          {items.map((item) => {
+            const pct = Math.abs(item.value) * 100;
+            const isNeg = item.value < 0;
+            return (
+              <div key={item.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                <span style={{ width: 100, fontSize: 11, color: "#5a6573", flexShrink: 0 }}>{item.label}</span>
+                <div style={{ flex: 1, height: 14, position: "relative", background: "#efece5", borderRadius: 2 }}>
+                  <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, background: "#5a6573" }} />
+                  <div style={{ position: "absolute", left: isNeg ? `${50 - pct/2}%` : "50%", width: `${pct/2}%`, top: 1, bottom: 1, background: colorFor(item.value), borderRadius: 2 }} />
+                </div>
+                <span className="mono" style={{ width: 50, textAlign: "right", fontSize: 11, fontWeight: 600, color: colorFor(item.value), flexShrink: 0 }}>{item.value > 0 ? "+" : ""}{item.value.toFixed(2)}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 10, padding: 8, background: "#fff8e1", borderLeft: "3px solid #d4a017", borderRadius: 2, fontSize: 11, color: "#5a6573", lineHeight: 1.5 }}>
+          +1.0 = moves perfectly with that asset. -1.0 = moves perfectly opposite. ±0.3 to 0.7 = meaningful linkage. Negative correlation with rates (10Y, Bonds) is typical for growth stocks: when rates rise, growth falls.
         </div>
       </div>
     </div>
@@ -1612,6 +1708,7 @@ function SimonsPanel({ sm, isMobile }) {
           <div className="panel-title" style={{ fontSize: 10, marginBottom: 8 }}>Risk & Money Flow</div>
           <StatRow label="ATR(14)" value={<span className="mono" title="Avg True Range. Use for vol-based position sizing.">{fmt(sm.atr14, 2)}</span>} />
           <StatRow label="Sharpe (1Y)" value={<span className="mono" style={{ color: sm.sharpe1Y > 1 ? "#0a8554" : sm.sharpe1Y < 0 ? "#c4314b" : "#1a1f2c" }}>{fmt(sm.sharpe1Y, 2)}</span>} />
+          <StatRow label="Sortino (1Y)" value={<span className="mono" style={{ color: sm.sortino1Y > 1.5 ? "#0a8554" : sm.sortino1Y < 0 ? "#c4314b" : "#1a1f2c" }} title="Like Sharpe but only counts downside volatility. Better for upside-heavy stocks. >1.5 is good.">{fmt(sm.sortino1Y, 2)}</span>} />
           <StatRow label="Max Drawdown (1Y)" value={<span className="mono" style={{ color: "#c4314b" }}>{fmt(sm.maxDrawdown, 2)}%</span>} />
           <StatRow label="OBV Trend" value={<span className="mono" style={{ color: sm.obvTrend === "Accumulation" ? "#0a8554" : sm.obvTrend === "Distribution" ? "#c4314b" : "#1a1f2c" }}>{sm.obvTrend}</span>} />
         </div>
