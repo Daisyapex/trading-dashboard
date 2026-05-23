@@ -483,6 +483,7 @@ export default function App() {
   const [priceScaleWidth, setPriceScaleWidth] = useState(null);
   const [macro, setMacro] = useState(null);
   const [showBehavior, setShowBehavior] = useState(false);
+  const [showRisk, setShowRisk] = useState(false);
   const isMobile = useIsMobile();
   const live = useLiveQuote(ticker);
 
@@ -611,8 +612,11 @@ export default function App() {
           <span className="serif" style={{ fontSize: isMobile ? 16 : 20, fontWeight: 600, letterSpacing: "-0.01em" }}>TERMINAL</span>
           {!isMobile && <span className="mono" style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.15em", marginLeft: 4 }}>EQUITY · QUANT · DESK</span>}
         </div>
-        <div className="mono" style={{ fontSize: isMobile ? 9 : 10, color: "#8a93a3", display: "flex", gap: isMobile ? 8 : 16, alignItems: "center" }}>
-          <button onClick={() => setShowBehavior(!showBehavior)} style={{ background: showBehavior ? "#d4a017" : "transparent", color: showBehavior ? "#1a1f2c" : "#fff", border: "1px solid #d4a017", padding: "3px 8px", borderRadius: 2, cursor: "pointer", fontSize: isMobile ? 9 : 10, fontWeight: 600, letterSpacing: "0.1em" }}>
+        <div className="mono" style={{ fontSize: isMobile ? 9 : 10, color: "#8a93a3", display: "flex", gap: isMobile ? 8 : 12, alignItems: "center" }}>
+          <button onClick={() => { setShowRisk(!showRisk); setShowBehavior(false); }} style={{ background: showRisk ? "#c4314b" : "transparent", color: showRisk ? "#fff" : "#fff", border: "1px solid #c4314b", padding: "3px 8px", borderRadius: 2, cursor: "pointer", fontSize: isMobile ? 9 : 10, fontWeight: 600, letterSpacing: "0.1em" }}>
+            {showRisk ? "← BACK" : "RISK"}
+          </button>
+          <button onClick={() => { setShowBehavior(!showBehavior); setShowRisk(false); }} style={{ background: showBehavior ? "#d4a017" : "transparent", color: showBehavior ? "#1a1f2c" : "#fff", border: "1px solid #d4a017", padding: "3px 8px", borderRadius: 2, cursor: "pointer", fontSize: isMobile ? 9 : 10, fontWeight: 600, letterSpacing: "0.1em" }}>
             {showBehavior ? "← BACK" : "MY TRADES"}
           </button>
           <LiveStatus status={live.status} lastUpdate={live.lastUpdate} compact={isMobile} />
@@ -627,6 +631,8 @@ export default function App() {
 
       {showBehavior ? (
         <BehaviorTracker isMobile={isMobile} />
+      ) : showRisk ? (
+        <RiskHelper isMobile={isMobile} />
       ) : (
       <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: isMobile ? undefined : "240px 1fr", position: "relative" }}>
         {sidebarVisible && (
@@ -1373,6 +1379,345 @@ function BehaviorTracker({ isMobile }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// RISK HELPER — Portfolio risk calculator using VaR
+// ============================================================
+function RiskHelper({ isMobile }) {
+  const [positions, setPositions] = useState([]); // {symbol, shares, costBasis, currentPrice, var95, var955day, cvar95, maxDD}
+  const [form, setForm] = useState({ symbol: "", shares: "", costBasis: "" });
+  const [accountSize, setAccountSize] = useState("");
+  const [riskPct, setRiskPct] = useState(1); // % of account willing to lose per trade
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Load saved positions from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("trading-dashboard-portfolio");
+      if (stored) setPositions(JSON.parse(stored));
+      const acct = localStorage.getItem("trading-dashboard-account-size");
+      if (acct) setAccountSize(acct);
+      const rpct = localStorage.getItem("trading-dashboard-risk-pct");
+      if (rpct) setRiskPct(parseFloat(rpct));
+    } catch (e) {}
+  }, []);
+
+  const savePositions = (next) => {
+    setPositions(next);
+    try { localStorage.setItem("trading-dashboard-portfolio", JSON.stringify(next)); } catch (e) {}
+  };
+  const saveAccountSize = (v) => {
+    setAccountSize(v);
+    try { localStorage.setItem("trading-dashboard-account-size", v); } catch (e) {}
+  };
+  const saveRiskPct = (v) => {
+    setRiskPct(v);
+    try { localStorage.setItem("trading-dashboard-risk-pct", String(v)); } catch (e) {}
+  };
+
+  // Fetch position risk data from the per-ticker JSON files
+  const fetchRiskFor = async (symbol) => {
+    try {
+      const res = await fetch(`${BASE}data/${symbol}.json?v=${Date.now()}`);
+      if (!res.ok) throw new Error(`No data for ${symbol}`);
+      const data = await res.json();
+      return {
+        currentPrice: data.quote?.current ?? null,
+        var95: data.simons?.var95daily ?? null,
+        var955day: data.simons?.var955day ?? null,
+        cvar95: data.simons?.cvar95daily ?? null,
+        maxDD: data.simons?.maxDrawdown ?? null,
+        atr14: data.simons?.atr14 ?? null,
+      };
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const addPosition = async () => {
+    if (!form.symbol || !form.shares) return;
+    const sym = form.symbol.toUpperCase();
+    setLoading(true);
+    setError(null);
+    const risk = await fetchRiskFor(sym);
+    setLoading(false);
+    if (!risk) { setError(`Could not find risk data for ${sym}. Make sure it's a ticker in your watchlist.`); return; }
+    const next = [...positions, {
+      symbol: sym,
+      shares: parseFloat(form.shares),
+      costBasis: form.costBasis ? parseFloat(form.costBasis) : null,
+      ...risk,
+      addedAt: new Date().toISOString().slice(0, 10),
+    }];
+    savePositions(next);
+    setForm({ symbol: "", shares: "", costBasis: "" });
+  };
+  const removePosition = (idx) => { if (confirm("Remove this position?")) savePositions(positions.filter((_, i) => i !== idx)); };
+
+  // Refresh all positions (refetch latest prices and VaR)
+  const refreshAll = async () => {
+    setLoading(true);
+    const next = [];
+    for (const p of positions) {
+      const risk = await fetchRiskFor(p.symbol);
+      if (risk) next.push({ ...p, ...risk });
+      else next.push(p);
+    }
+    savePositions(next);
+    setLoading(false);
+  };
+
+  // ============ AGGREGATE PORTFOLIO RISK ============
+  // Position value = shares × currentPrice
+  // Dollar VaR per position = positionValue × (var95 / 100)
+  // Portfolio VaR (simple sum) = sum of dollar VaRs. Note: this is the worst case (assumes
+  // all positions move together). True portfolio VaR factors in correlations, but for
+  // a tech-heavy retail portfolio that's close enough.
+  const enriched = positions.map((p) => {
+    const value = (p.shares && p.currentPrice) ? p.shares * p.currentPrice : 0;
+    const dollarVar95 = (p.var95 != null && value) ? value * (p.var95 / 100) : 0;
+    const dollarVar5d = (p.var955day != null && value) ? value * (p.var955day / 100) : 0;
+    const dollarCVar = (p.cvar95 != null && value) ? value * (p.cvar95 / 100) : 0;
+    const dollarMaxDD = (p.maxDD != null && value) ? value * (Math.abs(p.maxDD) / 100) : 0;
+    const unrealizedGain = (p.costBasis && p.currentPrice) ? (p.currentPrice - p.costBasis) * p.shares : null;
+    const unrealizedPct = (p.costBasis && p.currentPrice) ? ((p.currentPrice - p.costBasis) / p.costBasis) * 100 : null;
+    return { ...p, value, dollarVar95, dollarVar5d, dollarCVar, dollarMaxDD, unrealizedGain, unrealizedPct };
+  });
+  const totalValue = enriched.reduce((s, p) => s + p.value, 0);
+  const totalVar95 = enriched.reduce((s, p) => s + p.dollarVar95, 0);
+  const totalVar5d = enriched.reduce((s, p) => s + p.dollarVar5d, 0);
+  const totalCVar = enriched.reduce((s, p) => s + p.dollarCVar, 0);
+  const totalDD = enriched.reduce((s, p) => s + p.dollarMaxDD, 0);
+  const totalGain = enriched.reduce((s, p) => s + (p.unrealizedGain ?? 0), 0);
+  const acctNum = parseFloat(accountSize) || 0;
+  const cashRemaining = acctNum - totalValue;
+  const portfolioVarPct = acctNum > 0 ? (totalVar95 / acctNum) * 100 : null;
+
+  // ============ POSITION SIZING ============
+  // Risk per trade = riskPct% of account. Suggested max position uses 95% VaR.
+  const riskBudgetPerTrade = (acctNum * riskPct) / 100;
+
+  return (
+    <div style={{ padding: isMobile ? 12 : 20, maxWidth: 1200, margin: "0 auto" }}>
+      <h2 className="serif" style={{ fontSize: isMobile ? 22 : 28, fontWeight: 600, letterSpacing: "-0.02em", margin: "0 0 4px" }}>Portfolio Risk Calculator</h2>
+      <p style={{ fontSize: 13, color: "#5a6573", margin: "0 0 20px", lineHeight: 1.5 }}>
+        Enter your positions to see how much you could lose on a bad day or a bad month. Uses historical 1-year volatility for each stock to estimate Value-at-Risk.
+      </p>
+
+      {/* Account size + risk tolerance */}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-head"><span className="panel-title">Your Setup</span></div>
+        <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Total account size ($)</div>
+            <input type="number" value={accountSize} onChange={(e) => saveAccountSize(e.target.value)} placeholder="10000" style={{ padding: "8px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 14, fontFamily: "monospace", width: "100%" }} />
+            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>Including cash + holdings. Saved to your browser.</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Risk per trade (% of account)</div>
+            <input type="number" step="0.5" value={riskPct} onChange={(e) => saveRiskPct(parseFloat(e.target.value) || 1)} style={{ padding: "8px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 14, fontFamily: "monospace", width: "100%" }} />
+            <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>Standard advice: 1-2%. Aggressive: 3-5%. Suicidal: 10%+.</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Portfolio summary */}
+      {positions.length > 0 && (
+        <div className="panel" style={{ marginBottom: 16, background: totalVar95 > acctNum * 0.05 ? "#fdf3f3" : "#fff" }}>
+          <div className="panel-head">
+            <span className="panel-title">Portfolio Risk Summary</span>
+            <button onClick={refreshAll} disabled={loading} style={{ background: "transparent", border: "1px solid #d6d2c7", padding: "3px 8px", borderRadius: 2, fontSize: 10, cursor: "pointer" }}>{loading ? "Refreshing..." : "Refresh prices"}</button>
+          </div>
+          <div style={{ padding: "14px 16px", display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Portfolio value</div>
+              <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600 }}>${formatMcap(totalValue)}</div>
+              {acctNum > 0 && <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 2 }}>{((totalValue / acctNum) * 100).toFixed(0)}% invested · ${formatMcap(Math.max(0, cashRemaining))} cash</div>}
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Unrealized P/L</div>
+              <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600, color: totalGain >= 0 ? "#0a8554" : "#c4314b" }}>{totalGain >= 0 ? "+" : ""}${formatMcap(Math.abs(totalGain))}</div>
+            </div>
+            <div title="On a typical bad day (worst 5% of days historically), you could lose this much.">
+              <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Bad day loss (95% VaR)</div>
+              <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600, color: "#c4314b" }}>-${formatMcap(totalVar95)}</div>
+              {portfolioVarPct != null && <div style={{ fontSize: 10, color: portfolioVarPct > 5 ? "#c4314b" : "#8a93a3", marginTop: 2 }}>{portfolioVarPct.toFixed(1)}% of account</div>}
+            </div>
+            <div title="On the worst 5% of days, the AVERAGE loss is this. Tail risk.">
+              <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Tail loss (CVaR)</div>
+              <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600, color: "#c4314b" }}>-${formatMcap(totalCVar)}</div>
+            </div>
+          </div>
+          <div style={{ padding: "0 16px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+            <div style={{ padding: "10px 12px", background: "#fff8e1", borderLeft: "3px solid #d4a017", borderRadius: 2 }}>
+              <div style={{ fontSize: 10, color: "#8b6914", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>1-week bad case</div>
+              <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: "#1a1f2c" }}>-${formatMcap(totalVar5d)}</div>
+              <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>What you could lose over 5 trading days in a 95th-percentile bad week.</div>
+            </div>
+            <div style={{ padding: "10px 12px", background: "#fdf3f3", borderLeft: "3px solid #c4314b", borderRadius: 2 }}>
+              <div style={{ fontSize: 10, color: "#c4314b", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>Historical worst case</div>
+              <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: "#1a1f2c" }}>-${formatMcap(totalDD)}</div>
+              <div style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>If each stock matches its 1-year max drawdown (peak-to-trough). This has already happened once.</div>
+            </div>
+          </div>
+          {portfolioVarPct != null && portfolioVarPct > 5 && (
+            <div style={{ padding: "10px 14px", background: "#fdf3f3", borderTop: "1px solid #efece5", fontSize: 11, color: "#1a1f2c", lineHeight: 1.5 }}>
+              ⚠️ Your 1-day VaR is over 5% of your account. That's aggressive. A bad week could draw down 15-25%.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Position list */}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-head"><span className="panel-title">Your Positions</span><span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>{positions.length} {positions.length === 1 ? "position" : "positions"}</span></div>
+        {enriched.length === 0 ? (
+          <div style={{ padding: 20, textAlign: "center", color: "#8a93a3", fontSize: 12 }}>No positions yet. Add your holdings below to see risk.</div>
+        ) : (
+          <div style={{ padding: "8px 0", overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 700 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                  <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Shares</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Price</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Value</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>P/L</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Bad day</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Max DD risk</th>
+                  <th style={{ padding: "6px 10px", textAlign: "center", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {enriched.map((p, i) => (
+                  <tr key={i} style={{ borderBottom: "1px dotted #efece5" }}>
+                    <td className="mono" style={{ padding: "6px 10px", fontWeight: 600 }}>{p.symbol}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>{p.shares}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>${fmt(p.currentPrice, 2)}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 500 }}>${formatMcap(p.value)}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: p.unrealizedPct == null ? "#8a93a3" : p.unrealizedPct > 0 ? "#0a8554" : "#c4314b" }}>
+                      {p.unrealizedPct != null ? (p.unrealizedPct >= 0 ? "+" : "") + p.unrealizedPct.toFixed(1) + "%" : "—"}
+                    </td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(p.dollarVar95)}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(p.dollarMaxDD)}</td>
+                    <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                      <button onClick={() => removePosition(i)} style={{ background: "transparent", border: "none", color: "#c4314b", fontSize: 14, cursor: "pointer" }}>×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Add position form */}
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-head"><span className="panel-title">Add Position</span></div>
+        <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "auto auto auto auto", gap: 8, alignItems: "end" }}>
+          <div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Symbol</div>
+            <input value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="NVDA" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", textTransform: "uppercase", width: isMobile ? "100%" : 100 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Shares</div>
+            <input type="number" value={form.shares} onChange={(e) => setForm({ ...form, shares: e.target.value })} placeholder="10" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 80 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Cost basis ($/share, optional)</div>
+            <input type="number" step="0.01" value={form.costBasis} onChange={(e) => setForm({ ...form, costBasis: e.target.value })} placeholder="200.50" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 120 }} />
+          </div>
+          <button onClick={addPosition} disabled={loading} style={{ padding: "8px 16px", background: "#1a1f2c", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "+ ADD"}</button>
+        </div>
+        {error && <div style={{ padding: "0 14px 12px", color: "#c4314b", fontSize: 11 }}>{error}</div>}
+      </div>
+
+      {/* Position sizing helper */}
+      {acctNum > 0 && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <div className="panel-head"><span className="panel-title">Position Sizing Helper · For Future Trades</span></div>
+          <div style={{ padding: "12px 14px" }}>
+            <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 12, lineHeight: 1.6 }}>
+              At <strong>{riskPct}% risk per trade</strong> on a <strong>${formatMcap(acctNum)}</strong> account, your budget per trade is <strong style={{ color: "#c4314b" }}>${formatMcap(riskBudgetPerTrade)}</strong>.
+              Using each stock's 1-day 95% VaR, this is the maximum position size to keep within that budget:
+            </div>
+            <PositionSizingTable accountSize={acctNum} riskBudget={riskBudgetPerTrade} isMobile={isMobile} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ padding: 12, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2, marginTop: 16 }}>
+        <strong>How to read VaR honestly:</strong> "95% one-day VaR is $7" means: on 95% of trading days, your loss will be less than $7. On the worst 5% of days, you could lose more — sometimes a lot more. VaR assumes the future looks like the past 1 year of returns. Black swans (2008, COVID, flash crashes) are NOT captured. Use this for sanity-checking position sizes, not as a guarantee.
+      </div>
+    </div>
+  );
+}
+
+// Position sizing table — pulls VaR from watchlist tickers
+function PositionSizingTable({ accountSize, riskBudget, isMobile }) {
+  const [tickers, setTickers] = useState([]);
+  useEffect(() => {
+    fetch(`${BASE}data/index.json?v=${Date.now()}`)
+      .then((r) => r.json())
+      .then((idx) => {
+        // Get top tickers - holdings first, then a sample of others
+        const holdings = idx.tickers.filter((t) => t.holding);
+        const others = idx.tickers.filter((t) => !t.holding).slice(0, 8);
+        const sample = [...holdings, ...others];
+        // Fetch detail for each
+        return Promise.all(sample.map((t) =>
+          fetch(`${BASE}data/${t.symbol}.json?v=${Date.now()}`).then((r) => r.ok ? r.json() : null).catch(() => null)
+        ));
+      })
+      .then((all) => {
+        const rows = all.filter(Boolean).map((d) => ({
+          symbol: d.symbol,
+          price: d.quote?.current,
+          var95: d.simons?.var95daily,
+          holding: !!d.holding,
+        })).filter((r) => r.var95 != null && r.price);
+        setTickers(rows);
+      })
+      .catch(() => {});
+  }, []);
+
+  if (!tickers.length) return <div style={{ fontSize: 11, color: "#8a93a3" }}>Loading...</div>;
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 500 }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+            <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+            <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Price</th>
+            <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Daily VaR</th>
+            <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Max position $</th>
+            <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Max shares</th>
+            <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>% of acct</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tickers.map((t) => {
+            const maxPositionValue = riskBudget / (t.var95 / 100); // budget / VaR% = position $
+            const maxShares = Math.floor(maxPositionValue / t.price);
+            const pctOfAccount = (maxPositionValue / accountSize) * 100;
+            return (
+              <tr key={t.symbol} style={{ borderBottom: "1px dotted #efece5", background: t.holding ? "#fffdf4" : "transparent" }}>
+                <td className="mono" style={{ padding: "6px 10px", fontWeight: 600 }}>{t.symbol}{t.holding ? " ★" : ""}</td>
+                <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>${fmt(t.price, 2)}</td>
+                <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-{fmt(t.var95, 2)}%</td>
+                <td className="mono" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 500 }}>${formatMcap(maxPositionValue)}</td>
+                <td className="mono" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600 }}>{maxShares}</td>
+                <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: pctOfAccount > 30 ? "#c4314b" : pctOfAccount > 15 ? "#d4a017" : "#0a8554" }}>{pctOfAccount.toFixed(0)}%</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
