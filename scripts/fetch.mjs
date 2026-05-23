@@ -829,10 +829,28 @@ function computeSimonsMetrics(candles) {
     if (day >= 1 && day <= 5) dowReturns[day - 1].push(returns[i - 1]);
   }
   const dowAvg = dowReturns.map((arr) => arr.length ? +(arr.reduce((s, x) => s + x, 0) / arr.length * 100).toFixed(3) : null);
+
+  // Historical VaR & CVaR using actual return distribution (more accurate than parametric for fat tails).
+  // 95% 1-day VaR: the 5th percentile of daily returns. Translated to a positive "loss %" number.
+  // CVaR: average of the returns BELOW that threshold (the average bad-day loss).
+  const sorted = [...returns].sort((a, b) => a - b);
+  const pct = (p) => sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * p)))];
+  const var95daily = sorted.length >= 20 ? -pct(0.05) : null;
+  const var99daily = sorted.length >= 100 ? -pct(0.01) : null;
+  // CVaR = mean of losses worse than VaR threshold
+  const tailSet = sorted.slice(0, Math.max(1, Math.floor(sorted.length * 0.05)));
+  const cvar95daily = tailSet.length ? -(tailSet.reduce((s, x) => s + x, 0) / tailSet.length) : null;
+  // 5-day VaR using sqrt-time scaling (approximation valid for uncorrelated returns)
+  const var955day = var95daily != null ? var95daily * Math.sqrt(5) : null;
+
   return {
     autocorrLag1: autocorr(1), autocorrLag5: autocorr(5), autocorrLag20: autocorr(20),
     atr14: atr, maxDrawdown: +(mdd * 100).toFixed(2),
     sharpe1Y: sharpe, sortino1Y: sortino, obvTrend, dowAvgReturns: dowAvg,
+    var95daily: var95daily != null ? +(var95daily * 100).toFixed(2) : null,
+    var99daily: var99daily != null ? +(var99daily * 100).toFixed(2) : null,
+    cvar95daily: cvar95daily != null ? +(cvar95daily * 100).toFixed(2) : null,
+    var955day: var955day != null ? +(var955day * 100).toFixed(2) : null,
   };
 }
 
