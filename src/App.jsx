@@ -812,22 +812,17 @@ export default function App() {
             )}
           </div>
 
-          {/* === REORDERED: Risk Flags directly under chart (warn first) === */}
-          <RiskFlagsPanel data={data} ly={ly} f={f} op={op} displayQuote={displayQuote} isMobile={isMobile} />
+          {/* === Dashboard Summary first (the executive view) === */}
+          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} data={data} ly={ly} f={f} op={op} a={a} c={c} isMobile={isMobile} />}
 
-          {/* === Summary as collapsible (since stance is now in sticky header) === */}
-          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} collapsible />}
+          {/* === Risk Flags directly after summary === */}
+          <RiskFlagsPanel data={data} ly={ly} f={f} op={op} displayQuote={displayQuote} isMobile={isMobile} />
 
           {/* === Catalysts: what's coming up === */}
           {data.catalysts && <CatalystPanel catalysts={data.catalysts} symbol={data.symbol} isMobile={isMobile} />}
 
           {/* === Options flow (positioning) === */}
           {op && <OptionsFlowPanel op={op} isMobile={isMobile} />}
-
-          {/* === Analyst targets === */}
-          {a && a.targetMean && (
-            <AnalystInsightsPanel data={data} a={a} c={c} currentPrice={displayQuote.current} isMobile={isMobile} />
-          )}
 
           {/* === Long-term lens: Lynch fundamentals === */}
           {ly && <LynchPanel ly={ly} f={f} isMobile={isMobile} />}
@@ -1042,8 +1037,7 @@ function MacroStrip({ macro, isMobile }) {
 // ============================================================
 // AI SUMMARY PANEL — the deterministic "second opinion"
 // ============================================================
-function SummaryPanel({ summary, symbol, data, ly, f, op, isMobile, collapsible }) {
-  const [expanded, setExpanded] = useState(!collapsible);
+function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, isMobile }) {
   if (!summary) return null;
   const stanceColors = {
     positive: { bg: "#0a8554", fg: "#fff" },
@@ -1052,20 +1046,33 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, isMobile, collapsible 
   };
   const sc = stanceColors[summary.stanceColor] || stanceColors.neutral;
 
-  // Extract key numbers for the strip
+  // Extract key numbers from CORRECT data paths
   const cur = data?.quote?.current ?? null;
   const change = data?.quote?.changePct ?? null;
-  const target = data?.consensusTarget ?? data?.targetMean ?? null;
+  const target = a?.targetMean ?? null;
+  const targetHigh = a?.targetHigh ?? null;
+  const targetLow = a?.targetLow ?? null;
+  const numAnalysts = a?.numAnalysts ?? null;
   const upside = (target && cur) ? ((target - cur) / cur) * 100 : null;
   const w52H = data?.quote?.week52High ?? null;
-  const w52L = data?.quote?.week52Low ?? null;
   const pctOfHigh = (w52H && cur) ? (cur / w52H) * 100 : null;
   const pe = f?.pe ?? null;
   const fwdPe = f?.fwdPe ?? null;
   const peg = ly?.pegRatio ?? null;
   const roe = ly?.roe ?? null;
   const revG = ly?.revGrowthPct ?? null;
-  const rating = data?.consensusRating ?? null;
+  const rating = c?.rating ?? null;
+
+  // Analyst rating breakdown (for the mini-bar)
+  const latestRec = a?.monthlyTrend?.[a.monthlyTrend.length - 1];
+  const recCounts = latestRec ? {
+    strongBuy: latestRec.strongBuy || 0,
+    buy: latestRec.buy || 0,
+    hold: latestRec.hold || 0,
+    sell: latestRec.sell || 0,
+    strongSell: latestRec.strongSell || 0,
+  } : null;
+  const totalRecs = recCounts ? Object.values(recCounts).reduce((s, x) => s + x, 0) : 0;
 
   // Compact number cell
   const Num = ({ label, value, sub, color }) => (
@@ -1078,71 +1085,185 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, isMobile, collapsible 
 
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="panel-head" style={collapsible ? { cursor: "pointer", userSelect: "none" } : null} onClick={collapsible ? () => setExpanded(!expanded) : undefined}>
-        <span className="panel-title">
-          {collapsible && <span style={{ marginRight: 6, fontSize: 10, color: "#8a93a3" }}>{expanded ? "▼" : "▶"}</span>}
-          Dashboard Summary · {symbol}
-        </span>
+      <div className="panel-head">
+        <span className="panel-title">Dashboard Summary · {symbol}</span>
         <span className="pill" style={{ background: sc.bg, color: sc.fg }}>{summary.stance}</span>
       </div>
-      {!expanded && (
-        <div style={{ padding: "10px 14px", fontSize: 12, color: "#1a1f2c", lineHeight: 1.5 }}>
-          {summary.paragraph} <span style={{ color: "#8a93a3", fontSize: 11 }}>(click to expand)</span>
-        </div>
-      )}
-      {expanded && (
-        <div style={{ padding: "14px 16px", lineHeight: 1.6 }}>
-          {/* 1-line headline summary */}
-          <div style={{ fontSize: 13, color: "#1a1f2c", marginBottom: 14, lineHeight: 1.55 }}>{summary.paragraph}</div>
+      <div style={{ padding: "14px 16px", lineHeight: 1.6 }}>
+        {/* 1-line headline summary */}
+        <div style={{ fontSize: 13, color: "#1a1f2c", marginBottom: 14, lineHeight: 1.55 }}>{summary.paragraph}</div>
 
-          {/* Key Numbers strip — what every investor wants to see immediately */}
-          <div style={{ padding: "12px 14px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
-            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Key Numbers</div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 8 }}>
-              {cur != null && <Num label="Price" value={`$${fmt(cur, 2)}`} sub={change != null ? `${change >= 0 ? "+" : ""}${fmt(change, 2)}% today` : null} color={change == null ? "#1a1f2c" : change >= 0 ? "#0a8554" : "#c4314b"} />}
-              {target != null && (
-                <Num label="Analyst Target" value={`$${fmt(target, 0)}`}
-                  sub={upside != null ? `${upside >= 0 ? "+" : ""}${fmt(upside, 0)}% upside` : null}
-                  color={upside == null ? "#1a1f2c" : upside > 15 ? "#0a8554" : upside > 0 ? "#86b09c" : "#c4314b"} />
-              )}
-              {rating && <Num label="Street Rating" value={rating} color={rating?.toLowerCase().includes("buy") ? "#0a8554" : rating?.toLowerCase().includes("sell") ? "#c4314b" : "#1a1f2c"} />}
-              {pctOfHigh != null && (
-                <Num label="vs 52W High" value={`${fmt(pctOfHigh, 0)}%`}
-                  sub={w52H ? `High: $${fmt(w52H, 0)}` : null}
-                  color={pctOfHigh > 95 ? "#d4a017" : pctOfHigh > 80 ? "#1a1f2c" : "#0a8554"} />
-              )}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
-              {pe != null && (
-                <Num label="P/E (trailing)" value={fmt(pe, 1) + "×"}
-                  sub={fwdPe != null ? `Fwd: ${fmt(fwdPe, 1)}×` : null} />
-              )}
-              {peg != null && peg > 0 && (
-                <Num label="PEG Ratio" value={fmt(peg, 2)}
-                  sub={peg < 1 ? "Cheap vs growth" : peg < 1.5 ? "Fair" : peg < 2.5 ? "Premium" : "Expensive"}
-                  color={peg < 1 ? "#0a8554" : peg < 1.5 ? "#86b09c" : peg < 2.5 ? "#d4a017" : "#c4314b"} />
-              )}
-              {roe != null && (
-                <Num label="ROE" value={`${fmt(roe, 0)}%`}
-                  sub={roe > 20 ? "Exceptional" : roe > 15 ? "Strong" : roe > 8 ? "Average" : "Weak"}
-                  color={roe > 20 ? "#0a8554" : roe > 15 ? "#86b09c" : roe > 8 ? "#1a1f2c" : "#c4314b"} />
-              )}
-              {revG != null && (
-                <Num label="Revenue Growth" value={`${revG >= 0 ? "+" : ""}${fmt(revG, 0)}%`}
-                  sub={revG > 20 ? "Fast grower" : revG > 10 ? "Solid" : revG > 0 ? "Slow" : "Declining"}
-                  color={revG > 20 ? "#0a8554" : revG > 10 ? "#86b09c" : revG > 0 ? "#1a1f2c" : "#c4314b"} />
-              )}
-            </div>
+        {/* Key Numbers strip */}
+        <div style={{ padding: "12px 14px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
+          <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Key Numbers</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 8 }}>
+            {cur != null && <Num label="Price" value={`$${fmt(cur, 2)}`} sub={change != null ? `${change >= 0 ? "+" : ""}${fmt(change, 2)}% today` : null} color={change == null ? "#1a1f2c" : change >= 0 ? "#0a8554" : "#c4314b"} />}
+            {target != null && (
+              <Num label="Analyst Target" value={`$${fmt(target, 0)}`}
+                sub={upside != null ? `${upside >= 0 ? "+" : ""}${fmt(upside, 0)}% upside` : null}
+                color={upside == null ? "#1a1f2c" : upside > 15 ? "#0a8554" : upside > 0 ? "#86b09c" : "#c4314b"} />
+            )}
+            {rating && <Num label="Street Rating" value={rating} sub={numAnalysts ? `${numAnalysts} analysts` : null} color={rating?.toLowerCase().includes("buy") ? "#0a8554" : rating?.toLowerCase().includes("sell") ? "#c4314b" : "#1a1f2c"} />}
+            {pctOfHigh != null && (
+              <Num label="vs 52W High" value={`${fmt(pctOfHigh, 0)}%`}
+                sub={w52H ? `High: $${fmt(w52H, 0)}` : null}
+                color={pctOfHigh > 95 ? "#d4a017" : pctOfHigh > 80 ? "#1a1f2c" : "#0a8554"} />
+            )}
           </div>
-
-          {/* === Multi-Master Investor Check (Buffett, Lynch, Simons, Marks, Druckenmiller, Munger) === */}
-          <MultiMasterCheck summary={summary} symbol={symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} />
-
-          <div style={{ marginTop: 12, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
-            <em>Summary is rule-based from dashboard data. Always do your own work before any trade.</em>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
+            {pe != null && (
+              <Num label="P/E (trailing)" value={fmt(pe, 1) + "×"}
+                sub={fwdPe != null ? `Fwd: ${fmt(fwdPe, 1)}×` : null} />
+            )}
+            {peg != null && peg > 0 && (
+              <Num label="PEG Ratio" value={fmt(peg, 2)}
+                sub={peg < 1 ? "Cheap vs growth" : peg < 1.5 ? "Fair" : peg < 2.5 ? "Premium" : "Expensive"}
+                color={peg < 1 ? "#0a8554" : peg < 1.5 ? "#86b09c" : peg < 2.5 ? "#d4a017" : "#c4314b"} />
+            )}
+            {roe != null && (
+              <Num label="ROE" value={`${fmt(roe, 0)}%`}
+                sub={roe > 20 ? "Exceptional" : roe > 15 ? "Strong" : roe > 8 ? "Average" : "Weak"}
+                color={roe > 20 ? "#0a8554" : roe > 15 ? "#86b09c" : roe > 8 ? "#1a1f2c" : "#c4314b"} />
+            )}
+            {revG != null && (
+              <Num label="Revenue Growth" value={`${revG >= 0 ? "+" : ""}${fmt(revG, 0)}%`}
+                sub={revG > 20 ? "Fast grower" : revG > 10 ? "Solid" : revG > 0 ? "Slow" : "Declining"}
+                color={revG > 20 ? "#0a8554" : revG > 10 ? "#86b09c" : revG > 0 ? "#1a1f2c" : "#c4314b"} />
+            )}
           </div>
         </div>
-      )}
+
+        {/* Analyst target range visual + breakdown */}
+        {target != null && cur != null && (
+          <div style={{ padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 4 }}>
+              <span style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Analyst Price Targets</span>
+              {numAnalysts && <span style={{ fontSize: 10, color: "#8a93a3" }}>{numAnalysts} analysts</span>}
+            </div>
+            {targetHigh && targetLow && targetHigh > targetLow && (() => {
+              const rangeMin = Math.min(targetLow, cur);
+              const rangeMax = Math.max(targetHigh, cur);
+              const rangeWidth = rangeMax - rangeMin;
+              const pctOf = (v) => ((v - rangeMin) / rangeWidth) * 100;
+              return (
+                <div style={{ position: "relative", height: 50, marginBottom: 6 }}>
+                  {/* Range bar */}
+                  <div style={{ position: "absolute", top: 22, left: `${pctOf(targetLow)}%`, width: `${pctOf(targetHigh) - pctOf(targetLow)}%`, height: 6, background: "linear-gradient(90deg, #c4314b 0%, #d4a017 50%, #0a8554 100%)", borderRadius: 2 }} />
+                  {/* Low target marker */}
+                  <div style={{ position: "absolute", top: 18, left: `${pctOf(targetLow)}%`, transform: "translateX(-50%)", width: 2, height: 14, background: "#c4314b" }} />
+                  <div style={{ position: "absolute", top: 34, left: `${pctOf(targetLow)}%`, transform: "translateX(-50%)", fontSize: 10, color: "#c4314b", whiteSpace: "nowrap", fontWeight: 600 }}>${fmt(targetLow, 0)}</div>
+                  <div style={{ position: "absolute", top: 0, left: `${pctOf(targetLow)}%`, transform: "translateX(-50%)", fontSize: 8, color: "#8a93a3", whiteSpace: "nowrap" }}>Low</div>
+                  {/* Mean target marker */}
+                  <div style={{ position: "absolute", top: 16, left: `${pctOf(target)}%`, transform: "translateX(-50%)", width: 3, height: 18, background: "#1a1f2c" }} />
+                  <div style={{ position: "absolute", top: 34, left: `${pctOf(target)}%`, transform: "translateX(-50%)", fontSize: 10, color: "#1a1f2c", whiteSpace: "nowrap", fontWeight: 700 }}>${fmt(target, 0)} avg</div>
+                  <div style={{ position: "absolute", top: 0, left: `${pctOf(target)}%`, transform: "translateX(-50%)", fontSize: 8, color: "#8a93a3", whiteSpace: "nowrap" }}>Target</div>
+                  {/* High target marker */}
+                  <div style={{ position: "absolute", top: 18, left: `${pctOf(targetHigh)}%`, transform: "translateX(-50%)", width: 2, height: 14, background: "#0a8554" }} />
+                  <div style={{ position: "absolute", top: 34, left: `${pctOf(targetHigh)}%`, transform: "translateX(-50%)", fontSize: 10, color: "#0a8554", whiteSpace: "nowrap", fontWeight: 600 }}>${fmt(targetHigh, 0)}</div>
+                  <div style={{ position: "absolute", top: 0, left: `${pctOf(targetHigh)}%`, transform: "translateX(-50%)", fontSize: 8, color: "#8a93a3", whiteSpace: "nowrap" }}>High</div>
+                  {/* Current price marker (blue dot, prominent) */}
+                  <div style={{ position: "absolute", top: 17, left: `${pctOf(cur)}%`, transform: "translateX(-50%)", width: 14, height: 14, borderRadius: "50%", background: "#7ba2cc", border: "2px solid #fff", boxShadow: "0 0 0 2px #7ba2cc66" }} />
+                </div>
+              );
+            })()}
+            {/* Rating distribution bar */}
+            {totalRecs > 0 && (
+              <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, color: "#5a6573" }}>Rating distribution</span>
+                  <span style={{ fontSize: 10, color: "#8a93a3" }}>{totalRecs} ratings</span>
+                </div>
+                <div style={{ display: "flex", height: 8, borderRadius: 2, overflow: "hidden" }}>
+                  {recCounts.strongBuy > 0 && <div style={{ width: `${(recCounts.strongBuy / totalRecs) * 100}%`, background: "#0a8554" }} title={`Strong Buy: ${recCounts.strongBuy}`} />}
+                  {recCounts.buy > 0 && <div style={{ width: `${(recCounts.buy / totalRecs) * 100}%`, background: "#86b09c" }} title={`Buy: ${recCounts.buy}`} />}
+                  {recCounts.hold > 0 && <div style={{ width: `${(recCounts.hold / totalRecs) * 100}%`, background: "#d4a017" }} title={`Hold: ${recCounts.hold}`} />}
+                  {recCounts.sell > 0 && <div style={{ width: `${(recCounts.sell / totalRecs) * 100}%`, background: "#e07585" }} title={`Sell: ${recCounts.sell}`} />}
+                  {recCounts.strongSell > 0 && <div style={{ width: `${(recCounts.strongSell / totalRecs) * 100}%`, background: "#c4314b" }} title={`Strong Sell: ${recCounts.strongSell}`} />}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9, color: "#5a6573" }}>
+                  <span style={{ color: "#0a8554" }}>{recCounts.strongBuy} Str Buy</span>
+                  <span style={{ color: "#86b09c" }}>{recCounts.buy} Buy</span>
+                  <span style={{ color: "#d4a017" }}>{recCounts.hold} Hold</span>
+                  <span style={{ color: "#e07585" }}>{recCounts.sell} Sell</span>
+                  <span style={{ color: "#c4314b" }}>{recCounts.strongSell} Str Sell</span>
+                </div>
+              </div>
+            )}
+
+            {/* Monthly rating trend - 4-month sentiment shift */}
+            {a?.monthlyTrend?.length > 1 && (
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, color: "#5a6573" }}>4-Month Trend (how analyst views are shifting)</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", gap: 6, height: 70 }}>
+                  {a.monthlyTrend.map((m, i) => {
+                    const total = (m.strongBuy || 0) + (m.buy || 0) + (m.hold || 0) + (m.sell || 0) + (m.strongSell || 0);
+                    if (!total) return <div key={i} style={{ flex: 1, fontSize: 9, color: "#8a93a3", textAlign: "center" }}>—</div>;
+                    const monthLabel = m.period === "0m" ? "Now" : m.period;
+                    return (
+                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
+                        <div className="mono" style={{ fontSize: 10, color: "#1a1f2c", fontWeight: 600, marginBottom: 2 }}>{total}</div>
+                        <div style={{ width: "100%", maxWidth: 36, flex: 1, display: "flex", flexDirection: "column", borderRadius: 2, overflow: "hidden", background: "#efece5" }}>
+                          {m.strongBuy > 0 && <div style={{ flex: m.strongBuy, background: "#0a8554" }} />}
+                          {m.buy > 0 && <div style={{ flex: m.buy, background: "#86b09c" }} />}
+                          {m.hold > 0 && <div style={{ flex: m.hold, background: "#d4a017" }} />}
+                          {m.sell > 0 && <div style={{ flex: m.sell, background: "#e07585" }} />}
+                          {m.strongSell > 0 && <div style={{ flex: m.strongSell, background: "#c4314b" }} />}
+                        </div>
+                        <div style={{ fontSize: 9, color: "#5a6573", marginTop: 4 }}>{monthLabel}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Latest analyst action (single most recent) */}
+            {a?.latestActions?.length > 0 && (
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
+                <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 6 }}>Latest Analyst Action</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11, alignItems: "baseline" }}>
+                  <span className="mono" style={{ color: "#8a93a3", fontSize: 10 }}>{a.latestActions[0].date || "—"}</span>
+                  <span style={{ fontWeight: 600, color: "#1a1f2c" }}>{a.latestActions[0].firm || "—"}</span>
+                  <span style={{ color: "#5a6573" }}>
+                    {a.latestActions[0].fromGrade ? `${a.latestActions[0].fromGrade} → ` : ""}
+                    <span style={{ fontWeight: 600, color: "#1a1f2c" }}>{a.latestActions[0].toGrade || "—"}</span>
+                  </span>
+                  {a.latestActions[0].action && (
+                    <span className="pill" style={{
+                      background: a.latestActions[0].action.toLowerCase().includes("up") ? "#dcf0e3" : a.latestActions[0].action.toLowerCase().includes("down") ? "#fde0e3" : "#ebe9e0",
+                      color: a.latestActions[0].action.toLowerCase().includes("up") ? "#0a6e44" : a.latestActions[0].action.toLowerCase().includes("down") ? "#a3203a" : "#5a6573",
+                      fontSize: 9
+                    }}>{a.latestActions[0].action}</span>
+                  )}
+                </div>
+                {a.latestActions.length > 1 && (
+                  <details style={{ marginTop: 6 }}>
+                    <summary style={{ fontSize: 10, color: "#5a6573", cursor: "pointer" }}>{a.latestActions.length - 1} more recent actions</summary>
+                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                      {a.latestActions.slice(1).map((act, i) => (
+                        <div key={i} style={{ fontSize: 10, color: "#5a6573", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                          <span className="mono" style={{ color: "#8a93a3" }}>{act.date || "—"}</span>
+                          <span style={{ color: "#1a1f2c" }}>{act.firm || "—"}</span>
+                          <span>{act.fromGrade ? `${act.fromGrade} → ` : ""}<strong>{act.toGrade || "—"}</strong></span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* === Multi-Master Investor Check (Buffett, Lynch, Simons, Marks, Druckenmiller, Munger) === */}
+        <MultiMasterCheck summary={summary} symbol={symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} />
+
+        <div style={{ marginTop: 12, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
+          <em>Summary is rule-based from dashboard data. Always do your own work before any trade.</em>
+        </div>
+      </div>
     </div>
   );
 }
