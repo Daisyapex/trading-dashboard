@@ -1205,17 +1205,24 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
               if (!allVals.length) return null;
               const yMinRaw = Math.min(...allVals);
               const yMaxRaw = Math.max(...allVals);
-              // Pick a step from a nice set, then expand bounds so total range = 4 * step
+              // Pick a clean step that gives ~4 gridlines covering the full data range
               const rawRange = yMaxRaw - yMinRaw || 1;
               const niceSteps = [0.05, 0.10, 0.25, 0.50, 1.0, 2.0, 5.0, 10];
-              const targetStep = rawRange / 3.5;
+              const targetStep = rawRange / 3;  // want ~4 gridlines, so 3 intervals span the data
               const step = niceSteps.find((s) => s >= targetStep) || 10;
-              // Center the data inside 4 step intervals
-              const center = (yMinRaw + yMaxRaw) / 2;
-              const y0 = Math.floor((center - 2 * step) / step) * step;
-              const y1 = y0 + 4 * step;
-              const yRange = y1 - y0;
-              const yToPx = (v) => 100 - ((v - y0) / yRange) * 100;
+              // Snap y0 DOWN to step below yMin, y1 UP to step above yMax
+              // This guarantees all data points fall inside the chart bounds
+              const y0 = Math.floor(yMinRaw / step) * step;
+              const y1 = Math.ceil(yMaxRaw / step) * step;
+              // If y1 == y0 (perfectly aligned), add one step buffer
+              const yRange = y1 - y0 || step;
+              const yTop = y1 === y0 ? y1 + step : y1;
+              const yBot = y0;
+              const finalRange = yTop - yBot;
+              const yToPx = (v) => 100 - ((v - yBot) / finalRange) * 100;
+              // Number of gridlines = (yTop - yBot) / step + 1
+              const numGridlines = Math.round(finalRange / step) + 1;
+              const gridFractions = Array.from({ length: numGridlines }, (_, i) => i / (numGridlines - 1));
               const last = qs.findLast ? qs.findLast((q) => q.actual != null) : [...qs].reverse().find((q) => q.actual != null);
               const lastSurprise = last && last.estimate != null ? (last.actual - last.estimate) : null;
               return (
@@ -1228,11 +1235,27 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 12 }}>Estimate vs Actual · last {qs.length} quarters</div>
+                  <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>Estimate vs Actual · last {qs.length} quarters</div>
+                  {(() => {
+                    const fyEnd = ly?.fyEndMonth;
+                    if (!fyEnd || fyEnd < 1 || fyEnd > 12) return null;
+                    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    const fyStartMo = (fyEnd % 12) + 1;  // month AFTER fyEnd (NVDA: Feb)
+                    const quarterRanges = [0, 1, 2, 3].map((qi) => {
+                      const startMo = ((fyStartMo - 1 + qi * 3) % 12) + 1;
+                      const endMo = ((startMo - 1 + 2) % 12) + 1;
+                      return `Q${qi + 1}: ${monthNames[startMo - 1]}–${monthNames[endMo - 1]}`;
+                    });
+                    return (
+                      <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 10, lineHeight: 1.4 }}>
+                        Fiscal year: <span className="mono">{quarterRanges.join(" · ")}</span>
+                      </div>
+                    );
+                  })()}
                   <div style={{ position: "relative", height: 160, marginBottom: 4 }}>
-                    {/* Y axis labels */}
-                    {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
-                      const val = y1 - t * yRange;
+                    {/* Y axis labels - dynamic count based on data range */}
+                    {gridFractions.map((t, i) => {
+                      const val = yTop - t * finalRange;
                       return (
                         <div key={i} style={{ position: "absolute", top: `${t * 100}%`, left: 0, right: 0, transform: "translateY(-50%)" }}>
                           <span className="mono" style={{ fontSize: 9, color: "#8a93a3", paddingRight: 4 }}>{fmt(val, 2)}</span>
@@ -1243,7 +1266,8 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                     {/* Plot area */}
                     <div style={{ position: "absolute", top: 0, bottom: 0, left: 36, right: 0 }}>
                       {qs.map((q, i) => {
-                        const x = qs.length === 1 ? 50 : (i / (qs.length - 1)) * 100;
+                        // Match label flexbox center positions: each label center sits at (i + 0.5) / N * 100%
+                        const x = ((i + 0.5) / qs.length) * 100;
                         return (
                           <div key={i}>
                             {/* Estimate (open circle) */}
@@ -1321,7 +1345,23 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 12 }}>Quarterly · last {qs.length} quarters</div>
+                  <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>Quarterly · last {qs.length} quarters</div>
+                  {(() => {
+                    const fyEnd = ly?.fyEndMonth;
+                    if (!fyEnd || fyEnd < 1 || fyEnd > 12) return null;
+                    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    const fyStartMo = (fyEnd % 12) + 1;
+                    const quarterRanges = [0, 1, 2, 3].map((qi) => {
+                      const startMo = ((fyStartMo - 1 + qi * 3) % 12) + 1;
+                      const endMo = ((startMo - 1 + 2) % 12) + 1;
+                      return `Q${qi + 1}: ${monthNames[startMo - 1]}–${monthNames[endMo - 1]}`;
+                    });
+                    return (
+                      <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 10, lineHeight: 1.4 }}>
+                        Fiscal year: <span className="mono">{quarterRanges.join(" · ")}</span>
+                      </div>
+                    );
+                  })()}
                   <div style={{ position: "relative", height: 160, marginBottom: 4 }}>
                     {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
                       const val = yMax * (1 - t);
