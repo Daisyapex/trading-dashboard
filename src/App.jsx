@@ -816,7 +816,7 @@ export default function App() {
           <RiskFlagsPanel data={data} ly={ly} f={f} op={op} displayQuote={displayQuote} isMobile={isMobile} />
 
           {/* === Summary as collapsible (since stance is now in sticky header) === */}
-          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} isMobile={isMobile} collapsible />}
+          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} collapsible />}
 
           {/* === Catalysts: what's coming up === */}
           {data.catalysts && <CatalystPanel catalysts={data.catalysts} symbol={data.symbol} isMobile={isMobile} />}
@@ -1042,7 +1042,7 @@ function MacroStrip({ macro, isMobile }) {
 // ============================================================
 // AI SUMMARY PANEL — the deterministic "second opinion"
 // ============================================================
-function SummaryPanel({ summary, symbol, isMobile, collapsible }) {
+function SummaryPanel({ summary, symbol, data, ly, f, op, isMobile, collapsible }) {
   const [expanded, setExpanded] = useState(!collapsible);
   if (!summary) return null;
   const stanceColors = {
@@ -1089,11 +1089,284 @@ function SummaryPanel({ summary, symbol, isMobile, collapsible }) {
               </div>
             )}
           </div>
+
+          {/* === Multi-Master Investor Check (Buffett, Lynch, Simons, Marks, Druckenmiller, Munger) === */}
+          <MultiMasterCheck summary={summary} symbol={symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} />
+
           <div style={{ marginTop: 10, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
             <em>This summary is rule-based, computed from dashboard data — not AI commentary. It synthesizes the layers below for a quick read. Always do your own work before any trade.</em>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// MULTI-MASTER CHECK — Run dashboard data through 6 famous investor lenses
+// Buffett, Lynch, Simons, Marks, Druckenmiller, Munger
+// ============================================================
+function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
+  const [expandedMaster, setExpandedMaster] = useState(null);
+
+  // Pull values safely, fallback to nulls
+  const pe = f?.pe ?? null;
+  const fwdPe = f?.fwdPe ?? null;
+  const peg = ly?.pegRatio ?? null;
+  const roe = ly?.roe ?? null;
+  const roic = ly?.roic ?? null;
+  const debtEq = ly?.debtEq ?? null;
+  const fcfYield = ly?.fcfYield ?? null;
+  const earningsYield = ly?.earningsYield ?? null;
+  const revGrowth = ly?.revGrowthPct ?? null;
+  const epsGrowth = ly?.epsGrowthPct ?? null;
+  const insiderNet = ly?.netInsiderActivity ?? null;
+  const insiderBuys = ly?.insiderBuys ?? 0;
+  const pcr = op?.pcrVolume ?? null;
+  const consensusScore = data?.consensusScore ?? null;
+  const targetMean = data?.targetMean ?? null;
+  const currentPrice = data?.quote?.current ?? null;
+  const week52High = data?.quote?.week52High ?? null;
+  const sector = data?.sector ?? "";
+  const beta = f?.beta ?? null;
+  const lynchCat = ly?.category ?? null;
+
+  // ========== BUFFETT LENS — Business quality, moat, fair price ==========
+  const buffettChecks = [];
+  // Q1: Is this a great business? (ROE > 15, ROIC > 12)
+  if (roe != null && roe > 20) {
+    buffettChecks.push({ verdict: "match", q: "Is this a wonderful business?", remark: `ROE ${roe.toFixed(0)}% — yes, this earns high returns on shareholder capital. Buffett: "Time is the friend of the wonderful business."` });
+  } else if (roe != null && roe < 10) {
+    buffettChecks.push({ verdict: "diverge", q: "Is this a wonderful business?", remark: `ROE ${roe.toFixed(0)}% — Buffett would pass. He wants 15%+ ROE consistently.` });
+  } else if (roe != null) {
+    buffettChecks.push({ verdict: "neutral", q: "Is this a wonderful business?", remark: `ROE ${roe.toFixed(0)}% — decent but not exceptional. Buffett wants 15%+.` });
+  }
+  // Q2: Is the price fair?
+  if (peg != null && peg > 0 && peg < 1.5) {
+    buffettChecks.push({ verdict: "match", q: "Is the price fair?", remark: `PEG ${peg.toFixed(2)} — paying a reasonable amount for the growth. "Price is what you pay, value is what you get."` });
+  } else if (peg != null && peg > 2.5) {
+    buffettChecks.push({ verdict: "diverge", q: "Is the price fair?", remark: `PEG ${peg.toFixed(2)} — Buffett would say "I'd never pay this much for any business." Margin of safety is gone.` });
+  } else if (earningsYield != null && earningsYield > 6) {
+    buffettChecks.push({ verdict: "match", q: "Is the price fair?", remark: `Earnings yield ${earningsYield.toFixed(1)}% — better than long-term Treasuries. Reasonable.` });
+  } else if (earningsYield != null && earningsYield < 3) {
+    buffettChecks.push({ verdict: "diverge", q: "Is the price fair?", remark: `Earnings yield ${earningsYield.toFixed(1)}% below 10Y Treasury (~4.4%). Bonds offer better risk-adjusted yield.` });
+  }
+  // Q3: Strong balance sheet?
+  if (debtEq != null && debtEq < 0.5) {
+    buffettChecks.push({ verdict: "match", q: "Is the balance sheet conservative?", remark: `D/E ${debtEq.toFixed(2)} — minimal debt. Buffett loves clean balance sheets.` });
+  } else if (debtEq != null && debtEq > 2) {
+    buffettChecks.push({ verdict: "diverge", q: "Is the balance sheet conservative?", remark: `D/E ${debtEq.toFixed(2)} — heavily levered. Bad in a downturn.` });
+  }
+
+  // ========== LYNCH LENS — Growth at reasonable price, story you understand ==========
+  const lynchChecks = [];
+  // Q1: PEG below 1?
+  if (peg != null && peg > 0) {
+    if (peg < 1) lynchChecks.push({ verdict: "match", q: "Is PEG below 1?", remark: `PEG ${peg.toFixed(2)} — Lynch's favorite signal. "The P/E of any company that's fairly priced will equal its growth rate."` });
+    else if (peg < 1.5) lynchChecks.push({ verdict: "neutral", q: "Is PEG below 1?", remark: `PEG ${peg.toFixed(2)} — slightly above Lynch's sweet spot but still reasonable.` });
+    else lynchChecks.push({ verdict: "diverge", q: "Is PEG below 1?", remark: `PEG ${peg.toFixed(2)} — too rich on Lynch's framework. Growth not justifying the multiple.` });
+  }
+  // Q2: Steady earnings/revenue growth?
+  if (revGrowth != null && revGrowth > 15) {
+    lynchChecks.push({ verdict: "match", q: "Is growth real?", remark: `Revenue +${revGrowth.toFixed(0)}% — strong organic growth. Classic Lynch "fast grower" territory.` });
+  } else if (revGrowth != null && revGrowth < 0) {
+    lynchChecks.push({ verdict: "diverge", q: "Is growth real?", remark: `Revenue ${revGrowth.toFixed(0)}% — declining. Lynch would skip "stalwarts in decline."` });
+  } else if (revGrowth != null) {
+    lynchChecks.push({ verdict: "neutral", q: "Is growth real?", remark: `Revenue +${revGrowth.toFixed(0)}% — modest. Stalwart territory, not "fast grower."` });
+  }
+  // Q3: Lynch category fits the story?
+  if (lynchCat && lynchCat !== "—") {
+    const catLower = lynchCat.toLowerCase();
+    if (catLower.includes("fast grower")) lynchChecks.push({ verdict: "match", q: "What kind of stock is this?", remark: `Classified as "Fast Grower" — Lynch's favorite category if PEG is sane. These can 10x.` });
+    else if (catLower.includes("stalwart")) lynchChecks.push({ verdict: "neutral", q: "What kind of stock is this?", remark: `Classified as "Stalwart" — 10-15% growth annually. Boring but reliable.` });
+    else if (catLower.includes("slow")) lynchChecks.push({ verdict: "diverge", q: "What kind of stock is this?", remark: `Classified as "Slow Grower" — Lynch would skip. Wait for the dividend or move on.` });
+    else if (catLower.includes("cyclical")) lynchChecks.push({ verdict: "neutral", q: "What kind of stock is this?", remark: `Cyclical — depends on macro timing. PE doesn't work the same here.` });
+  }
+
+  // ========== SIMONS LENS — Pure data, no story, statistical edge ==========
+  const simonsChecks = [];
+  // Q1: Insiders agree?
+  if (insiderNet != null && insiderNet < -100e6 && insiderBuys === 0) {
+    simonsChecks.push({ verdict: "diverge", q: "Are insiders buying or selling?", remark: `Insiders sold $${formatMcap(Math.abs(insiderNet))} with zero purchases. Smart money exits — that's a data signal, not noise.` });
+  } else if (insiderNet != null && insiderBuys > 0 && insiderNet > 0) {
+    simonsChecks.push({ verdict: "match", q: "Are insiders buying or selling?", remark: `Net insider buying. Strong data signal — people closest to the business are voting with dollars.` });
+  }
+  // Q2: Crowd over-positioned? (PCR extreme = contrarian)
+  if (pcr != null) {
+    if (pcr < 0.4) simonsChecks.push({ verdict: "diverge", q: "Is the crowd over-positioned?", remark: `P/C ratio ${pcr.toFixed(2)} — extreme bullishness. Statistically, this often precedes pullbacks.` });
+    else if (pcr > 1.8) simonsChecks.push({ verdict: "match", q: "Is the crowd over-positioned?", remark: `P/C ratio ${pcr.toFixed(2)} — extreme bearishness. Crowds get washed out at the wrong time.` });
+    else simonsChecks.push({ verdict: "neutral", q: "Is the crowd over-positioned?", remark: `P/C ratio ${pcr.toFixed(2)} — balanced positioning. No edge from sentiment.` });
+  }
+  // Q3: Statistical composite signal
+  if (summary.stanceColor === "positive") {
+    simonsChecks.push({ verdict: "match", q: "What does the composite signal say?", remark: `Dashboard stance is "${summary.stance}" — your data signal supports the position.` });
+  } else if (summary.stanceColor === "negative") {
+    simonsChecks.push({ verdict: "diverge", q: "What does the composite signal say?", remark: `Dashboard stance is "${summary.stance}" — model says weight of evidence is against you.` });
+  } else {
+    simonsChecks.push({ verdict: "neutral", q: "What does the composite signal say?", remark: `Dashboard stance is "${summary.stance}" — no clear statistical edge.` });
+  }
+
+  // ========== MARKS LENS — Risk-first, second-level thinking ==========
+  const marksChecks = [];
+  // Q1: What's the reward-to-risk asymmetry?
+  if (week52High && currentPrice) {
+    const pctOfHigh = (currentPrice / week52High) * 100;
+    if (pctOfHigh > 95) {
+      marksChecks.push({ verdict: "diverge", q: "What's the asymmetry of risk vs reward?", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high. Limited upside, full downside risk. Marks: "Move toward what's hated, not what's loved."` });
+    } else if (pctOfHigh < 60) {
+      marksChecks.push({ verdict: "match", q: "What's the asymmetry of risk vs reward?", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high — there's room to run. Marks-favored "uncomfortable opportunity."` });
+    } else {
+      marksChecks.push({ verdict: "neutral", q: "What's the asymmetry of risk vs reward?", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high — middle of range. Average asymmetry.` });
+    }
+  }
+  // Q2: Is consensus already priced in?
+  if (consensusScore != null && targetMean != null && currentPrice) {
+    const upside = ((targetMean - currentPrice) / currentPrice) * 100;
+    if (consensusScore >= 4.3 && upside < 5) {
+      marksChecks.push({ verdict: "diverge", q: "Is the consensus already priced in?", remark: `Wall St rates this "${data?.consensusRating || "buy"}" but stock is already at target. The good news is in the price. Marks: "Trees don't grow to the sky."` });
+    } else if (upside > 25) {
+      marksChecks.push({ verdict: "match", q: "Is the consensus already priced in?", remark: `Analyst target implies +${upside.toFixed(0)}% — meaningful upside still ahead per consensus.` });
+    } else {
+      marksChecks.push({ verdict: "neutral", q: "Is the consensus already priced in?", remark: `Modest implied upside (${upside.toFixed(0)}%). Limited consensus edge either way.` });
+    }
+  }
+  // Q3: Where are we in the cycle?
+  if (sector.toLowerCase().includes("semi") || sector.toLowerCase().includes("ai")) {
+    marksChecks.push({ verdict: "diverge", q: "Where are we in the cycle?", remark: `${sector} is late-cycle territory. AI cap-ex peaks happen, then ratios compress. Marks: "Risk is highest when it feels safest."` });
+  }
+
+  // ========== DRUCKENMILLER LENS — Concentrated conviction + macro tailwind ==========
+  const druckChecks = [];
+  // Q1: Macro alignment
+  if (sector.toLowerCase().includes("ai") || sector.toLowerCase().includes("semi") || sector.toLowerCase().includes("hyperscaler")) {
+    druckChecks.push({ verdict: "match", q: "Is there a macro tailwind?", remark: `AI/Semis/Hyperscaler — multi-year capex cycle from MSFT, GOOG, META, AMZN. Druckenmiller would call this a thematic tailwind worth riding.` });
+  } else if (sector.toLowerCase().includes("financ") && data?.macroContext?.rates10Y > 4) {
+    druckChecks.push({ verdict: "match", q: "Is there a macro tailwind?", remark: `Higher rates = better bank NIM. Macro is on your side.` });
+  }
+  // Q2: Conviction-worthy thesis?
+  if (revGrowth != null && roe != null && revGrowth > 15 && roe > 20) {
+    druckChecks.push({ verdict: "match", q: "Does this deserve concentration?", remark: `Revenue +${revGrowth.toFixed(0)}%, ROE ${roe.toFixed(0)}%. Druckenmiller philosophy: "Bet big when you have an edge — but only then."` });
+  } else if (revGrowth != null && revGrowth < 5) {
+    druckChecks.push({ verdict: "diverge", q: "Does this deserve concentration?", remark: `Slow growth (revenue +${revGrowth.toFixed(0)}%). No reason to concentrate. Druckenmiller cuts losers fast.` });
+  }
+
+  // ========== MUNGER LENS — Inversion, avoid stupidity ==========
+  const mungerChecks = [];
+  // Q1: Inversion — what could go wrong?
+  const risks = [];
+  if (debtEq != null && debtEq > 2) risks.push("balance sheet leverage");
+  if (peg != null && peg > 2.5) risks.push("valuation compression");
+  if (insiderNet != null && insiderNet < -100e6) risks.push("insider exit");
+  if (pcr != null && pcr < 0.4) risks.push("crowded long");
+  if (week52High && currentPrice && (currentPrice / week52High) > 0.97) risks.push("priced for perfection");
+  if (risks.length >= 3) {
+    mungerChecks.push({ verdict: "diverge", q: "Inverting — what could go wrong?", remark: `Multiple risk vectors: ${risks.join(", ")}. Munger: "All I want to know is where I'm going to die, so I'll never go there."` });
+  } else if (risks.length === 0) {
+    mungerChecks.push({ verdict: "match", q: "Inverting — what could go wrong?", remark: `No obvious red flags. Munger: "Take a simple idea and take it seriously."` });
+  } else {
+    mungerChecks.push({ verdict: "neutral", q: "Inverting — what could go wrong?", remark: `Some risks present (${risks.join(", ")}) but manageable. Watch them.` });
+  }
+  // Q2: Is the sector hated or loved? (We want hated)
+  if (pcr != null && pcr < 0.4 && summary.flags?.some((f) => f.toLowerCase().includes("near 52"))) {
+    mungerChecks.push({ verdict: "diverge", q: "Are people too excited about this?", remark: `Near 52w high + crowd extremely bullish = peak euphoria. Munger: "The big money is not in the buying or selling, but in the waiting."` });
+  }
+
+  // ========== Compute master overall verdicts ==========
+  const summarize = (checks) => {
+    const m = checks.filter((c) => c.verdict === "match").length;
+    const d = checks.filter((c) => c.verdict === "diverge").length;
+    const total = checks.length;
+    if (total === 0) return { score: "neutral", color: "#5a6573", label: "No data" };
+    if (m >= 2 && d === 0) return { score: "match", color: "#0a8554", label: "Approves" };
+    if (m > d) return { score: "match-weak", color: "#86b09c", label: "Leans positive" };
+    if (d >= 2 && m === 0) return { score: "diverge", color: "#c4314b", label: "Would pass" };
+    if (d > m) return { score: "diverge-weak", color: "#d4a017", label: "Cautious" };
+    return { score: "neutral", color: "#5a6573", label: "Mixed" };
+  };
+
+  const masters = [
+    { name: "Buffett",       lens: "Quality & price",            checks: buffettChecks, ...summarize(buffettChecks), color: "#0a8554" },
+    { name: "Lynch",         lens: "Growth at fair price",       checks: lynchChecks,   ...summarize(lynchChecks),   color: "#5a6573" },
+    { name: "Simons",        lens: "Pure data, no story",        checks: simonsChecks,  ...summarize(simonsChecks),  color: "#7ba2cc" },
+    { name: "Marks",         lens: "Risk-first, second-level",   checks: marksChecks,   ...summarize(marksChecks),   color: "#d4a017" },
+    { name: "Druckenmiller", lens: "Concentrated + macro",       checks: druckChecks,   ...summarize(druckChecks),   color: "#c4314b" },
+    { name: "Munger",        lens: "Inversion, avoid stupidity", checks: mungerChecks,  ...summarize(mungerChecks),  color: "#1a1f2c" },
+  ].filter((m) => m.checks.length > 0);
+
+  // Overall: average of master scores
+  const approveCount = masters.filter((m) => m.score === "match" || m.score === "match-weak").length;
+  const passCount = masters.filter((m) => m.score === "diverge" || m.score === "diverge-weak").length;
+  const consensus = approveCount >= 4 ? "Broad approval" :
+                    approveCount >= passCount + 2 ? "Most masters approve" :
+                    passCount >= 4 ? "Broad caution" :
+                    passCount >= approveCount + 2 ? "Most masters cautious" :
+                    "Masters split";
+  const consensusColor = approveCount >= 4 ? "#0a8554" :
+                         approveCount >= passCount + 2 ? "#86b09c" :
+                         passCount >= 4 ? "#c4314b" :
+                         passCount >= approveCount + 2 ? "#d4a017" :
+                         "#5a6573";
+
+  return (
+    <div style={{ marginTop: 14, padding: "12px 14px", background: "#1a1f2c", color: "#fff", borderRadius: 2 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 10, color: "#d4a017", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>Multi-Master Check · {symbol}</span>
+        <span className="pill" style={{ background: consensusColor, color: "#fff" }}>{consensus}</span>
+      </div>
+      <div style={{ fontSize: 11, color: "#a4abb8", lineHeight: 1.5, marginBottom: 12 }}>
+        How would the great investors evaluate this stock based on actual data? Click a master to see their detailed checks.
+      </div>
+
+      {/* Master cards grid */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 6, marginBottom: 12 }}>
+        {masters.map((m) => (
+          <div key={m.name}
+            onClick={() => setExpandedMaster(expandedMaster === m.name ? null : m.name)}
+            style={{ padding: "8px 10px", background: expandedMaster === m.name ? "#2a2f3c" : "#0f131a", border: `1px solid ${m.color}`, borderLeft: `3px solid ${m.color}`, borderRadius: 2, cursor: "pointer" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>{m.name}</div>
+            <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 4 }}>{m.lens}</div>
+            <div style={{ fontSize: 10, color: m.color, fontWeight: 600 }}>{m.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Expanded master detail */}
+      {expandedMaster && (() => {
+        const m = masters.find((x) => x.name === expandedMaster);
+        if (!m) return null;
+        return (
+          <div style={{ padding: "10px 12px", background: "#0f131a", border: `1px solid ${m.color}`, borderRadius: 2 }}>
+            <div style={{ fontSize: 12, color: "#fff", marginBottom: 8 }}>
+              <strong>{m.name}'s perspective:</strong> <span style={{ color: "#a4abb8" }}>{m.lens}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {m.checks.map((c, i) => {
+                const icon = c.verdict === "match" ? "✓" : c.verdict === "diverge" ? "✗" : "·";
+                const color = c.verdict === "match" ? "#86b09c" : c.verdict === "diverge" ? "#e07585" : "#8a93a3";
+                return (
+                  <div key={i} style={{ display: "flex", gap: 8, fontSize: 11, lineHeight: 1.5 }}>
+                    <span style={{ color, fontWeight: 700, fontSize: 14, flexShrink: 0, width: 14 }}>{icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: "#fff", fontWeight: 600, marginBottom: 2 }}>{c.q}</div>
+                      <div style={{ color: "#a4abb8", fontSize: 11 }}>{c.remark}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Overall consensus interpretation */}
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #2a2f3c", fontSize: 11, color: "#a4abb8", lineHeight: 1.6 }}>
+        <strong style={{ color: consensusColor }}>Overall:</strong> {approveCount}/{masters.length} masters approve, {passCount}/{masters.length} cautious.{" "}
+        {consensus === "Broad approval" && "Strong multi-framework support. Position with conviction."}
+        {consensus === "Most masters approve" && "Solid setup with some dissenting views worth noting."}
+        {consensus === "Masters split" && "Each lens shows a different angle. No clear consensus — your conviction has to come from elsewhere."}
+        {consensus === "Most masters cautious" && "More cautions than approvals. Consider trimming or waiting for better entry."}
+        {consensus === "Broad caution" && "Multiple frameworks see problems. Even if you believe in the story, the math is against you. Re-evaluate."}
+      </div>
     </div>
   );
 }
