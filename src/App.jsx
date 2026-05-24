@@ -1373,7 +1373,7 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                       <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.ps != null ? `${fmt(r.ps, 1)}×` : "—"}</td>
                       <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.evEbitda != null ? `${fmt(r.evEbitda, 1)}×` : "—"}</td>
                       <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.roe != null ? `${fmt(r.roe * (r.roe > 1 ? 1 : 100), 0)}%` : "—"}</td>
-                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.mcap ? formatMcap(r.mcap) : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.mcap != null ? formatMcap(r.mcap * 1e6) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
