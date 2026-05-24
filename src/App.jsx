@@ -813,7 +813,10 @@ export default function App() {
           </div>
 
           {/* === Dashboard Summary first (the executive view) === */}
-          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} data={data} ly={ly} f={f} op={op} a={a} c={c} isMobile={isMobile} />}
+          {data.summary && <SummaryPanel summary={data.summary} symbol={data.symbol} data={data} ly={ly} f={f} op={op} a={a} c={c}
+            tech={{ lastRsi, lastZ, sqzActive, hurst, rv30, rv90, trendSignal, momentumSignal, reversionSignal, regimeSignal, last }}
+            peerRows={peerRows} peerAvg={peerAvg}
+            isMobile={isMobile} />}
 
           {/* === Risk Flags directly after summary === */}
           <RiskFlagsPanel data={data} ly={ly} f={f} op={op} displayQuote={displayQuote} isMobile={isMobile} />
@@ -1037,7 +1040,7 @@ function MacroStrip({ macro, isMobile }) {
 // ============================================================
 // AI SUMMARY PANEL — the deterministic "second opinion"
 // ============================================================
-function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, isMobile }) {
+function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, peerAvg, isMobile }) {
   if (!summary) return null;
   const stanceColors = {
     positive: { bg: "#0a8554", fg: "#fff" },
@@ -1163,48 +1166,67 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, isMobile }) {
                 </div>
               </div>
 
-              {/* Card 2: Price targets with range bar */}
-              <div style={{ padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
-                <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, marginBottom: 10 }}>Price Targets</div>
+              {/* Card 2: Price targets with callout-style range bar */}
+              <div style={{ padding: "14px 16px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+                <div style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 700, marginBottom: 4 }}>Analyst Price Targets</div>
                 {targetHigh && targetLow && targetHigh > targetLow && (() => {
+                  // Range goes from Low to High; Current may be at or outside the analyst range
                   const rangeMin = Math.min(targetLow, cur);
                   const rangeMax = Math.max(targetHigh, cur);
                   const rangeWidth = rangeMax - rangeMin || 1;
                   const pctOf = (v) => ((v - rangeMin) / rangeWidth) * 100;
+                  const avgPct = Math.max(15, Math.min(85, pctOf(target)));
+                  const curPct = Math.max(15, Math.min(85, pctOf(cur)));
+
                   return (
-                    <>
-                      {/* Average target prominent */}
-                      <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: "#1a1f2c", lineHeight: 1, marginBottom: 2 }}>${fmt(target, 0)}</div>
-                      <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 14 }}>average target</div>
-                      {/* Range bar */}
-                      <div style={{ position: "relative", height: 30, marginBottom: 6 }}>
-                        <div style={{ position: "absolute", top: 14, left: 0, right: 0, height: 4, background: "#efece5", borderRadius: 2 }} />
-                        <div style={{ position: "absolute", top: 14, left: `${pctOf(targetLow)}%`, width: `${pctOf(targetHigh) - pctOf(targetLow)}%`, height: 4, background: "linear-gradient(90deg, #c4314b 0%, #d4a017 50%, #0a8554 100%)", borderRadius: 2 }} />
-                        {/* Current price marker */}
-                        <div style={{ position: "absolute", top: 10, left: `${Math.max(2, Math.min(98, pctOf(cur)))}%`, transform: "translateX(-50%)", width: 12, height: 12, borderRadius: "50%", background: "#7ba2cc", border: "2px solid #fff", boxShadow: "0 0 0 1px #7ba2cc" }} />
+                    <div style={{ position: "relative", padding: "60px 0 60px", marginTop: 6 }}>
+                      {/* AVERAGE callout — above the bar */}
+                      <div style={{ position: "absolute", top: 0, left: `${avgPct}%`, transform: "translateX(-50%)", textAlign: "center" }}>
+                        <div style={{ padding: "6px 10px", background: "#fff", border: "1.5px solid #7ba2cc", borderRadius: 4, minWidth: 70 }}>
+                          <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: "#1a1f2c", lineHeight: 1 }}>${fmt(target, 2)}</div>
+                          <div style={{ fontSize: 9, color: "#5a6573", marginTop: 2, letterSpacing: "0.04em" }}>Average</div>
+                        </div>
+                        {/* Pointer arrow down */}
+                        <div style={{ width: 0, height: 0, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: "6px solid #7ba2cc", margin: "0 auto", marginTop: -1 }} />
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
-                        <div>
-                          <div className="mono" style={{ color: "#c4314b", fontWeight: 600 }}>${fmt(targetLow, 0)}</div>
-                          <div style={{ color: "#8a93a3", fontSize: 9 }}>Low</div>
-                        </div>
-                        <div style={{ textAlign: "center" }}>
-                          <div className="mono" style={{ color: "#7ba2cc", fontWeight: 600 }}>${fmt(cur, 2)}</div>
-                          <div style={{ color: "#8a93a3", fontSize: 9 }}>Current</div>
-                        </div>
-                        <div style={{ textAlign: "right" }}>
-                          <div className="mono" style={{ color: "#0a8554", fontWeight: 600 }}>${fmt(targetHigh, 0)}</div>
-                          <div style={{ color: "#8a93a3", fontSize: 9 }}>High</div>
+
+                      {/* The horizontal bar */}
+                      <div style={{ position: "absolute", top: 56, left: 0, right: 0, height: 4, background: "#d6d2c7", borderRadius: 2 }} />
+
+                      {/* Low number label - left end */}
+                      <div style={{ position: "absolute", top: 66, left: 0, fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>
+                        <span className="mono">${fmt(targetLow, 2)}</span>
+                      </div>
+
+                      {/* High number label - right end */}
+                      <div style={{ position: "absolute", top: 66, right: 0, textAlign: "right", fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>
+                        <div className="mono">${fmt(targetHigh, 2)}</div>
+                        <div style={{ fontSize: 9, color: "#5a6573", marginTop: 1 }}>High</div>
+                      </div>
+
+                      {/* Average dot on the bar */}
+                      <div style={{ position: "absolute", top: 53, left: `${avgPct}%`, transform: "translateX(-50%)", width: 10, height: 10, borderRadius: "50%", background: "#7ba2cc", border: "2px solid #fff", boxShadow: "0 0 0 1px #7ba2cc" }} />
+
+                      {/* Current dot on the bar */}
+                      <div style={{ position: "absolute", top: 53, left: `${curPct}%`, transform: "translateX(-50%)", width: 10, height: 10, borderRadius: "50%", background: "#fff", border: "2px solid #5a6573" }} />
+
+                      {/* CURRENT callout — below the bar */}
+                      <div style={{ position: "absolute", bottom: 0, left: `${curPct}%`, transform: "translateX(-50%)", textAlign: "center" }}>
+                        {/* Pointer arrow up */}
+                        <div style={{ width: 0, height: 0, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: "6px solid #5a6573", margin: "0 auto", marginBottom: -1 }} />
+                        <div style={{ padding: "6px 10px", background: "#fff", border: "1.5px solid #5a6573", borderRadius: 4, minWidth: 70 }}>
+                          <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: "#1a1f2c", lineHeight: 1 }}>${fmt(cur, 2)}</div>
+                          <div style={{ fontSize: 9, color: "#5a6573", marginTop: 2, letterSpacing: "0.04em" }}>Current</div>
                         </div>
                       </div>
-                      {upside != null && (
-                        <div style={{ marginTop: 8, padding: "4px 8px", background: upside > 0 ? "#dcf0e3" : "#fde0e3", border: `1px solid ${upside > 0 ? "#86b09c" : "#e07585"}`, borderRadius: 2, fontSize: 11, color: upside > 0 ? "#0a6e44" : "#a3203a", fontWeight: 600, textAlign: "center" }}>
-                          {upside > 0 ? "▲" : "▼"} {pct(upside)} implied upside
-                        </div>
-                      )}
-                    </>
+                    </div>
                   );
                 })()}
+                {upside != null && (
+                  <div style={{ marginTop: 10, padding: "5px 10px", background: upside > 0 ? "#dcf0e3" : "#fde0e3", border: `1px solid ${upside > 0 ? "#86b09c" : "#e07585"}`, borderRadius: 2, fontSize: 11, color: upside > 0 ? "#0a6e44" : "#a3203a", fontWeight: 600, textAlign: "center" }}>
+                    {upside > 0 ? "▲" : "▼"} {pct(upside)} implied upside
+                  </div>
+                )}
               </div>
 
               {/* Card 3: Monthly recommendations trend (4-month bars) */}
@@ -1307,6 +1329,174 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, isMobile }) {
           </div>
         )}
 
+        {/* === Technical Snapshot + Peer Valuation (2 cards side-by-side) === */}
+        {(tech?.lastRsi != null || (peerRows && peerRows.length > 1)) && (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10, marginBottom: 14 }}>
+
+            {/* Technical Snapshot card */}
+            {tech?.lastRsi != null && (() => {
+              const rsi = tech.lastRsi;
+              const z = tech.lastZ;
+              const rsiColor = rsi > 70 ? "#c4314b" : rsi < 30 ? "#0a8554" : "#1a1f2c";
+              const rsiLabel = rsi > 70 ? "Overbought" : rsi < 30 ? "Oversold" : "Neutral";
+              // MACD histogram interpretation
+              const macdHist = tech.last?.hist ?? null;
+              const macdLabel = macdHist == null ? "—" : macdHist > 0 ? "Bullish momentum" : "Bearish momentum";
+              const macdColor = macdHist == null ? "#5a6573" : macdHist > 0 ? "#0a8554" : "#c4314b";
+              // Squeeze interpretation
+              const sqzLabel = tech.sqzActive ? "Compressing (breakout coming)" : "No squeeze";
+              const sqzColor = tech.sqzActive ? "#d4a017" : "#5a6573";
+              // Trend interpretation already in trendSignal
+              const trendColor = tech.trendSignal?.includes("Bullish") ? "#0a8554"
+                              : tech.trendSignal?.includes("Bearish") ? "#c4314b"
+                              : "#1a1f2c";
+
+              return (
+                <div style={{ padding: "14px 16px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+                  <div style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 700, marginBottom: 12 }}>Technical Snapshot</div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {/* RSI with visual bar */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                        <span style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>RSI(14)</span>
+                        <span style={{ fontSize: 10, color: rsiColor, fontWeight: 600 }}>{rsiLabel}</span>
+                      </div>
+                      <div style={{ position: "relative", height: 8, background: "#efece5", borderRadius: 2, overflow: "hidden" }}>
+                        {/* Oversold zone (0-30) */}
+                        <div style={{ position: "absolute", top: 0, left: 0, width: "30%", height: "100%", background: "#dcf0e3" }} />
+                        {/* Overbought zone (70-100) */}
+                        <div style={{ position: "absolute", top: 0, right: 0, width: "30%", height: "100%", background: "#fde0e3" }} />
+                        {/* Current RSI marker */}
+                        <div style={{ position: "absolute", top: -2, left: `${Math.max(0, Math.min(100, rsi))}%`, transform: "translateX(-50%)", width: 3, height: 12, background: rsiColor }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, fontSize: 9, color: "#8a93a3" }}>
+                        <span>0</span>
+                        <span>30</span>
+                        <span className="mono" style={{ color: rsiColor, fontWeight: 600 }}>{fmt(rsi, 1)}</span>
+                        <span>70</span>
+                        <span>100</span>
+                      </div>
+                    </div>
+
+                    {/* MACD */}
+                    {macdHist != null && (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>MACD Histogram</div>
+                          <div className="mono" style={{ fontSize: 12, color: macdColor, fontWeight: 600 }}>{macdHist > 0 ? "+" : ""}{fmt(macdHist, 2)}</div>
+                        </div>
+                        <span style={{ fontSize: 10, color: macdColor, fontWeight: 600 }}>{macdLabel}</span>
+                      </div>
+                    )}
+
+                    {/* Squeeze (SQZMOM_LB) */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }} title="Squeeze Momentum (LazyBear). Active when BB inside KC — volatility compressing, often precedes large moves.">Squeeze (SQZMOM)</div>
+                        <div className="mono" style={{ fontSize: 12, color: sqzColor, fontWeight: 600 }}>{tech.sqzActive ? "ACTIVE" : "INACTIVE"}</div>
+                      </div>
+                      <span style={{ fontSize: 10, color: sqzColor, fontWeight: 600, textAlign: "right" }}>{sqzLabel}</span>
+                    </div>
+
+                    {/* Trend (SMA structure) */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
+                      <div>
+                        <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }} title="Bullish: price > 50SMA > 200SMA. Bearish: opposite.">Trend (50/200 SMA)</div>
+                        <div style={{ fontSize: 12, color: trendColor, fontWeight: 600 }}>{tech.trendSignal || "—"}</div>
+                      </div>
+                    </div>
+
+                    {/* Z-score (mean reversion) */}
+                    {z != null && (
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }} title="Standard deviations from 20-day mean. ±2 is statistically stretched.">Z-Score (20d)</div>
+                          <div className="mono" style={{ fontSize: 12, color: Math.abs(z) > 2 ? "#c4314b" : "#1a1f2c", fontWeight: 600 }}>{z > 0 ? "+" : ""}{fmt(z, 2)}σ</div>
+                        </div>
+                        <span style={{ fontSize: 10, color: Math.abs(z) > 2 ? "#c4314b" : "#5a6573", textAlign: "right" }}>{tech.reversionSignal}</span>
+                      </div>
+                    )}
+
+                    {/* Volatility */}
+                    {tech.rv30 != null && (
+                      <div style={{ paddingTop: 6, borderTop: "1px dotted #e0ddd2", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>Realized Vol</div>
+                          <div className="mono" style={{ fontSize: 11, color: "#1a1f2c" }}>30d: {fmt(tech.rv30 * 100, 1)}% · 90d: {fmt((tech.rv90 || 0) * 100, 1)}%</div>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Peer Valuation card */}
+            {peerRows && peerRows.length > 1 && (() => {
+              const peerAvgPE = peerAvg ? peerAvg("pe") : null;
+              const peerAvgFwdPE = peerAvg ? peerAvg("fwdPe") : null;
+              const peerAvgPS = peerAvg ? peerAvg("ps") : null;
+              const peerAvgEvEbitda = peerAvg ? peerAvg("evEbitda") : null;
+              const peerAvgRoe = peerAvg ? peerAvg("roe") : null;
+              const self = peerRows[0];
+
+              // Comparison row helper
+              const Row = ({ label, selfVal, peerVal, fmtFn = (v) => fmt(v, 1), suffix = "", betterWhen = "lower", tooltip }) => {
+                if (selfVal == null && peerVal == null) return null;
+                const diff = (selfVal != null && peerVal != null) ? ((selfVal - peerVal) / peerVal) * 100 : null;
+                let color = "#1a1f2c";
+                let verdict = "—";
+                if (diff != null) {
+                  const isBetter = betterWhen === "lower" ? diff < -5 : diff > 5;
+                  const isWorse = betterWhen === "lower" ? diff > 15 : diff < -15;
+                  color = isBetter ? "#0a8554" : isWorse ? "#c4314b" : "#1a1f2c";
+                  verdict = isBetter ? "Cheaper" : isWorse ? "Expensive" : "In line";
+                  if (betterWhen === "higher" && diff > 5) verdict = "Above peers";
+                  if (betterWhen === "higher" && diff < -15) verdict = "Below peers";
+                }
+                return (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 6, borderBottom: "1px dotted #e0ddd2" }} title={tooltip}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>{label}</div>
+                      <div className="mono" style={{ fontSize: 12, color: "#1a1f2c", fontWeight: 600 }}>
+                        {selfVal != null ? fmtFn(selfVal) + suffix : "—"}
+                        <span style={{ color: "#8a93a3", fontWeight: 400, marginLeft: 6, fontSize: 10 }}>
+                          vs {peerVal != null ? fmtFn(peerVal) + suffix : "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 10, color, fontWeight: 600, marginLeft: 8 }}>{verdict}</span>
+                  </div>
+                );
+              };
+
+              return (
+                <div style={{ padding: "14px 16px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                    <span style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>vs Peers</span>
+                    <span style={{ fontSize: 9, color: "#8a93a3" }}>{symbol} vs {peerRows.length - 1} peer avg</span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <Row label="P/E (trailing)" selfVal={self.pe} peerVal={peerAvgPE} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" tooltip="Lower is cheaper" />
+                    <Row label="P/E (forward)" selfVal={self.fwdPe} peerVal={peerAvgFwdPE} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" />
+                    <Row label="P/S" selfVal={self.ps} peerVal={peerAvgPS} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" tooltip="Price to Sales" />
+                    <Row label="EV/EBITDA" selfVal={self.evEbitda} peerVal={peerAvgEvEbitda} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" tooltip="Enterprise value / EBITDA" />
+                    <Row label="ROE" selfVal={self.roe} peerVal={peerAvgRoe} fmtFn={(v) => fmt(v * 100, 0)} suffix="%" betterWhen="higher" tooltip="Higher is better quality" />
+                  </div>
+
+                  <div style={{ marginTop: 10, padding: 8, background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 2, fontSize: 10, color: "#5a6573", lineHeight: 1.5 }}>
+                    Compared against: {peerRows.slice(1, 5).map((p) => p.ticker).join(", ")}
+                  </div>
+                </div>
+              );
+            })()}
+
+          </div>
+        )}
+
         {/* === Multi-Master Investor Check (Buffett, Lynch, Simons, Marks, Druckenmiller, Munger) === */}
         <MultiMasterCheck summary={summary} symbol={symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} />
 
@@ -1319,297 +1509,175 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, isMobile }) {
 }
 
 // ============================================================
-// MULTI-MASTER CHECK — Run dashboard data through 6 famous investor lenses
-// Buffett, Lynch, Simons, Marks, Druckenmiller, Munger
+// INVESTMENT CHECKS — flat list of data-driven verdicts
+// Distilled from Buffett/Lynch/Simons/Marks/Druckenmiller/Munger frameworks,
+// but presented as direct conclusions without master attribution.
 // ============================================================
 function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
-  const [expandedMaster, setExpandedMaster] = useState(null);
-
-  // Pull values safely, fallback to nulls
+  // Pull values safely
   const pe = f?.pe ?? null;
   const fwdPe = f?.fwdPe ?? null;
   const peg = ly?.pegRatio ?? null;
   const roe = ly?.roe ?? null;
-  const roic = ly?.roic ?? null;
   const debtEq = ly?.debtEq ?? null;
   const fcfYield = ly?.fcfYield ?? null;
   const earningsYield = ly?.earningsYield ?? null;
   const revGrowth = ly?.revGrowthPct ?? null;
-  const epsGrowth = ly?.epsGrowthPct ?? null;
   const insiderNet = ly?.netInsiderActivity ?? null;
   const insiderBuys = ly?.insiderBuys ?? 0;
   const pcr = op?.pcrVolume ?? null;
-  const consensusScore = data?.consensusScore ?? null;
-  const targetMean = data?.targetMean ?? null;
+  const targetMean = data?.targetMean ?? data?.analyst?.targetMean ?? null;
   const currentPrice = data?.quote?.current ?? null;
   const week52High = data?.quote?.week52High ?? null;
-  const sector = data?.sector ?? "";
-  const beta = f?.beta ?? null;
-  const lynchCat = ly?.category ?? null;
+  const sector = (data?.sector || "").toLowerCase();
+  const consensusRating = data?.consensusRating || data?.consensus?.rating;
+  const pctOfHigh = (week52High && currentPrice) ? (currentPrice / week52High) * 100 : null;
+  const upside = (targetMean && currentPrice) ? ((targetMean - currentPrice) / currentPrice) * 100 : null;
 
-  // ========== BUFFETT LENS — Business quality, moat, fair price ==========
-  const buffettChecks = [];
-  // Q1: Is this a great business? (ROE > 15, ROIC > 12)
-  if (roe != null && roe > 20) {
-    buffettChecks.push({ verdict: "match", q: "Is this a wonderful business?", remark: `ROE ${roe.toFixed(0)}% — yes, this earns high returns on shareholder capital. Buffett: "Time is the friend of the wonderful business."` });
-  } else if (roe != null && roe < 10) {
-    buffettChecks.push({ verdict: "diverge", q: "Is this a wonderful business?", remark: `ROE ${roe.toFixed(0)}% — Buffett would pass. He wants 15%+ ROE consistently.` });
-  } else if (roe != null) {
-    buffettChecks.push({ verdict: "neutral", q: "Is this a wonderful business?", remark: `ROE ${roe.toFixed(0)}% — decent but not exceptional. Buffett wants 15%+.` });
+  // Build flat list of checks. Each: { q, verdict, remark, category }
+  const checks = [];
+
+  // ===== Business Quality =====
+  if (roe != null) {
+    if (roe > 25) checks.push({ category: "Quality", q: "Is this a high-quality business?", verdict: "good", remark: `ROE ${roe.toFixed(0)}% — exceptional return on shareholder capital.` });
+    else if (roe > 15) checks.push({ category: "Quality", q: "Is this a high-quality business?", verdict: "good", remark: `ROE ${roe.toFixed(0)}% — strong, above-average business.` });
+    else if (roe > 8) checks.push({ category: "Quality", q: "Is this a high-quality business?", verdict: "neutral", remark: `ROE ${roe.toFixed(0)}% — decent but not exceptional.` });
+    else checks.push({ category: "Quality", q: "Is this a high-quality business?", verdict: "bad", remark: `ROE ${roe.toFixed(0)}% — weak returns on capital.` });
   }
-  // Q2: Is the price fair?
-  if (peg != null && peg > 0 && peg < 1.5) {
-    buffettChecks.push({ verdict: "match", q: "Is the price fair?", remark: `PEG ${peg.toFixed(2)} — paying a reasonable amount for the growth. "Price is what you pay, value is what you get."` });
-  } else if (peg != null && peg > 2.5) {
-    buffettChecks.push({ verdict: "diverge", q: "Is the price fair?", remark: `PEG ${peg.toFixed(2)} — Buffett would say "I'd never pay this much for any business." Margin of safety is gone.` });
-  } else if (earningsYield != null && earningsYield > 6) {
-    buffettChecks.push({ verdict: "match", q: "Is the price fair?", remark: `Earnings yield ${earningsYield.toFixed(1)}% — better than long-term Treasuries. Reasonable.` });
-  } else if (earningsYield != null && earningsYield < 3) {
-    buffettChecks.push({ verdict: "diverge", q: "Is the price fair?", remark: `Earnings yield ${earningsYield.toFixed(1)}% below 10Y Treasury (~4.4%). Bonds offer better risk-adjusted yield.` });
-  }
-  // Q3: Strong balance sheet?
-  if (debtEq != null && debtEq < 0.5) {
-    buffettChecks.push({ verdict: "match", q: "Is the balance sheet conservative?", remark: `D/E ${debtEq.toFixed(2)} — minimal debt. Buffett loves clean balance sheets.` });
-  } else if (debtEq != null && debtEq > 2) {
-    buffettChecks.push({ verdict: "diverge", q: "Is the balance sheet conservative?", remark: `D/E ${debtEq.toFixed(2)} — heavily levered. Bad in a downturn.` });
+  if (revGrowth != null) {
+    if (revGrowth > 25) checks.push({ category: "Quality", q: "Is the business growing?", verdict: "good", remark: `Revenue +${revGrowth.toFixed(0)}% — fast-growing business.` });
+    else if (revGrowth > 10) checks.push({ category: "Quality", q: "Is the business growing?", verdict: "good", remark: `Revenue +${revGrowth.toFixed(0)}% — solid growth.` });
+    else if (revGrowth > 0) checks.push({ category: "Quality", q: "Is the business growing?", verdict: "neutral", remark: `Revenue +${revGrowth.toFixed(0)}% — slow grower.` });
+    else checks.push({ category: "Quality", q: "Is the business growing?", verdict: "bad", remark: `Revenue ${revGrowth.toFixed(0)}% — declining.` });
   }
 
-  // ========== LYNCH LENS — Growth at reasonable price, story you understand ==========
-  const lynchChecks = [];
-  // Q1: PEG below 1?
+  // ===== Valuation =====
   if (peg != null && peg > 0) {
-    if (peg < 1) lynchChecks.push({ verdict: "match", q: "Is PEG below 1?", remark: `PEG ${peg.toFixed(2)} — Lynch's favorite signal. "The P/E of any company that's fairly priced will equal its growth rate."` });
-    else if (peg < 1.5) lynchChecks.push({ verdict: "neutral", q: "Is PEG below 1?", remark: `PEG ${peg.toFixed(2)} — slightly above Lynch's sweet spot but still reasonable.` });
-    else lynchChecks.push({ verdict: "diverge", q: "Is PEG below 1?", remark: `PEG ${peg.toFixed(2)} — too rich on Lynch's framework. Growth not justifying the multiple.` });
+    if (peg < 1) checks.push({ category: "Valuation", q: "Is the price fair for the growth?", verdict: "good", remark: `PEG ${peg.toFixed(2)} — cheap relative to growth rate.` });
+    else if (peg < 1.5) checks.push({ category: "Valuation", q: "Is the price fair for the growth?", verdict: "neutral", remark: `PEG ${peg.toFixed(2)} — fair value.` });
+    else if (peg < 2.5) checks.push({ category: "Valuation", q: "Is the price fair for the growth?", verdict: "neutral", remark: `PEG ${peg.toFixed(2)} — premium pricing, paying for growth.` });
+    else checks.push({ category: "Valuation", q: "Is the price fair for the growth?", verdict: "bad", remark: `PEG ${peg.toFixed(2)} — expensive even accounting for growth.` });
   }
-  // Q2: Steady earnings/revenue growth?
-  if (revGrowth != null && revGrowth > 15) {
-    lynchChecks.push({ verdict: "match", q: "Is growth real?", remark: `Revenue +${revGrowth.toFixed(0)}% — strong organic growth. Classic Lynch "fast grower" territory.` });
-  } else if (revGrowth != null && revGrowth < 0) {
-    lynchChecks.push({ verdict: "diverge", q: "Is growth real?", remark: `Revenue ${revGrowth.toFixed(0)}% — declining. Lynch would skip "stalwarts in decline."` });
-  } else if (revGrowth != null) {
-    lynchChecks.push({ verdict: "neutral", q: "Is growth real?", remark: `Revenue +${revGrowth.toFixed(0)}% — modest. Stalwart territory, not "fast grower."` });
+  if (earningsYield != null) {
+    if (earningsYield > 6) checks.push({ category: "Valuation", q: "Does the earnings yield beat bonds?", verdict: "good", remark: `Earnings yield ${earningsYield.toFixed(1)}% — better than long-term Treasuries.` });
+    else if (earningsYield < 3.5) checks.push({ category: "Valuation", q: "Does the earnings yield beat bonds?", verdict: "bad", remark: `Earnings yield ${earningsYield.toFixed(1)}% below 10Y Treasury (~4.4%) — bonds offer better risk-adjusted yield.` });
   }
-  // Q3: Lynch category fits the story?
-  if (lynchCat && lynchCat !== "—") {
-    const catLower = lynchCat.toLowerCase();
-    if (catLower.includes("fast grower")) lynchChecks.push({ verdict: "match", q: "What kind of stock is this?", remark: `Classified as "Fast Grower" — Lynch's favorite category if PEG is sane. These can 10x.` });
-    else if (catLower.includes("stalwart")) lynchChecks.push({ verdict: "neutral", q: "What kind of stock is this?", remark: `Classified as "Stalwart" — 10-15% growth annually. Boring but reliable.` });
-    else if (catLower.includes("slow")) lynchChecks.push({ verdict: "diverge", q: "What kind of stock is this?", remark: `Classified as "Slow Grower" — Lynch would skip. Wait for the dividend or move on.` });
-    else if (catLower.includes("cyclical")) lynchChecks.push({ verdict: "neutral", q: "What kind of stock is this?", remark: `Cyclical — depends on macro timing. PE doesn't work the same here.` });
+  if (fcfYield != null) {
+    if (fcfYield > 5) checks.push({ category: "Valuation", q: "Is free cash flow yield attractive?", verdict: "good", remark: `FCF yield ${fcfYield.toFixed(1)}% — generous cash generation per dollar invested.` });
+    else if (fcfYield > 0 && fcfYield < 1.5) checks.push({ category: "Valuation", q: "Is free cash flow yield attractive?", verdict: "bad", remark: `FCF yield ${fcfYield.toFixed(1)}% — paying a steep premium relative to cash generated.` });
   }
 
-  // ========== SIMONS LENS — Pure data, no story, statistical edge ==========
-  const simonsChecks = [];
-  // Q1: Insiders agree?
+  // ===== Balance Sheet =====
+  if (debtEq != null) {
+    if (debtEq < 0.5) checks.push({ category: "Quality", q: "Is the balance sheet healthy?", verdict: "good", remark: `D/E ${debtEq.toFixed(2)} — minimal leverage, clean balance sheet.` });
+    else if (debtEq > 2) checks.push({ category: "Quality", q: "Is the balance sheet healthy?", verdict: "bad", remark: `D/E ${debtEq.toFixed(2)} — heavy leverage, vulnerable in downturns.` });
+  }
+
+  // ===== Smart Money =====
   if (insiderNet != null && insiderNet < -100e6 && insiderBuys === 0) {
-    simonsChecks.push({ verdict: "diverge", q: "Are insiders buying or selling?", remark: `Insiders sold $${formatMcap(Math.abs(insiderNet))} with zero purchases. Smart money exits — that's a data signal, not noise.` });
+    checks.push({ category: "Smart Money", q: "Are insiders buying or selling?", verdict: "bad", remark: `Insiders sold $${formatMcap(Math.abs(insiderNet))} in 6 months with zero purchases — people closest to the business are exiting.` });
   } else if (insiderNet != null && insiderBuys > 0 && insiderNet > 0) {
-    simonsChecks.push({ verdict: "match", q: "Are insiders buying or selling?", remark: `Net insider buying. Strong data signal — people closest to the business are voting with dollars.` });
+    checks.push({ category: "Smart Money", q: "Are insiders buying or selling?", verdict: "good", remark: `Net insider buying — strong vote of confidence from people closest to the business.` });
   }
-  // Q2: Crowd over-positioned? (PCR extreme = contrarian)
+
+  // ===== Crowd / Positioning =====
   if (pcr != null) {
-    if (pcr < 0.4) simonsChecks.push({ verdict: "diverge", q: "Is the crowd over-positioned?", remark: `P/C ratio ${pcr.toFixed(2)} — extreme bullishness. Statistically, this often precedes pullbacks.` });
-    else if (pcr > 1.8) simonsChecks.push({ verdict: "match", q: "Is the crowd over-positioned?", remark: `P/C ratio ${pcr.toFixed(2)} — extreme bearishness. Crowds get washed out at the wrong time.` });
-    else simonsChecks.push({ verdict: "neutral", q: "Is the crowd over-positioned?", remark: `P/C ratio ${pcr.toFixed(2)} — balanced positioning. No edge from sentiment.` });
+    if (pcr < 0.4) checks.push({ category: "Crowd", q: "Is the crowd over-positioned?", verdict: "bad", remark: `Put/Call ${pcr.toFixed(2)} — extreme bullishness. Historically a contrarian warning sign for near-term pullbacks.` });
+    else if (pcr > 1.8) checks.push({ category: "Crowd", q: "Is the crowd over-positioned?", verdict: "good", remark: `Put/Call ${pcr.toFixed(2)} — extreme bearishness, sentiment washed out. Often precedes bounces.` });
   }
-  // Q3: Statistical composite signal
+
+  // ===== Street View =====
+  if (upside != null && upside > 20) {
+    checks.push({ category: "Street", q: "Is there room to analyst targets?", verdict: "good", remark: `+${upside.toFixed(0)}% to consensus target — meaningful upside per Wall Street.` });
+  } else if (upside != null && upside < -5) {
+    checks.push({ category: "Street", q: "Is there room to analyst targets?", verdict: "bad", remark: `Trading ${Math.abs(upside).toFixed(0)}% above consensus target — Wall Street thinks the gains are done.` });
+  } else if (upside != null) {
+    checks.push({ category: "Street", q: "Is there room to analyst targets?", verdict: "neutral", remark: `${upside >= 0 ? "+" : ""}${upside.toFixed(0)}% to consensus — modest expected return per Wall Street.` });
+  }
+
+  // ===== Position vs 52-week range =====
+  if (pctOfHigh != null) {
+    if (pctOfHigh > 95) checks.push({ category: "Risk", q: "Where is price vs 52-week range?", verdict: "bad", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high — limited upside, full downside risk. Poor reward/risk asymmetry.` });
+    else if (pctOfHigh < 60) checks.push({ category: "Risk", q: "Where is price vs 52-week range?", verdict: "good", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high — room to recover if thesis intact.` });
+  }
+
+  // ===== Sector/cycle awareness =====
+  if (sector.includes("semi") || sector.includes("ai")) {
+    checks.push({ category: "Risk", q: "What stage of cycle is the sector in?", verdict: "neutral", remark: `${data?.sector || "AI/Semis"} — late-cycle territory. Risk highest when sentiment is most positive.` });
+  } else if (sector.includes("health") || sector.includes("staple")) {
+    checks.push({ category: "Risk", q: "What stage of cycle is the sector in?", verdict: "good", remark: `${data?.sector} — defensive sector, recession-resistant.` });
+  }
+
+  // ===== Composite signal =====
   if (summary.stanceColor === "positive") {
-    simonsChecks.push({ verdict: "match", q: "What does the composite signal say?", remark: `Dashboard stance is "${summary.stance}" — your data signal supports the position.` });
+    checks.push({ category: "Composite", q: "What does the overall data signal say?", verdict: "good", remark: `Dashboard composite is "${summary.stance}" — weight of evidence supports the position.` });
   } else if (summary.stanceColor === "negative") {
-    simonsChecks.push({ verdict: "diverge", q: "What does the composite signal say?", remark: `Dashboard stance is "${summary.stance}" — model says weight of evidence is against you.` });
+    checks.push({ category: "Composite", q: "What does the overall data signal say?", verdict: "bad", remark: `Dashboard composite is "${summary.stance}" — weight of evidence is against you.` });
   } else {
-    simonsChecks.push({ verdict: "neutral", q: "What does the composite signal say?", remark: `Dashboard stance is "${summary.stance}" — no clear statistical edge.` });
+    checks.push({ category: "Composite", q: "What does the overall data signal say?", verdict: "neutral", remark: `Dashboard composite is "${summary.stance}" — mixed signals, no clear edge.` });
   }
 
-  // ========== MARKS LENS — Risk-first, second-level thinking ==========
-  const marksChecks = [];
-  // Q1: What's the reward-to-risk asymmetry?
-  if (week52High && currentPrice) {
-    const pctOfHigh = (currentPrice / week52High) * 100;
-    if (pctOfHigh > 95) {
-      marksChecks.push({ verdict: "diverge", q: "What's the asymmetry of risk vs reward?", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high. Limited upside, full downside risk. Marks: "Move toward what's hated, not what's loved."` });
-    } else if (pctOfHigh < 60) {
-      marksChecks.push({ verdict: "match", q: "What's the asymmetry of risk vs reward?", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high — there's room to run. Marks-favored "uncomfortable opportunity."` });
-    } else {
-      marksChecks.push({ verdict: "neutral", q: "What's the asymmetry of risk vs reward?", remark: `At ${pctOfHigh.toFixed(0)}% of 52w high — middle of range. Average asymmetry.` });
-    }
-  }
-  // Q2: Is consensus already priced in?
-  if (consensusScore != null && targetMean != null && currentPrice) {
-    const upside = ((targetMean - currentPrice) / currentPrice) * 100;
-    if (consensusScore >= 4.3 && upside < 5) {
-      marksChecks.push({ verdict: "diverge", q: "Is the consensus already priced in?", remark: `Wall St rates this "${data?.consensusRating || "buy"}" but stock is already at target. The good news is in the price. Marks: "Trees don't grow to the sky."` });
-    } else if (upside > 25) {
-      marksChecks.push({ verdict: "match", q: "Is the consensus already priced in?", remark: `Analyst target implies +${upside.toFixed(0)}% — meaningful upside still ahead per consensus.` });
-    } else {
-      marksChecks.push({ verdict: "neutral", q: "Is the consensus already priced in?", remark: `Modest implied upside (${upside.toFixed(0)}%). Limited consensus edge either way.` });
-    }
-  }
-  // Q3: Where are we in the cycle?
-  if (sector.toLowerCase().includes("semi") || sector.toLowerCase().includes("ai")) {
-    marksChecks.push({ verdict: "diverge", q: "Where are we in the cycle?", remark: `${sector} is late-cycle territory. AI cap-ex peaks happen, then ratios compress. Marks: "Risk is highest when it feels safest."` });
-  }
+  // ===== Compute overall =====
+  const goodCount = checks.filter((c) => c.verdict === "good").length;
+  const badCount = checks.filter((c) => c.verdict === "bad").length;
+  let overall, overallColor, overallBg;
+  if (goodCount >= badCount + 3) { overall = "Strong setup"; overallColor = "#0a6e44"; overallBg = "#dcf0e3"; }
+  else if (goodCount > badCount) { overall = "Leans positive"; overallColor = "#0a6e44"; overallBg = "#dcf0e3"; }
+  else if (badCount > goodCount + 2) { overall = "Multiple red flags"; overallColor = "#a3203a"; overallBg = "#fde0e3"; }
+  else if (badCount > goodCount) { overall = "Caution warranted"; overallColor = "#8b6914"; overallBg = "#fff4d0"; }
+  else { overall = "Mixed signals"; overallColor = "#5a6573"; overallBg = "#ebe9e0"; }
 
-  // ========== DRUCKENMILLER LENS — Concentrated conviction + macro tailwind ==========
-  const druckChecks = [];
-  // Q1: Macro alignment
-  if (sector.toLowerCase().includes("ai") || sector.toLowerCase().includes("semi") || sector.toLowerCase().includes("hyperscaler")) {
-    druckChecks.push({ verdict: "match", q: "Is there a macro tailwind?", remark: `AI/Semis/Hyperscaler — multi-year capex cycle from MSFT, GOOG, META, AMZN. Druckenmiller would call this a thematic tailwind worth riding.` });
-  } else if (sector.toLowerCase().includes("financ") && data?.macroContext?.rates10Y > 4) {
-    druckChecks.push({ verdict: "match", q: "Is there a macro tailwind?", remark: `Higher rates = better bank NIM. Macro is on your side.` });
+  // Group by category for readable layout
+  const order = ["Quality", "Valuation", "Smart Money", "Crowd", "Street", "Risk", "Composite"];
+  const grouped = {};
+  for (const c of checks) {
+    if (!grouped[c.category]) grouped[c.category] = [];
+    grouped[c.category].push(c);
   }
-  // Q2: Conviction-worthy thesis?
-  if (revGrowth != null && roe != null && revGrowth > 15 && roe > 20) {
-    druckChecks.push({ verdict: "match", q: "Does this deserve concentration?", remark: `Revenue +${revGrowth.toFixed(0)}%, ROE ${roe.toFixed(0)}%. Druckenmiller philosophy: "Bet big when you have an edge — but only then."` });
-  } else if (revGrowth != null && revGrowth < 5) {
-    druckChecks.push({ verdict: "diverge", q: "Does this deserve concentration?", remark: `Slow growth (revenue +${revGrowth.toFixed(0)}%). No reason to concentrate. Druckenmiller cuts losers fast.` });
-  }
-
-  // ========== MUNGER LENS — Inversion, avoid stupidity ==========
-  const mungerChecks = [];
-  // Q1: Inversion — what could go wrong?
-  const risks = [];
-  if (debtEq != null && debtEq > 2) risks.push("balance sheet leverage");
-  if (peg != null && peg > 2.5) risks.push("valuation compression");
-  if (insiderNet != null && insiderNet < -100e6) risks.push("insider exit");
-  if (pcr != null && pcr < 0.4) risks.push("crowded long");
-  if (week52High && currentPrice && (currentPrice / week52High) > 0.97) risks.push("priced for perfection");
-  if (risks.length >= 3) {
-    mungerChecks.push({ verdict: "diverge", q: "Inverting — what could go wrong?", remark: `Multiple risk vectors: ${risks.join(", ")}. Munger: "All I want to know is where I'm going to die, so I'll never go there."` });
-  } else if (risks.length === 0) {
-    mungerChecks.push({ verdict: "match", q: "Inverting — what could go wrong?", remark: `No obvious red flags. Munger: "Take a simple idea and take it seriously."` });
-  } else {
-    mungerChecks.push({ verdict: "neutral", q: "Inverting — what could go wrong?", remark: `Some risks present (${risks.join(", ")}) but manageable. Watch them.` });
-  }
-  // Q2: Is the sector hated or loved? (We want hated)
-  if (pcr != null && pcr < 0.4 && summary.flags?.some((f) => f.toLowerCase().includes("near 52"))) {
-    mungerChecks.push({ verdict: "diverge", q: "Are people too excited about this?", remark: `Near 52w high + crowd extremely bullish = peak euphoria. Munger: "The big money is not in the buying or selling, but in the waiting."` });
-  }
-
-  // ========== Compute master overall verdicts ==========
-  const summarize = (checks) => {
-    const m = checks.filter((c) => c.verdict === "match").length;
-    const d = checks.filter((c) => c.verdict === "diverge").length;
-    const total = checks.length;
-    if (total === 0) return { score: "neutral", color: "#5a6573", label: "No data" };
-    if (m >= 2 && d === 0) return { score: "match", color: "#0a8554", label: "Approves" };
-    if (m > d) return { score: "match-weak", color: "#86b09c", label: "Leans positive" };
-    if (d >= 2 && m === 0) return { score: "diverge", color: "#c4314b", label: "Would pass" };
-    if (d > m) return { score: "diverge-weak", color: "#d4a017", label: "Cautious" };
-    return { score: "neutral", color: "#5a6573", label: "Mixed" };
-  };
-
-  const masters = [
-    { name: "Buffett",       lens: "Quality & price",            checks: buffettChecks, ...summarize(buffettChecks), color: "#0a8554" },
-    { name: "Lynch",         lens: "Growth at fair price",       checks: lynchChecks,   ...summarize(lynchChecks),   color: "#5a6573" },
-    { name: "Simons",        lens: "Pure data, no story",        checks: simonsChecks,  ...summarize(simonsChecks),  color: "#7ba2cc" },
-    { name: "Marks",         lens: "Risk-first, second-level",   checks: marksChecks,   ...summarize(marksChecks),   color: "#d4a017" },
-    { name: "Druckenmiller", lens: "Concentrated + macro",       checks: druckChecks,   ...summarize(druckChecks),   color: "#c4314b" },
-    { name: "Munger",        lens: "Inversion, avoid stupidity", checks: mungerChecks,  ...summarize(mungerChecks),  color: "#1a1f2c" },
-  ].filter((m) => m.checks.length > 0);
-
-  // Overall: average of master scores
-  const approveCount = masters.filter((m) => m.score === "match" || m.score === "match-weak").length;
-  const passCount = masters.filter((m) => m.score === "diverge" || m.score === "diverge-weak").length;
-  const consensus = approveCount >= 4 ? "Broad approval" :
-                    approveCount >= passCount + 2 ? "Most masters approve" :
-                    passCount >= 4 ? "Broad caution" :
-                    passCount >= approveCount + 2 ? "Most masters cautious" :
-                    "Masters split";
-  const consensusColor = approveCount >= 4 ? "#0a8554" :
-                         approveCount >= passCount + 2 ? "#86b09c" :
-                         passCount >= 4 ? "#c4314b" :
-                         passCount >= approveCount + 2 ? "#d4a017" :
-                         "#5a6573";
 
   return (
     <div style={{ marginTop: 14, padding: "14px 16px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: "#5a6573", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>Multi-Master Check · {symbol}</span>
-        <span className="pill" style={{ background: consensusColor === "#5a6573" ? "#7a8497" : consensusColor, color: "#fff", fontWeight: 700 }}>{consensus}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, color: "#1a1f2c", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700 }}>Investment Checks · {symbol}</span>
+        <span style={{ padding: "4px 10px", background: overallBg, color: overallColor, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", borderRadius: 2, textTransform: "uppercase" }}>{overall}</span>
       </div>
-      <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5, marginBottom: 12 }}>
-        How would the great investors evaluate this stock? Click a master to see detailed checks.
-      </div>
-
-      {/* Master cards grid */}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
-        {masters.map((m) => {
-          const isOpen = expandedMaster === m.name;
-          // Verdict bg/text — light, semantic
-          const verdictBg = m.color === "#0a8554" ? "#dcf0e3"
-                         : m.color === "#86b09c" ? "#e6f0e8"
-                         : m.color === "#d4a017" ? "#fff4d0"
-                         : m.color === "#c4314b" ? "#fde0e3"
-                         : "#ebe9e0";
-          const verdictText = m.color === "#0a8554" ? "#0a6e44"
-                            : m.color === "#86b09c" ? "#3d7a5b"
-                            : m.color === "#d4a017" ? "#8b6914"
-                            : m.color === "#c4314b" ? "#a3203a"
-                            : "#5a6573";
-          return (
-            <div key={m.name}
-              onClick={() => setExpandedMaster(isOpen ? null : m.name)}
-              style={{ padding: "10px 12px", background: isOpen ? "#fff" : "#ffffff", border: isOpen ? `2px solid ${verdictText}` : "1px solid #e6e3db", borderRadius: 3, cursor: "pointer", transition: "border 0.15s" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c", letterSpacing: "0.02em" }}>{m.name}</div>
-                <div style={{ fontSize: 9, color: "#8a93a3" }}>{isOpen ? "▼" : "▶"}</div>
-              </div>
-              <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 8, lineHeight: 1.3 }}>{m.lens}</div>
-              <div style={{ display: "inline-block", padding: "3px 8px", background: verdictBg, color: verdictText, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", borderRadius: 2, textTransform: "uppercase" }}>{m.label}</div>
-            </div>
-          );
-        })}
+      <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5, marginBottom: 14 }}>
+        {goodCount} positive · {badCount} negative · {checks.length - goodCount - badCount} neutral. Direct conclusions from the data — no narrative spin.
       </div>
 
-      {/* Expanded master detail */}
-      {expandedMaster && (() => {
-        const m = masters.find((x) => x.name === expandedMaster);
-        if (!m) return null;
-        const borderColor = m.color === "#1a1f2c" ? "#5a6573"
-                          : m.color === "#0a8554" ? "#0a6e44"
-                          : m.color === "#86b09c" ? "#3d7a5b"
-                          : m.color === "#d4a017" ? "#8b6914"
-                          : m.color === "#c4314b" ? "#a3203a"
-                          : "#5a6573";
-        return (
-          <div style={{ padding: "12px 14px", background: "#fff", border: `2px solid ${borderColor}`, borderRadius: 3, marginBottom: 4 }}>
-            <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 10 }}>
-              <strong>{m.name}'s perspective:</strong> <span style={{ color: "#5a6573" }}>{m.lens}</span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {m.checks.map((c, i) => {
-                const icon = c.verdict === "match" ? "✓" : c.verdict === "diverge" ? "✗" : "·";
-                const color = c.verdict === "match" ? "#0a8554" : c.verdict === "diverge" ? "#c4314b" : "#5a6573";
-                return (
-                  <div key={i} style={{ display: "flex", gap: 10, fontSize: 11, lineHeight: 1.55 }}>
-                    <span style={{ color, fontWeight: 700, fontSize: 16, flexShrink: 0, width: 16, textAlign: "center" }}>{icon}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#1a1f2c", fontWeight: 600, marginBottom: 3, fontSize: 12 }}>{c.q}</div>
-                      <div style={{ color: "#5a6573", fontSize: 11, lineHeight: 1.5 }}>{c.remark}</div>
-                    </div>
+      {order.filter((cat) => grouped[cat]?.length).map((cat) => (
+        <div key={cat} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, marginBottom: 6 }}>{cat}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {grouped[cat].map((c, i) => {
+              const icon = c.verdict === "good" ? "✓" : c.verdict === "bad" ? "✗" : "·";
+              const color = c.verdict === "good" ? "#0a8554" : c.verdict === "bad" ? "#c4314b" : "#8a93a3";
+              const bg = c.verdict === "good" ? "#f4faf6" : c.verdict === "bad" ? "#fef7f8" : "#fff";
+              return (
+                <div key={i} style={{ display: "flex", gap: 10, padding: "8px 10px", background: bg, border: `1px solid ${c.verdict === "good" ? "#cfe6d8" : c.verdict === "bad" ? "#f3d3d8" : "#e6e3db"}`, borderLeft: `3px solid ${color}`, borderRadius: 2 }}>
+                  <span style={{ color, fontWeight: 700, fontSize: 14, flexShrink: 0, width: 14, textAlign: "center", lineHeight: 1.4 }}>{icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: "#1a1f2c", fontWeight: 600, fontSize: 12, marginBottom: 2 }}>{c.q}</div>
+                    <div style={{ color: "#5a6573", fontSize: 11, lineHeight: 1.5 }}>{c.remark}</div>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
           </div>
-        );
-      })()}
+        </div>
+      ))}
 
-      {/* Overall consensus interpretation */}
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e6e3db", fontSize: 11, color: "#5a6573", lineHeight: 1.65 }}>
-        <strong style={{ color: "#1a1f2c" }}>Overall:</strong> <span style={{ color: consensusColor === "#5a6573" ? "#5a6573" : consensusColor, fontWeight: 600 }}>{approveCount}/{masters.length} approve, {passCount}/{masters.length} cautious.</span>{" "}
-        {consensus === "Broad approval" && "Strong multi-framework support. Position with conviction."}
-        {consensus === "Most masters approve" && "Solid setup with some dissenting views worth noting."}
-        {consensus === "Masters split" && "Each lens shows a different angle. No clear consensus — your conviction has to come from elsewhere."}
-        {consensus === "Most masters cautious" && "More cautions than approvals. Consider trimming or waiting for better entry."}
-        {consensus === "Broad caution" && "Multiple frameworks see problems. Even if you believe in the story, the math is against you. Re-evaluate."}
+      <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px solid #e6e3db", fontSize: 11, color: "#5a6573", lineHeight: 1.65 }}>
+        <strong style={{ color: overallColor }}>Bottom line:</strong>{" "}
+        {overall === "Strong setup" && "Multiple positive signals across categories with few warnings. Position with conviction."}
+        {overall === "Leans positive" && "More positives than negatives. Solid setup with some concerns to monitor."}
+        {overall === "Mixed signals" && "Roughly balanced positives and negatives. No clear edge from the data alone."}
+        {overall === "Caution warranted" && "More negatives than positives. Reduce position size or wait for better entry."}
+        {overall === "Multiple red flags" && "Several red flags across categories. Even if you believe the story, the math is against you."}
       </div>
     </div>
   );
 }
-
 // ============================================================
 // RISK FLAGS PANEL — extracted as component so it can sit near top
 // ============================================================
