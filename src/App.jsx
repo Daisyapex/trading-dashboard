@@ -1308,26 +1308,43 @@ function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
                          "#5a6573";
 
   return (
-    <div style={{ marginTop: 14, padding: "12px 14px", background: "#1a1f2c", color: "#fff", borderRadius: 2 }}>
+    <div style={{ marginTop: 14, padding: "14px 16px", background: "#222837", color: "#fff", borderRadius: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
-        <span style={{ fontSize: 10, color: "#d4a017", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600 }}>Multi-Master Check · {symbol}</span>
-        <span className="pill" style={{ background: consensusColor, color: "#fff" }}>{consensus}</span>
+        <span style={{ fontSize: 11, color: "#d4a017", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>Multi-Master Check · {symbol}</span>
+        <span className="pill" style={{ background: consensusColor === "#5a6573" ? "#7a8497" : consensusColor, color: "#fff", fontWeight: 700 }}>{consensus}</span>
       </div>
-      <div style={{ fontSize: 11, color: "#a4abb8", lineHeight: 1.5, marginBottom: 12 }}>
+      <div style={{ fontSize: 11, color: "#c0c6d0", lineHeight: 1.5, marginBottom: 14 }}>
         How would the great investors evaluate this stock based on actual data? Click a master to see their detailed checks.
       </div>
 
       {/* Master cards grid */}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 6, marginBottom: 12 }}>
-        {masters.map((m) => (
-          <div key={m.name}
-            onClick={() => setExpandedMaster(expandedMaster === m.name ? null : m.name)}
-            style={{ padding: "8px 10px", background: expandedMaster === m.name ? "#2a2f3c" : "#0f131a", border: `1px solid ${m.color}`, borderLeft: `3px solid ${m.color}`, borderRadius: 2, cursor: "pointer" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>{m.name}</div>
-            <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 4 }}>{m.lens}</div>
-            <div style={{ fontSize: 10, color: m.color, fontWeight: 600 }}>{m.label}</div>
-          </div>
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
+        {masters.map((m) => {
+          const isOpen = expandedMaster === m.name;
+          // Verdict color — semantic (green/red/yellow/gray based on score, not which master)
+          const verdictBg = m.color === "#0a8554" ? "rgba(10, 133, 84, 0.18)"
+                         : m.color === "#86b09c" ? "rgba(134, 176, 156, 0.18)"
+                         : m.color === "#d4a017" ? "rgba(212, 160, 23, 0.18)"
+                         : m.color === "#c4314b" ? "rgba(196, 49, 75, 0.18)"
+                         : "rgba(255, 255, 255, 0.06)";
+          const verdictText = m.color === "#0a8554" ? "#7fd9a8"
+                            : m.color === "#86b09c" ? "#a8d4be"
+                            : m.color === "#d4a017" ? "#f4cc4d"
+                            : m.color === "#c4314b" ? "#f08fa0"
+                            : "#c0c6d0";
+          return (
+            <div key={m.name}
+              onClick={() => setExpandedMaster(isOpen ? null : m.name)}
+              style={{ padding: "10px 12px", background: isOpen ? "#3a4150" : "#2a3040", border: isOpen ? `2px solid ${verdictText}` : "1px solid #3a4150", borderRadius: 4, cursor: "pointer", transition: "background 0.15s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", letterSpacing: "0.02em" }}>{m.name}</div>
+                <div style={{ fontSize: 9, color: "#fff", opacity: 0.5 }}>{isOpen ? "▼" : "▶"}</div>
+              </div>
+              <div style={{ fontSize: 10, color: "#a4abb8", marginBottom: 8, lineHeight: 1.3 }}>{m.lens}</div>
+              <div style={{ display: "inline-block", padding: "3px 8px", background: verdictBg, color: verdictText, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", borderRadius: 2, textTransform: "uppercase" }}>{m.label}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Expanded master detail */}
@@ -1335,20 +1352,20 @@ function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
         const m = masters.find((x) => x.name === expandedMaster);
         if (!m) return null;
         return (
-          <div style={{ padding: "10px 12px", background: "#0f131a", border: `1px solid ${m.color}`, borderRadius: 2 }}>
-            <div style={{ fontSize: 12, color: "#fff", marginBottom: 8 }}>
-              <strong>{m.name}'s perspective:</strong> <span style={{ color: "#a4abb8" }}>{m.lens}</span>
+          <div style={{ padding: "12px 14px", background: "#2a3040", border: `2px solid ${m.color === "#1a1f2c" ? "#5a6573" : m.color}`, borderRadius: 4, marginBottom: 4 }}>
+            <div style={{ fontSize: 12, color: "#fff", marginBottom: 10 }}>
+              <strong>{m.name}'s perspective:</strong> <span style={{ color: "#c0c6d0" }}>{m.lens}</span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {m.checks.map((c, i) => {
                 const icon = c.verdict === "match" ? "✓" : c.verdict === "diverge" ? "✗" : "·";
-                const color = c.verdict === "match" ? "#86b09c" : c.verdict === "diverge" ? "#e07585" : "#8a93a3";
+                const color = c.verdict === "match" ? "#7fd9a8" : c.verdict === "diverge" ? "#f08fa0" : "#c0c6d0";
                 return (
-                  <div key={i} style={{ display: "flex", gap: 8, fontSize: 11, lineHeight: 1.5 }}>
-                    <span style={{ color, fontWeight: 700, fontSize: 14, flexShrink: 0, width: 14 }}>{icon}</span>
+                  <div key={i} style={{ display: "flex", gap: 10, fontSize: 11, lineHeight: 1.55 }}>
+                    <span style={{ color, fontWeight: 700, fontSize: 15, flexShrink: 0, width: 16, textAlign: "center" }}>{icon}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#fff", fontWeight: 600, marginBottom: 2 }}>{c.q}</div>
-                      <div style={{ color: "#a4abb8", fontSize: 11 }}>{c.remark}</div>
+                      <div style={{ color: "#fff", fontWeight: 600, marginBottom: 3, fontSize: 12 }}>{c.q}</div>
+                      <div style={{ color: "#c0c6d0", fontSize: 11, lineHeight: 1.5 }}>{c.remark}</div>
                     </div>
                   </div>
                 );
@@ -1359,8 +1376,8 @@ function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
       })()}
 
       {/* Overall consensus interpretation */}
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #2a2f3c", fontSize: 11, color: "#a4abb8", lineHeight: 1.6 }}>
-        <strong style={{ color: consensusColor }}>Overall:</strong> {approveCount}/{masters.length} masters approve, {passCount}/{masters.length} cautious.{" "}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #3a4150", fontSize: 11, color: "#c0c6d0", lineHeight: 1.65 }}>
+        <strong style={{ color: "#fff" }}>Overall:</strong> <span style={{ color: consensusColor === "#5a6573" ? "#c0c6d0" : consensusColor, fontWeight: 600 }}>{approveCount}/{masters.length} approve, {passCount}/{masters.length} cautious.</span>{" "}
         {consensus === "Broad approval" && "Strong multi-framework support. Position with conviction."}
         {consensus === "Most masters approve" && "Solid setup with some dissenting views worth noting."}
         {consensus === "Masters split" && "Each lens shows a different angle. No clear consensus — your conviction has to come from elsewhere."}
