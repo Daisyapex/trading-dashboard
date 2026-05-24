@@ -1133,127 +1133,177 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, isMobile }) {
           </div>
         </div>
 
-        {/* Analyst target range visual + breakdown */}
+        {/* === Analyst Insights — 4 Yahoo-Finance-style cards, light themed === */}
         {target != null && cur != null && (
-          <div style={{ padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 4 }}>
-              <span style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>Analyst Price Targets</span>
-              {numAnalysts && <span style={{ fontSize: 10, color: "#8a93a3" }}>{numAnalysts} analysts</span>}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 4 }}>
+              <span style={{ fontSize: 11, color: "#1a1f2c", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700 }}>Analyst Insights · {symbol}</span>
+              {numAnalysts && <span style={{ fontSize: 10, color: "#5a6573" }}>{numAnalysts} analysts</span>}
             </div>
-            {targetHigh && targetLow && targetHigh > targetLow && (() => {
-              const rangeMin = Math.min(targetLow, cur);
-              const rangeMax = Math.max(targetHigh, cur);
-              const rangeWidth = rangeMax - rangeMin;
-              const pctOf = (v) => ((v - rangeMin) / rangeWidth) * 100;
-              return (
-                <div style={{ position: "relative", height: 50, marginBottom: 6 }}>
-                  {/* Range bar */}
-                  <div style={{ position: "absolute", top: 22, left: `${pctOf(targetLow)}%`, width: `${pctOf(targetHigh) - pctOf(targetLow)}%`, height: 6, background: "linear-gradient(90deg, #c4314b 0%, #d4a017 50%, #0a8554 100%)", borderRadius: 2 }} />
-                  {/* Low target marker */}
-                  <div style={{ position: "absolute", top: 18, left: `${pctOf(targetLow)}%`, transform: "translateX(-50%)", width: 2, height: 14, background: "#c4314b" }} />
-                  <div style={{ position: "absolute", top: 34, left: `${pctOf(targetLow)}%`, transform: "translateX(-50%)", fontSize: 10, color: "#c4314b", whiteSpace: "nowrap", fontWeight: 600 }}>${fmt(targetLow, 0)}</div>
-                  <div style={{ position: "absolute", top: 0, left: `${pctOf(targetLow)}%`, transform: "translateX(-50%)", fontSize: 8, color: "#8a93a3", whiteSpace: "nowrap" }}>Low</div>
-                  {/* Mean target marker */}
-                  <div style={{ position: "absolute", top: 16, left: `${pctOf(target)}%`, transform: "translateX(-50%)", width: 3, height: 18, background: "#1a1f2c" }} />
-                  <div style={{ position: "absolute", top: 34, left: `${pctOf(target)}%`, transform: "translateX(-50%)", fontSize: 10, color: "#1a1f2c", whiteSpace: "nowrap", fontWeight: 700 }}>${fmt(target, 0)} avg</div>
-                  <div style={{ position: "absolute", top: 0, left: `${pctOf(target)}%`, transform: "translateX(-50%)", fontSize: 8, color: "#8a93a3", whiteSpace: "nowrap" }}>Target</div>
-                  {/* High target marker */}
-                  <div style={{ position: "absolute", top: 18, left: `${pctOf(targetHigh)}%`, transform: "translateX(-50%)", width: 2, height: 14, background: "#0a8554" }} />
-                  <div style={{ position: "absolute", top: 34, left: `${pctOf(targetHigh)}%`, transform: "translateX(-50%)", fontSize: 10, color: "#0a8554", whiteSpace: "nowrap", fontWeight: 600 }}>${fmt(targetHigh, 0)}</div>
-                  <div style={{ position: "absolute", top: 0, left: `${pctOf(targetHigh)}%`, transform: "translateX(-50%)", fontSize: 8, color: "#8a93a3", whiteSpace: "nowrap" }}>High</div>
-                  {/* Current price marker (blue dot, prominent) */}
-                  <div style={{ position: "absolute", top: 17, left: `${pctOf(cur)}%`, transform: "translateX(-50%)", width: 14, height: 14, borderRadius: "50%", background: "#7ba2cc", border: "2px solid #fff", boxShadow: "0 0 0 2px #7ba2cc66" }} />
-                </div>
-              );
-            })()}
-            {/* Rating distribution bar */}
-            {totalRecs > 0 && (
-              <div style={{ marginTop: 8, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 10, color: "#5a6573" }}>Rating distribution</span>
-                  <span style={{ fontSize: 10, color: "#8a93a3" }}>{totalRecs} ratings</span>
-                </div>
-                <div style={{ display: "flex", height: 8, borderRadius: 2, overflow: "hidden" }}>
-                  {recCounts.strongBuy > 0 && <div style={{ width: `${(recCounts.strongBuy / totalRecs) * 100}%`, background: "#0a8554" }} title={`Strong Buy: ${recCounts.strongBuy}`} />}
-                  {recCounts.buy > 0 && <div style={{ width: `${(recCounts.buy / totalRecs) * 100}%`, background: "#86b09c" }} title={`Buy: ${recCounts.buy}`} />}
-                  {recCounts.hold > 0 && <div style={{ width: `${(recCounts.hold / totalRecs) * 100}%`, background: "#d4a017" }} title={`Hold: ${recCounts.hold}`} />}
-                  {recCounts.sell > 0 && <div style={{ width: `${(recCounts.sell / totalRecs) * 100}%`, background: "#e07585" }} title={`Sell: ${recCounts.sell}`} />}
-                  {recCounts.strongSell > 0 && <div style={{ width: `${(recCounts.strongSell / totalRecs) * 100}%`, background: "#c4314b" }} title={`Strong Sell: ${recCounts.strongSell}`} />}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 9, color: "#5a6573" }}>
-                  <span style={{ color: "#0a8554" }}>{recCounts.strongBuy} Str Buy</span>
-                  <span style={{ color: "#86b09c" }}>{recCounts.buy} Buy</span>
-                  <span style={{ color: "#d4a017" }}>{recCounts.hold} Hold</span>
-                  <span style={{ color: "#e07585" }}>{recCounts.sell} Sell</span>
-                  <span style={{ color: "#c4314b" }}>{recCounts.strongSell} Str Sell</span>
-                </div>
-              </div>
-            )}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 8 }}>
 
-            {/* Monthly rating trend - 4-month sentiment shift */}
-            {a?.monthlyTrend?.length > 1 && (
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontSize: 10, color: "#5a6573" }}>4-Month Trend (how analyst views are shifting)</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", gap: 6, height: 70 }}>
-                  {a.monthlyTrend.map((m, i) => {
-                    const total = (m.strongBuy || 0) + (m.buy || 0) + (m.hold || 0) + (m.sell || 0) + (m.strongSell || 0);
-                    if (!total) return <div key={i} style={{ flex: 1, fontSize: 9, color: "#8a93a3", textAlign: "center" }}>—</div>;
-                    const monthLabel = m.period === "0m" ? "Now" : m.period;
-                    return (
-                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
-                        <div className="mono" style={{ fontSize: 10, color: "#1a1f2c", fontWeight: 600, marginBottom: 2 }}>{total}</div>
-                        <div style={{ width: "100%", maxWidth: 36, flex: 1, display: "flex", flexDirection: "column", borderRadius: 2, overflow: "hidden", background: "#efece5" }}>
-                          {m.strongBuy > 0 && <div style={{ flex: m.strongBuy, background: "#0a8554" }} />}
-                          {m.buy > 0 && <div style={{ flex: m.buy, background: "#86b09c" }} />}
-                          {m.hold > 0 && <div style={{ flex: m.hold, background: "#d4a017" }} />}
-                          {m.sell > 0 && <div style={{ flex: m.sell, background: "#e07585" }} />}
-                          {m.strongSell > 0 && <div style={{ flex: m.strongSell, background: "#c4314b" }} />}
-                        </div>
-                        <div style={{ fontSize: 9, color: "#5a6573", marginTop: 4 }}>{monthLabel}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Latest analyst action (single most recent) */}
-            {a?.latestActions?.length > 0 && (
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
-                <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 6 }}>Latest Analyst Action</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11, alignItems: "baseline" }}>
-                  <span className="mono" style={{ color: "#8a93a3", fontSize: 10 }}>{a.latestActions[0].date || "—"}</span>
-                  <span style={{ fontWeight: 600, color: "#1a1f2c" }}>{a.latestActions[0].firm || "—"}</span>
-                  <span style={{ color: "#5a6573" }}>
-                    {a.latestActions[0].fromGrade ? `${a.latestActions[0].fromGrade} → ` : ""}
-                    <span style={{ fontWeight: 600, color: "#1a1f2c" }}>{a.latestActions[0].toGrade || "—"}</span>
-                  </span>
-                  {a.latestActions[0].action && (
-                    <span className="pill" style={{
-                      background: a.latestActions[0].action.toLowerCase().includes("up") ? "#dcf0e3" : a.latestActions[0].action.toLowerCase().includes("down") ? "#fde0e3" : "#ebe9e0",
-                      color: a.latestActions[0].action.toLowerCase().includes("up") ? "#0a6e44" : a.latestActions[0].action.toLowerCase().includes("down") ? "#a3203a" : "#5a6573",
-                      fontSize: 9
-                    }}>{a.latestActions[0].action}</span>
-                  )}
-                </div>
-                {a.latestActions.length > 1 && (
-                  <details style={{ marginTop: 6 }}>
-                    <summary style={{ fontSize: 10, color: "#5a6573", cursor: "pointer" }}>{a.latestActions.length - 1} more recent actions</summary>
-                    <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
-                      {a.latestActions.slice(1).map((act, i) => (
-                        <div key={i} style={{ fontSize: 10, color: "#5a6573", display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          <span className="mono" style={{ color: "#8a93a3" }}>{act.date || "—"}</span>
-                          <span style={{ color: "#1a1f2c" }}>{act.firm || "—"}</span>
-                          <span>{act.fromGrade ? `${act.fromGrade} → ` : ""}<strong>{act.toGrade || "—"}</strong></span>
-                        </div>
-                      ))}
+              {/* Card 1: Consensus rating + score bar */}
+              <div style={{ padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+                <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, marginBottom: 10 }}>Consensus</div>
+                <div className="serif" style={{ fontSize: 20, fontWeight: 600, color: "#1a1f2c", marginBottom: 8, lineHeight: 1 }}>{rating || "—"}</div>
+                {c?.score != null && (
+                  <>
+                    <div style={{ height: 6, background: "#efece5", borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
+                      <div style={{ width: `${(c.score / 5) * 100}%`, height: "100%", background: c.score >= 4 ? "#0a8554" : c.score >= 3 ? "#d4a017" : "#c4314b" }} />
                     </div>
-                  </details>
+                    <div className="mono" style={{ fontSize: 10, color: "#5a6573" }}>{fmt(c.score, 1)} / 5.0</div>
+                  </>
+                )}
+                <div style={{ marginTop: 8, fontSize: 10, color: "#5a6573" }}>
+                  <span style={{ color: "#0a8554", fontWeight: 600 }}>{c?.buys || 0} BUY</span>
+                  {" · "}
+                  <span style={{ color: "#d4a017", fontWeight: 600 }}>{c?.hold || 0} HOLD</span>
+                  {" · "}
+                  <span style={{ color: "#c4314b", fontWeight: 600 }}>{c?.sells || 0} SELL</span>
+                </div>
+              </div>
+
+              {/* Card 2: Price targets with range bar */}
+              <div style={{ padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+                <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, marginBottom: 10 }}>Price Targets</div>
+                {targetHigh && targetLow && targetHigh > targetLow && (() => {
+                  const rangeMin = Math.min(targetLow, cur);
+                  const rangeMax = Math.max(targetHigh, cur);
+                  const rangeWidth = rangeMax - rangeMin || 1;
+                  const pctOf = (v) => ((v - rangeMin) / rangeWidth) * 100;
+                  return (
+                    <>
+                      {/* Average target prominent */}
+                      <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: "#1a1f2c", lineHeight: 1, marginBottom: 2 }}>${fmt(target, 0)}</div>
+                      <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 14 }}>average target</div>
+                      {/* Range bar */}
+                      <div style={{ position: "relative", height: 30, marginBottom: 6 }}>
+                        <div style={{ position: "absolute", top: 14, left: 0, right: 0, height: 4, background: "#efece5", borderRadius: 2 }} />
+                        <div style={{ position: "absolute", top: 14, left: `${pctOf(targetLow)}%`, width: `${pctOf(targetHigh) - pctOf(targetLow)}%`, height: 4, background: "linear-gradient(90deg, #c4314b 0%, #d4a017 50%, #0a8554 100%)", borderRadius: 2 }} />
+                        {/* Current price marker */}
+                        <div style={{ position: "absolute", top: 10, left: `${Math.max(2, Math.min(98, pctOf(cur)))}%`, transform: "translateX(-50%)", width: 12, height: 12, borderRadius: "50%", background: "#7ba2cc", border: "2px solid #fff", boxShadow: "0 0 0 1px #7ba2cc" }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+                        <div>
+                          <div className="mono" style={{ color: "#c4314b", fontWeight: 600 }}>${fmt(targetLow, 0)}</div>
+                          <div style={{ color: "#8a93a3", fontSize: 9 }}>Low</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div className="mono" style={{ color: "#7ba2cc", fontWeight: 600 }}>${fmt(cur, 2)}</div>
+                          <div style={{ color: "#8a93a3", fontSize: 9 }}>Current</div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div className="mono" style={{ color: "#0a8554", fontWeight: 600 }}>${fmt(targetHigh, 0)}</div>
+                          <div style={{ color: "#8a93a3", fontSize: 9 }}>High</div>
+                        </div>
+                      </div>
+                      {upside != null && (
+                        <div style={{ marginTop: 8, padding: "4px 8px", background: upside > 0 ? "#dcf0e3" : "#fde0e3", border: `1px solid ${upside > 0 ? "#86b09c" : "#e07585"}`, borderRadius: 2, fontSize: 11, color: upside > 0 ? "#0a6e44" : "#a3203a", fontWeight: 600, textAlign: "center" }}>
+                          {upside > 0 ? "▲" : "▼"} {pct(upside)} implied upside
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Card 3: Monthly recommendations trend (4-month bars) */}
+              <div style={{ padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+                <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, marginBottom: 10 }}>Recommendations Trend</div>
+                {a?.monthlyTrend?.length ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-around", gap: 6, height: 80, marginBottom: 8 }}>
+                      {a.monthlyTrend.map((m, i) => {
+                        const total = (m.strongBuy || 0) + (m.buy || 0) + (m.hold || 0) + (m.sell || 0) + (m.strongSell || 0);
+                        if (!total) return <div key={i} style={{ flex: 1, fontSize: 9, color: "#8a93a3", textAlign: "center" }}>—</div>;
+                        const monthLabel = m.period === "0m" ? "Now" : m.period;
+                        return (
+                          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
+                            <div className="mono" style={{ fontSize: 10, color: "#1a1f2c", fontWeight: 600, marginBottom: 2 }}>{total}</div>
+                            <div style={{ width: "100%", maxWidth: 28, flex: 1, display: "flex", flexDirection: "column", borderRadius: 2, overflow: "hidden", background: "#efece5" }}>
+                              {m.strongBuy > 0 && <div style={{ flex: m.strongBuy, background: "#0a8554" }} />}
+                              {m.buy > 0 && <div style={{ flex: m.buy, background: "#86b09c" }} />}
+                              {m.hold > 0 && <div style={{ flex: m.hold, background: "#d4a017" }} />}
+                              {m.sell > 0 && <div style={{ flex: m.sell, background: "#e07585" }} />}
+                              {m.strongSell > 0 && <div style={{ flex: m.strongSell, background: "#c4314b" }} />}
+                            </div>
+                            <div style={{ fontSize: 9, color: "#5a6573", marginTop: 4 }}>{monthLabel}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, fontSize: 9, color: "#5a6573", justifyContent: "space-between" }}>
+                      <span><span style={{ color: "#0a8554" }}>●</span> Str Buy</span>
+                      <span><span style={{ color: "#86b09c" }}>●</span> Buy</span>
+                      <span><span style={{ color: "#d4a017" }}>●</span> Hold</span>
+                      <span><span style={{ color: "#c4314b" }}>●</span> Sell</span>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: "#8a93a3", padding: "20px 0", textAlign: "center" }}>No trend data</div>
                 )}
               </div>
-            )}
+
+              {/* Card 4: Latest analyst action */}
+              <div style={{ padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+                <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600, marginBottom: 10 }}>Latest Rating</div>
+                {a?.latestActions?.length > 0 ? (
+                  <>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 11 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "#5a6573" }}>Date</span>
+                        <span className="mono" style={{ color: "#1a1f2c" }}>{a.latestActions[0].date || "—"}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "#5a6573" }}>Firm</span>
+                        <span style={{ color: "#1a1f2c", fontWeight: 600 }}>{a.latestActions[0].firm || "—"}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "#5a6573" }}>Action</span>
+                        <span style={{
+                          color: a.latestActions[0].action?.toLowerCase().includes("up") || a.latestActions[0].action?.toLowerCase().includes("raise") ? "#0a8554"
+                               : a.latestActions[0].action?.toLowerCase().includes("down") || a.latestActions[0].action?.toLowerCase().includes("cut") ? "#c4314b"
+                               : "#1a1f2c",
+                          fontWeight: 600
+                        }}>{a.latestActions[0].action || "—"}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span style={{ color: "#5a6573" }}>Rating</span>
+                        <span style={{
+                          color: a.latestActions[0].toGrade?.toLowerCase().includes("buy") || a.latestActions[0].toGrade?.toLowerCase().includes("outperform") ? "#0a8554"
+                               : a.latestActions[0].toGrade?.toLowerCase().includes("sell") || a.latestActions[0].toGrade?.toLowerCase().includes("underperform") ? "#c4314b"
+                               : "#1a1f2c",
+                          fontWeight: 600
+                        }}>{a.latestActions[0].toGrade || "—"}</span>
+                      </div>
+                      {a.latestActions[0].fromGrade && (
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ color: "#5a6573" }}>From</span>
+                          <span className="mono" style={{ color: "#8a93a3", fontSize: 10 }}>{a.latestActions[0].fromGrade}</span>
+                        </div>
+                      )}
+                    </div>
+                    {a.latestActions.length > 1 && (
+                      <details style={{ marginTop: 8 }}>
+                        <summary style={{ fontSize: 10, color: "#5a6573", cursor: "pointer" }}>+{a.latestActions.length - 1} more actions</summary>
+                        <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                          {a.latestActions.slice(1).map((act, i) => (
+                            <div key={i} style={{ fontSize: 10, color: "#5a6573", display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              <span className="mono" style={{ color: "#8a93a3" }}>{act.date || "—"}</span>
+                              <span style={{ color: "#1a1f2c" }}>{act.firm || "—"}</span>
+                              <span><strong>{act.toGrade || "—"}</strong></span>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 11, color: "#8a93a3", padding: "20px 0", textAlign: "center" }}>No recent actions</div>
+                )}
+              </div>
+
+            </div>
           </div>
         )}
 
