@@ -1203,11 +1203,17 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
               const qs = ly.epsQuarters;
               const allVals = qs.flatMap((q) => [q.estimate, q.actual].filter((v) => v != null && isFinite(v)));
               if (!allVals.length) return null;
-              const yMin = Math.min(...allVals);
-              const yMax = Math.max(...allVals);
-              const pad = (yMax - yMin) * 0.15 || 0.1;
-              const y0 = yMin - pad;
-              const y1 = yMax + pad;
+              const yMinRaw = Math.min(...allVals);
+              const yMaxRaw = Math.max(...allVals);
+              // Pick a step from a nice set, then expand bounds so total range = 4 * step
+              const rawRange = yMaxRaw - yMinRaw || 1;
+              const niceSteps = [0.05, 0.10, 0.25, 0.50, 1.0, 2.0, 5.0, 10];
+              const targetStep = rawRange / 3.5;
+              const step = niceSteps.find((s) => s >= targetStep) || 10;
+              // Center the data inside 4 step intervals
+              const center = (yMinRaw + yMaxRaw) / 2;
+              const y0 = Math.floor((center - 2 * step) / step) * step;
+              const y1 = y0 + 4 * step;
               const yRange = y1 - y0;
               const yToPx = (v) => 100 - ((v - y0) / yRange) * 100;
               const last = qs.findLast ? qs.findLast((q) => q.actual != null) : [...qs].reverse().find((q) => q.actual != null);
@@ -1286,7 +1292,17 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
               const qs = ly.revEarnQuarters;
               const allVals = qs.flatMap((q) => [q.revenue, q.earnings].filter((v) => v != null && isFinite(v)));
               if (!allVals.length) return null;
-              const yMax = Math.max(...allVals);
+              const yMaxRaw = Math.max(...allVals);
+              // Round yMax up to a clean billion value for the top of the chart
+              const cleanMax = (val) => {
+                if (val >= 100e9) return Math.ceil(val / 20e9) * 20e9;  // step 20B
+                if (val >= 50e9) return Math.ceil(val / 10e9) * 10e9;   // step 10B
+                if (val >= 10e9) return Math.ceil(val / 5e9) * 5e9;     // step 5B
+                if (val >= 1e9) return Math.ceil(val / 1e9) * 1e9;      // step 1B
+                if (val >= 100e6) return Math.ceil(val / 100e6) * 100e6;
+                return val * 1.1;
+              };
+              const yMax = cleanMax(yMaxRaw);
               const fmtBn = (v) => {
                 if (v == null) return "—";
                 const abs = Math.abs(v);
