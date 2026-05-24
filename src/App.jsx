@@ -874,48 +874,10 @@ export default function App() {
             <CorrelationsPanel correlations={data.correlations} symbol={data.symbol} isMobile={isMobile} />
           )}
 
-          {peerRows.length > 1 && !data.isAdHoc && (
-            <div className="panel" style={{ marginBottom: 16 }}>
-              <div className="panel-head"><span className="panel-title">Peer Comparison</span><GitCompare size={13} color="#d4a017" /></div>
-              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-                <table className="peers">
-                  <thead>
-                    <tr><th>Ticker</th><th>Price</th><th>P/E</th><th>Fwd P/E</th><th>PEG</th><th>P/S</th><th>EV/EBITDA</th><th>ROE %</th><th>Mkt Cap</th></tr>
-                  </thead>
-                  <tbody>
-                    {peerRows.map((r) => {
-                      const peColor = r.pe && peerAvg("pe") && !r.isSelf ? (r.pe < peerAvg("pe") ? "#0a8554" : "#c4314b") : "#1a1f2c";
-                      const fwdColor = r.fwdPe && peerAvg("fwdPe") && !r.isSelf ? (r.fwdPe < peerAvg("fwdPe") ? "#0a8554" : "#c4314b") : "#1a1f2c";
-                      return (
-                        <tr key={r.ticker} className={r.isSelf ? "self" : ""}>
-                          <td><span className="mono" style={{ fontWeight: 600 }}>{r.ticker}</span>{r.isSelf && <span className="pill" style={{ background: "#d4a017", color: "#fff", marginLeft: 6 }}>Self</span>}</td>
-                          <td className="mono">${fmt(r.price)}</td>
-                          <td className="mono" style={{ color: peColor }}>{fmt(r.pe, 1)}</td>
-                          <td className="mono" style={{ color: fwdColor }}>{fmt(r.fwdPe, 1)}</td>
-                          <td className="mono">{fmt(r.peg, 2)}</td>
-                          <td className="mono">{fmt(r.ps, 1)}</td>
-                          <td className="mono">{fmt(r.evEbitda, 1)}</td>
-                          <td className="mono" style={{ color: r.roe > 15 ? "#0a8554" : r.roe < 0 ? "#c4314b" : "#1a1f2c" }}>{fmt(r.roe, 1)}</td>
-                          <td className="mono">{r.mcap ? formatMcap(r.mcap * 1e6) : "—"}</td>
-                        </tr>
-                      );
-                    })}
-                    <tr className="avg">
-                      <td>Peer Avg</td><td>—</td>
-                      <td className="mono">{fmt(peerAvg("pe"), 1)}</td><td className="mono">{fmt(peerAvg("fwdPe"), 1)}</td>
-                      <td className="mono">{fmt(peerAvg("peg"), 2)}</td><td className="mono">{fmt(peerAvg("ps"), 1)}</td>
-                      <td className="mono">{fmt(peerAvg("evEbitda"), 1)}</td><td className="mono">{fmt(peerAvg("roe"), 1)}</td><td>—</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: isMobile ? 12 : 16 }}>
             <div className="panel">
               <div className="panel-head"><span className="panel-title">Value · Fundamentals</span><DollarSign size={13} color="#d4a017" /></div>
-              <div style={{ padding: "10px 14px" }}>
+              <div style={{ padding: "10px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: "0 24px" }}>
                 <StatRow label="P/E (TTM)" value={<span className="mono">{fmt(f.pe, 2)}</span>} />
                 <StatRow label="Forward P/E" value={<span className="mono">{fmt(f.fwdPe, 2)}</span>} />
                 <StatRow label="PEG" value={<span className="mono" style={{ color: f.peg && f.peg < 1 ? "#0a8554" : f.peg > 2 ? "#c4314b" : "#1a1f2c" }}>{fmt(f.peg, 2)}</span>} />
@@ -924,72 +886,16 @@ export default function App() {
                 <StatRow label="EV/EBITDA" value={<span className="mono">{fmt(f.evEbitda, 2)}</span>} />
                 <StatRow label="Div Yield" value={<span className="mono">{f.divYield != null ? fmt(f.divYield, 3) + "%" : "—"}</span>} />
                 <StatRow label="ROE" value={<span className="mono" style={{ color: f.roe > 15 ? "#0a8554" : "#1a1f2c" }}>{f.roe != null ? fmt(f.roe, 2) + "%" : "—"}</span>} />
-                <StatRow label="ROIC (approx)" value={<span className="mono" style={{ color: f.roic > 15 ? "#0a8554" : "#1a1f2c" }} title="Return on Invested Capital. Buffett's favorite quality metric. >15% = excellent.">{f.roic != null ? fmt(f.roic, 2) + "%" : "—"}</span>} />
+                <StatRow label="ROIC (approx)" value={<span className="mono" style={{ color: f.roic > 15 ? "#0a8554" : "#1a1f2c" }} title="Return on Invested Capital. >15% = excellent.">{f.roic != null ? fmt(f.roic, 2) + "%" : "—"}</span>} />
                 <StatRow label="Debt/Equity" value={<span className="mono" style={{ color: f.debtEq != null && f.debtEq < 0.5 ? "#0a8554" : f.debtEq > 1.5 ? "#c4314b" : "#1a1f2c" }}>{fmt(f.debtEq, 2)}</span>} />
-                <StatRow label="FCF Yield" value={<span className="mono" style={{ color: f.fcfYield > 5 ? "#0a8554" : f.fcfYield < 1 ? "#c4314b" : "#1a1f2c" }} title="Free Cash Flow / Market Cap. Like dividend yield but for total cash generation. >5% = cheap, <2% = expensive.">{f.fcfYield != null ? fmt(f.fcfYield, 2) + "%" : "—"}</span>} />
-                <StatRow label="Earnings Yield" value={<span className="mono" title="1/PE. Compare to 10Y Treasury (~4%). If lower, stock yields less than bonds.">{f.earningsYield != null ? fmt(f.earningsYield, 2) + "%" : "—"}</span>} />
+                <StatRow label="FCF Yield" value={<span className="mono" style={{ color: f.fcfYield > 5 ? "#0a8554" : f.fcfYield < 1 ? "#c4314b" : "#1a1f2c" }} title="FCF / Market Cap. >5% cheap, <2% expensive.">{f.fcfYield != null ? fmt(f.fcfYield, 2) + "%" : "—"}</span>} />
+                <StatRow label="Earnings Yield" value={<span className="mono" title="1/PE. Compare to 10Y Treasury (~4%).">{f.earningsYield != null ? fmt(f.earningsYield, 2) + "%" : "—"}</span>} />
                 <StatRow label="Op. Margin" value={<span className="mono">{f.opMargin != null ? fmt(f.opMargin, 2) + "%" : "—"}</span>} />
                 <StatRow label="Profit Margin" value={<span className="mono">{f.profitMargin != null ? fmt(f.profitMargin, 2) + "%" : "—"}</span>} />
                 <StatRow label="Rev Growth" value={<span className="mono" style={{ color: colorFor(f.revGrowth) }}>{f.revGrowth != null ? pct(f.revGrowth) : "—"}</span>} />
                 <StatRow label="EPS (TTM)" value={<span className="mono">${fmt(f.eps, 2)}</span>} />
                 <StatRow label="EPS Forward" value={<span className="mono">${fmt(f.epsForward, 2)}</span>} />
                 <StatRow label="Mkt Cap" value={<span className="mono">{formatMcap(f.mcapRaw)}</span>} />
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-head"><span className="panel-title">Analyst Consensus</span><Users size={13} color="#d4a017" /></div>
-              <div style={{ padding: "14px" }}>
-                <div style={{ textAlign: "center", marginBottom: 14, padding: "12px 0", background: "#f5f3ed", borderRadius: 2 }}>
-                  <div className="panel-title" style={{ fontSize: 9 }}>Consensus</div>
-                  <div className="serif" style={{ fontSize: 22, fontWeight: 600, marginTop: 4 }}>{c.rating}</div>
-                  <div className="mono" style={{ fontSize: 10, color: "#5a6573", marginTop: 2 }}>{c.score ? `${fmt(c.score, 1)}/5.0` : "—"} · {c.analysts ?? 0} analysts</div>
-                </div>
-                {c.analysts > 0 && (
-                  <>
-                    <div style={{ display: "flex", height: 6, borderRadius: 1, overflow: "hidden", marginBottom: 6 }}>
-                      <div style={{ flex: c.buys, background: "#0a8554" }} />
-                      <div style={{ flex: c.hold, background: "#d4a017" }} />
-                      <div style={{ flex: c.sells, background: "#c4314b" }} />
-                    </div>
-                    <div className="mono" style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#5a6573", marginBottom: 12 }}>
-                      <span><span style={{ color: "#0a8554" }}>●</span> Buy {c.buys}</span>
-                      <span><span style={{ color: "#d4a017" }}>●</span> Hold {c.hold}</span>
-                      <span><span style={{ color: "#c4314b" }}>●</span> Sell {c.sells}</span>
-                    </div>
-                  </>
-                )}
-                <StatRow label="Strong Buy" value={<span className="mono">{c.strongBuy ?? 0}</span>} />
-                <StatRow label="Buy" value={<span className="mono">{c.buy ?? 0}</span>} />
-                <StatRow label="Hold" value={<span className="mono">{c.hold ?? 0}</span>} />
-                <StatRow label="Sell" value={<span className="mono">{c.sell ?? 0}</span>} />
-                <StatRow label="Strong Sell" value={<span className="mono">{c.strongSell ?? 0}</span>} />
-              </div>
-            </div>
-
-            <div className="panel">
-              <div className="panel-head"><span className="panel-title">52-Week Range</span><Activity size={13} color="#d4a017" /></div>
-              <div style={{ padding: "14px" }}>
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 6 }}>
-                    <span className="mono" style={{ color: "#c4314b" }}>${fmt(f.week52Low)}</span>
-                    <span className="mono" style={{ color: "#0a8554" }}>${fmt(f.week52High)}</span>
-                  </div>
-                  <div style={{ height: 6, background: "#efece5", borderRadius: 2, position: "relative" }}>
-                    {f.week52High && f.week52Low && displayQuote.current && (
-                      <div style={{ position: "absolute", left: `${Math.min(100, Math.max(0, ((displayQuote.current - f.week52Low) / (f.week52High - f.week52Low)) * 100))}%`, top: -2, width: 2, height: 10, background: "#1a1f2c", transform: "translateX(-50%)" }} />
-                    )}
-                  </div>
-                  <div style={{ textAlign: "center", fontSize: 10, color: "#5a6573", marginTop: 6 }}>
-                    Current: ${fmt(displayQuote.current)} ({f.week52High && f.week52Low ? fmt(((displayQuote.current - f.week52Low) / (f.week52High - f.week52Low)) * 100, 0) : "—"}% of range)
-                  </div>
-                </div>
-                <StatRow label="Day High" value={<span className="mono">${fmt(displayQuote.high)}</span>} />
-                <StatRow label="Day Low" value={<span className="mono">${fmt(displayQuote.low)}</span>} />
-                <StatRow label="Day Open" value={<span className="mono">${fmt(displayQuote.open)}</span>} />
-                <StatRow label="Prev Close" value={<span className="mono">${fmt(displayQuote.prevClose)}</span>} />
-                <StatRow label="52W High" value={<span className="mono">${fmt(f.week52High)}</span>} />
-                <StatRow label="52W Low" value={<span className="mono">${fmt(f.week52Low)}</span>} />
               </div>
             </div>
           </div>
@@ -1095,46 +1001,6 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
       <div style={{ padding: "14px 16px", lineHeight: 1.6 }}>
         {/* 1-line headline summary */}
         <div style={{ fontSize: 13, color: "#1a1f2c", marginBottom: 14, lineHeight: 1.55 }}>{summary.paragraph}</div>
-
-        {/* Key Numbers strip */}
-        <div style={{ padding: "12px 14px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
-          <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Key Numbers</div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 8 }}>
-            {cur != null && <Num label="Price" value={`$${fmt(cur, 2)}`} sub={change != null ? `${change >= 0 ? "+" : ""}${fmt(change, 2)}% today` : null} color={change == null ? "#1a1f2c" : change >= 0 ? "#0a8554" : "#c4314b"} />}
-            {target != null && (
-              <Num label="Analyst Target" value={`$${fmt(target, 0)}`}
-                sub={upside != null ? `${upside >= 0 ? "+" : ""}${fmt(upside, 0)}% upside` : null}
-                color={upside == null ? "#1a1f2c" : upside > 15 ? "#0a8554" : upside > 0 ? "#86b09c" : "#c4314b"} />
-            )}
-            {rating && <Num label="Street Rating" value={rating} sub={numAnalysts ? `${numAnalysts} analysts` : null} color={rating?.toLowerCase().includes("buy") ? "#0a8554" : rating?.toLowerCase().includes("sell") ? "#c4314b" : "#1a1f2c"} />}
-            {pctOfHigh != null && (
-              <Num label="vs 52W High" value={`${fmt(pctOfHigh, 0)}%`}
-                sub={w52H ? `High: $${fmt(w52H, 0)}` : null}
-                color={pctOfHigh > 95 ? "#d4a017" : pctOfHigh > 80 ? "#1a1f2c" : "#0a8554"} />
-            )}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
-            {pe != null && (
-              <Num label="P/E (trailing)" value={fmt(pe, 1) + "×"}
-                sub={fwdPe != null ? `Fwd: ${fmt(fwdPe, 1)}×` : null} />
-            )}
-            {peg != null && peg > 0 && (
-              <Num label="PEG Ratio" value={fmt(peg, 2)}
-                sub={peg < 1 ? "Cheap vs growth" : peg < 1.5 ? "Fair" : peg < 2.5 ? "Premium" : "Expensive"}
-                color={peg < 1 ? "#0a8554" : peg < 1.5 ? "#86b09c" : peg < 2.5 ? "#d4a017" : "#c4314b"} />
-            )}
-            {roe != null && (
-              <Num label="ROE" value={`${fmt(roe, 0)}%`}
-                sub={roe > 20 ? "Exceptional" : roe > 15 ? "Strong" : roe > 8 ? "Average" : "Weak"}
-                color={roe > 20 ? "#0a8554" : roe > 15 ? "#86b09c" : roe > 8 ? "#1a1f2c" : "#c4314b"} />
-            )}
-            {revG != null && (
-              <Num label="Revenue Growth" value={`${revG >= 0 ? "+" : ""}${fmt(revG, 0)}%`}
-                sub={revG > 20 ? "Fast grower" : revG > 10 ? "Solid" : revG > 0 ? "Slow" : "Declining"}
-                color={revG > 20 ? "#0a8554" : revG > 10 ? "#86b09c" : revG > 0 ? "#1a1f2c" : "#c4314b"} />
-            )}
-          </div>
-        </div>
 
         {/* === Analyst Insights — 4 Yahoo-Finance-style cards, light themed === */}
         {target != null && cur != null && (
@@ -1329,174 +1195,197 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
           </div>
         )}
 
-        {/* === Technical Snapshot + Peer Valuation (2 cards side-by-side) === */}
-        {(tech?.lastRsi != null || (peerRows && peerRows.length > 1)) && (
+        {/* === Earnings & Revenue Quarterly Charts (Yahoo-style) === */}
+        {(ly?.epsQuarters?.length > 0 || ly?.revEarnQuarters?.length > 0) && (
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10, marginBottom: 14 }}>
-
-            {/* Technical Snapshot card */}
-            {tech?.lastRsi != null && (() => {
-              const rsi = tech.lastRsi;
-              const z = tech.lastZ;
-              const rsiColor = rsi > 70 ? "#c4314b" : rsi < 30 ? "#0a8554" : "#1a1f2c";
-              const rsiLabel = rsi > 70 ? "Overbought" : rsi < 30 ? "Oversold" : "Neutral";
-              // MACD histogram interpretation
-              const macdHist = tech.last?.hist ?? null;
-              const macdLabel = macdHist == null ? "—" : macdHist > 0 ? "Bullish momentum" : "Bearish momentum";
-              const macdColor = macdHist == null ? "#5a6573" : macdHist > 0 ? "#0a8554" : "#c4314b";
-              // Squeeze interpretation
-              const sqzLabel = tech.sqzActive ? "Compressing (breakout coming)" : "No squeeze";
-              const sqzColor = tech.sqzActive ? "#d4a017" : "#5a6573";
-              // Trend interpretation already in trendSignal
-              const trendColor = tech.trendSignal?.includes("Bullish") ? "#0a8554"
-                              : tech.trendSignal?.includes("Bearish") ? "#c4314b"
-                              : "#1a1f2c";
-
+            {/* EPS Chart */}
+            {ly?.epsQuarters?.length > 0 && (() => {
+              const qs = ly.epsQuarters;
+              const allVals = qs.flatMap((q) => [q.estimate, q.actual].filter((v) => v != null && isFinite(v)));
+              if (!allVals.length) return null;
+              const yMin = Math.min(...allVals);
+              const yMax = Math.max(...allVals);
+              const pad = (yMax - yMin) * 0.15 || 0.1;
+              const y0 = yMin - pad;
+              const y1 = yMax + pad;
+              const yRange = y1 - y0;
+              const yToPx = (v) => 100 - ((v - y0) / yRange) * 100;
+              const last = qs.findLast ? qs.findLast((q) => q.actual != null) : [...qs].reverse().find((q) => q.actual != null);
+              const lastSurprise = last && last.estimate != null ? (last.actual - last.estimate) : null;
               return (
                 <div style={{ padding: "14px 16px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
-                  <div style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 700, marginBottom: 12 }}>Technical Snapshot</div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {/* RSI with visual bar */}
-                    <div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                        <span style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>RSI(14)</span>
-                        <span style={{ fontSize: 10, color: rsiColor, fontWeight: 600 }}>{rsiLabel}</span>
-                      </div>
-                      <div style={{ position: "relative", height: 8, background: "#efece5", borderRadius: 2, overflow: "hidden" }}>
-                        {/* Oversold zone (0-30) */}
-                        <div style={{ position: "absolute", top: 0, left: 0, width: "30%", height: "100%", background: "#dcf0e3" }} />
-                        {/* Overbought zone (70-100) */}
-                        <div style={{ position: "absolute", top: 0, right: 0, width: "30%", height: "100%", background: "#fde0e3" }} />
-                        {/* Current RSI marker */}
-                        <div style={{ position: "absolute", top: -2, left: `${Math.max(0, Math.min(100, rsi))}%`, transform: "translateX(-50%)", width: 3, height: 12, background: rsiColor }} />
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, fontSize: 9, color: "#8a93a3" }}>
-                        <span>0</span>
-                        <span>30</span>
-                        <span className="mono" style={{ color: rsiColor, fontWeight: 600 }}>{fmt(rsi, 1)}</span>
-                        <span>70</span>
-                        <span>100</span>
-                      </div>
-                    </div>
-
-                    {/* MACD */}
-                    {macdHist != null && (
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>MACD Histogram</div>
-                          <div className="mono" style={{ fontSize: 12, color: macdColor, fontWeight: 600 }}>{macdHist > 0 ? "+" : ""}{fmt(macdHist, 2)}</div>
-                        </div>
-                        <span style={{ fontSize: 10, color: macdColor, fontWeight: 600 }}>{macdLabel}</span>
-                      </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, color: "#1a1f2c", fontWeight: 700 }}>Earnings Per Share</span>
+                    {last && (
+                      <span style={{ fontSize: 10, color: "#5a6573" }}>
+                        {last.label} · <span style={{ color: "#8a93a3" }}>Est</span> {last.estimate != null ? `$${fmt(last.estimate, 2)}` : "—"} · <span style={{ color: "#0a8554" }}>● Actual</span> {last.actual != null ? `$${fmt(last.actual, 2)}` : "—"}
+                      </span>
                     )}
-
-                    {/* Squeeze (SQZMOM_LB) */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
-                      <div>
-                        <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }} title="Squeeze Momentum (LazyBear). Active when BB inside KC — volatility compressing, often precedes large moves.">Squeeze (SQZMOM)</div>
-                        <div className="mono" style={{ fontSize: 12, color: sqzColor, fontWeight: 600 }}>{tech.sqzActive ? "ACTIVE" : "INACTIVE"}</div>
-                      </div>
-                      <span style={{ fontSize: 10, color: sqzColor, fontWeight: 600, textAlign: "right" }}>{sqzLabel}</span>
-                    </div>
-
-                    {/* Trend (SMA structure) */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
-                      <div>
-                        <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }} title="Bullish: price > 50SMA > 200SMA. Bearish: opposite.">Trend (50/200 SMA)</div>
-                        <div style={{ fontSize: 12, color: trendColor, fontWeight: 600 }}>{tech.trendSignal || "—"}</div>
-                      </div>
-                    </div>
-
-                    {/* Z-score (mean reversion) */}
-                    {z != null && (
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 6, borderTop: "1px dotted #e0ddd2" }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }} title="Standard deviations from 20-day mean. ±2 is statistically stretched.">Z-Score (20d)</div>
-                          <div className="mono" style={{ fontSize: 12, color: Math.abs(z) > 2 ? "#c4314b" : "#1a1f2c", fontWeight: 600 }}>{z > 0 ? "+" : ""}{fmt(z, 2)}σ</div>
+                  </div>
+                  <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 12 }}>Estimate vs Actual · last {qs.length} quarters</div>
+                  <div style={{ position: "relative", height: 160, marginBottom: 4 }}>
+                    {/* Y axis labels */}
+                    {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
+                      const val = y1 - t * yRange;
+                      return (
+                        <div key={i} style={{ position: "absolute", top: `${t * 100}%`, left: 0, right: 0, transform: "translateY(-50%)" }}>
+                          <span className="mono" style={{ fontSize: 9, color: "#8a93a3", paddingRight: 4 }}>{fmt(val, 2)}</span>
+                          <div style={{ position: "absolute", top: "50%", left: 36, right: 0, height: 1, borderTop: "1px dashed #e6e3db" }} />
                         </div>
-                        <span style={{ fontSize: 10, color: Math.abs(z) > 2 ? "#c4314b" : "#5a6573", textAlign: "right" }}>{tech.reversionSignal}</span>
-                      </div>
-                    )}
-
-                    {/* Volatility */}
-                    {tech.rv30 != null && (
-                      <div style={{ paddingTop: 6, borderTop: "1px dotted #e0ddd2", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>Realized Vol</div>
-                          <div className="mono" style={{ fontSize: 11, color: "#1a1f2c" }}>30d: {fmt(tech.rv30 * 100, 1)}% · 90d: {fmt((tech.rv90 || 0) * 100, 1)}%</div>
-                        </div>
-                      </div>
-                    )}
-
+                      );
+                    })}
+                    {/* Plot area */}
+                    <div style={{ position: "absolute", top: 0, bottom: 0, left: 36, right: 0 }}>
+                      {qs.map((q, i) => {
+                        const x = qs.length === 1 ? 50 : (i / (qs.length - 1)) * 100;
+                        return (
+                          <div key={i}>
+                            {/* Estimate (open circle) */}
+                            {q.estimate != null && (
+                              <div style={{ position: "absolute", left: `${x}%`, top: `${yToPx(q.estimate)}%`, transform: "translate(-50%, -50%)", width: 12, height: 12, borderRadius: "50%", background: "transparent", border: "1.5px solid #8a93a3" }} />
+                            )}
+                            {/* Actual (filled circle) */}
+                            {q.actual != null && (
+                              <div style={{ position: "absolute", left: `${x}%`, top: `${yToPx(q.actual)}%`, transform: "translate(-50%, -50%)", width: 12, height: 12, borderRadius: "50%", background: "#0a8554", border: "2px solid #fff", boxShadow: "0 0 0 1px #0a8554" }} />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {/* X axis labels with Beat/Miss */}
+                  <div style={{ position: "relative", marginLeft: 36 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      {qs.map((q, i) => {
+                        const surprise = (q.actual != null && q.estimate != null) ? (q.actual - q.estimate) : null;
+                        const beat = surprise != null && surprise > 0;
+                        const miss = surprise != null && surprise < 0;
+                        return (
+                          <div key={i} style={{ flex: 1, textAlign: "center", fontSize: 10 }}>
+                            <div style={{ color: "#5a6573", fontSize: 10 }}>{q.label}</div>
+                            {surprise != null && (
+                              <>
+                                <div style={{ color: beat ? "#0a8554" : miss ? "#c4314b" : "#5a6573", fontSize: 10, fontWeight: 700, marginTop: 1 }}>{beat ? "Beat" : miss ? "Miss" : "Met"}</div>
+                                <div className="mono" style={{ color: beat ? "#0a8554" : miss ? "#c4314b" : "#5a6573", fontSize: 9 }}>{surprise > 0 ? "+" : ""}${fmt(surprise, 2)}</div>
+                              </>
+                            )}
+                            {surprise == null && q.estimate != null && q.actual == null && (
+                              <div style={{ color: "#8a93a3", fontSize: 9, marginTop: 1 }}>—</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               );
             })()}
 
-            {/* Peer Valuation card */}
-            {peerRows && peerRows.length > 1 && (() => {
-              const peerAvgPE = peerAvg ? peerAvg("pe") : null;
-              const peerAvgFwdPE = peerAvg ? peerAvg("fwdPe") : null;
-              const peerAvgPS = peerAvg ? peerAvg("ps") : null;
-              const peerAvgEvEbitda = peerAvg ? peerAvg("evEbitda") : null;
-              const peerAvgRoe = peerAvg ? peerAvg("roe") : null;
-              const self = peerRows[0];
-
-              // Comparison row helper
-              const Row = ({ label, selfVal, peerVal, fmtFn = (v) => fmt(v, 1), suffix = "", betterWhen = "lower", tooltip }) => {
-                if (selfVal == null && peerVal == null) return null;
-                const diff = (selfVal != null && peerVal != null) ? ((selfVal - peerVal) / peerVal) * 100 : null;
-                let color = "#1a1f2c";
-                let verdict = "—";
-                if (diff != null) {
-                  const isBetter = betterWhen === "lower" ? diff < -5 : diff > 5;
-                  const isWorse = betterWhen === "lower" ? diff > 15 : diff < -15;
-                  color = isBetter ? "#0a8554" : isWorse ? "#c4314b" : "#1a1f2c";
-                  verdict = isBetter ? "Cheaper" : isWorse ? "Expensive" : "In line";
-                  if (betterWhen === "higher" && diff > 5) verdict = "Above peers";
-                  if (betterWhen === "higher" && diff < -15) verdict = "Below peers";
-                }
-                return (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 6, borderBottom: "1px dotted #e0ddd2" }} title={tooltip}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 10, color: "#5a6573", letterSpacing: "0.04em" }}>{label}</div>
-                      <div className="mono" style={{ fontSize: 12, color: "#1a1f2c", fontWeight: 600 }}>
-                        {selfVal != null ? fmtFn(selfVal) + suffix : "—"}
-                        <span style={{ color: "#8a93a3", fontWeight: 400, marginLeft: 6, fontSize: 10 }}>
-                          vs {peerVal != null ? fmtFn(peerVal) + suffix : "—"}
-                        </span>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 10, color, fontWeight: 600, marginLeft: 8 }}>{verdict}</span>
-                  </div>
-                );
+            {/* Revenue vs Earnings Chart */}
+            {ly?.revEarnQuarters?.length > 0 && (() => {
+              const qs = ly.revEarnQuarters;
+              const allVals = qs.flatMap((q) => [q.revenue, q.earnings].filter((v) => v != null && isFinite(v)));
+              if (!allVals.length) return null;
+              const yMax = Math.max(...allVals);
+              const fmtBn = (v) => {
+                if (v == null) return "—";
+                const abs = Math.abs(v);
+                if (abs >= 1e9) return `$${fmt(v / 1e9, 1)}B`;
+                if (abs >= 1e6) return `$${fmt(v / 1e6, 0)}M`;
+                return `$${fmt(v, 0)}`;
               };
-
+              const last = qs[qs.length - 1];
               return (
                 <div style={{ padding: "14px 16px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-                    <span style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>vs Peers</span>
-                    <span style={{ fontSize: 9, color: "#8a93a3" }}>{symbol} vs {peerRows.length - 1} peer avg</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, color: "#1a1f2c", fontWeight: 700 }}>Revenue vs Earnings</span>
+                    {last && (
+                      <span style={{ fontSize: 10, color: "#5a6573" }}>
+                        {last.label} · <span style={{ color: "#7ba2cc" }}>● Rev</span> {fmtBn(last.revenue)} · <span style={{ color: "#d4a017" }}>● Earn</span> {fmtBn(last.earnings)}
+                      </span>
+                    )}
                   </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <Row label="P/E (trailing)" selfVal={self.pe} peerVal={peerAvgPE} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" tooltip="Lower is cheaper" />
-                    <Row label="P/E (forward)" selfVal={self.fwdPe} peerVal={peerAvgFwdPE} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" />
-                    <Row label="P/S" selfVal={self.ps} peerVal={peerAvgPS} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" tooltip="Price to Sales" />
-                    <Row label="EV/EBITDA" selfVal={self.evEbitda} peerVal={peerAvgEvEbitda} fmtFn={(v) => fmt(v, 1) + "×"} betterWhen="lower" tooltip="Enterprise value / EBITDA" />
-                    <Row label="ROE" selfVal={self.roe} peerVal={peerAvgRoe} fmtFn={(v) => fmt(v * 100, 0)} suffix="%" betterWhen="higher" tooltip="Higher is better quality" />
+                  <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 12 }}>Quarterly · last {qs.length} quarters</div>
+                  <div style={{ position: "relative", height: 160, marginBottom: 4 }}>
+                    {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
+                      const val = yMax * (1 - t);
+                      return (
+                        <div key={i} style={{ position: "absolute", top: `${t * 100}%`, left: 0, right: 0, transform: "translateY(-50%)" }}>
+                          <span className="mono" style={{ fontSize: 9, color: "#8a93a3", paddingRight: 4 }}>{fmtBn(val)}</span>
+                          <div style={{ position: "absolute", top: "50%", left: 42, right: 0, height: 1, borderTop: "1px dashed #e6e3db" }} />
+                        </div>
+                      );
+                    })}
+                    <div style={{ position: "absolute", top: 0, bottom: 0, left: 42, right: 0, display: "flex", alignItems: "flex-end", justifyContent: "space-around", gap: 6 }}>
+                      {qs.map((q, i) => {
+                        const revH = q.revenue != null && q.revenue > 0 ? (q.revenue / yMax) * 100 : 0;
+                        const earnH = q.earnings != null && q.earnings > 0 ? (q.earnings / yMax) * 100 : 0;
+                        return (
+                          <div key={i} style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 4, height: "100%" }}>
+                            <div style={{ width: "40%", maxWidth: 22, height: `${revH}%`, background: "#7ba2cc", borderRadius: "2px 2px 0 0" }} title={`Revenue: ${fmtBn(q.revenue)}`} />
+                            <div style={{ width: "40%", maxWidth: 22, height: `${earnH}%`, background: "#d4a017", borderRadius: "2px 2px 0 0" }} title={`Earnings: ${fmtBn(q.earnings)}`} />
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-
-                  <div style={{ marginTop: 10, padding: 8, background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 2, fontSize: 10, color: "#5a6573", lineHeight: 1.5 }}>
-                    Compared against: {peerRows.slice(1, 5).map((p) => p.ticker).join(", ")}
+                  <div style={{ marginLeft: 42, display: "flex", justifyContent: "space-between", fontSize: 10, color: "#5a6573" }}>
+                    {qs.map((q, i) => (
+                      <div key={i} style={{ flex: 1, textAlign: "center" }}>{q.label}</div>
+                    ))}
                   </div>
                 </div>
               );
             })()}
-
           </div>
         )}
 
+        {/* === Peer Comparison Table (moved into Summary) === */}
+        {peerRows && peerRows.length > 1 && (
+          <div style={{ padding: "14px 16px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: "#1a1f2c", fontWeight: 700 }}>Peer Comparison</span>
+              <span style={{ fontSize: 10, color: "#8a93a3" }}>{peerRows.length - 1} peers</span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #e6e3db", color: "#5a6573", textAlign: "right" }}>
+                    <th style={{ padding: "6px 6px", textAlign: "left", fontWeight: 600 }}>Ticker</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>Price</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>P/E</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>Fwd P/E</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>PEG</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>P/S</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>EV/EBITDA</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>ROE</th>
+                    <th style={{ padding: "6px 6px", fontWeight: 600 }}>MCap</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {peerRows.map((r, i) => (
+                    <tr key={i} style={{ borderBottom: "1px dotted #efece5", background: r.isSelf ? "#f9f7f1" : "transparent" }}>
+                      <td style={{ padding: "6px 6px", fontWeight: r.isSelf ? 700 : 500, color: "#1a1f2c" }}>{r.ticker}{r.isSelf ? " ★" : ""}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.price != null ? `$${fmt(r.price, 2)}` : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.pe != null ? `${fmt(r.pe, 1)}×` : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.fwdPe != null ? `${fmt(r.fwdPe, 1)}×` : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.peg != null ? fmt(r.peg, 2) : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.ps != null ? `${fmt(r.ps, 1)}×` : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.evEbitda != null ? `${fmt(r.evEbitda, 1)}×` : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.roe != null ? `${fmt(r.roe * (r.roe > 1 ? 1 : 100), 0)}%` : "—"}</td>
+                      <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.mcap ? formatMcap(r.mcap) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {peerAvg && (
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dotted #e6e3db", fontSize: 10, color: "#5a6573" }}>
+                Peer averages: P/E {peerAvg("pe") != null ? `${fmt(peerAvg("pe"), 1)}×` : "—"} · Fwd P/E {peerAvg("fwdPe") != null ? `${fmt(peerAvg("fwdPe"), 1)}×` : "—"} · P/S {peerAvg("ps") != null ? `${fmt(peerAvg("ps"), 1)}×` : "—"} · EV/EBITDA {peerAvg("evEbitda") != null ? `${fmt(peerAvg("evEbitda"), 1)}×` : "—"}
+              </div>
+            )}
+          </div>
+        )}
         {/* === Multi-Master Investor Check (Buffett, Lynch, Simons, Marks, Druckenmiller, Munger) === */}
         <MultiMasterCheck summary={summary} symbol={symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} />
 
