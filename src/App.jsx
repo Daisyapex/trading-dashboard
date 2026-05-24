@@ -1051,6 +1051,31 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, isMobile, collapsible 
     neutral:  { bg: "#5a6573", fg: "#fff" },
   };
   const sc = stanceColors[summary.stanceColor] || stanceColors.neutral;
+
+  // Extract key numbers for the strip
+  const cur = data?.quote?.current ?? null;
+  const change = data?.quote?.changePct ?? null;
+  const target = data?.consensusTarget ?? data?.targetMean ?? null;
+  const upside = (target && cur) ? ((target - cur) / cur) * 100 : null;
+  const w52H = data?.quote?.week52High ?? null;
+  const w52L = data?.quote?.week52Low ?? null;
+  const pctOfHigh = (w52H && cur) ? (cur / w52H) * 100 : null;
+  const pe = f?.pe ?? null;
+  const fwdPe = f?.fwdPe ?? null;
+  const peg = ly?.pegRatio ?? null;
+  const roe = ly?.roe ?? null;
+  const revG = ly?.revGrowthPct ?? null;
+  const rating = data?.consensusRating ?? null;
+
+  // Compact number cell
+  const Num = ({ label, value, sub, color }) => (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: color || "#1a1f2c", lineHeight: 1.2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: "#5a6573", marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
       <div className="panel-head" style={collapsible ? { cursor: "pointer", userSelect: "none" } : null} onClick={collapsible ? () => setExpanded(!expanded) : undefined}>
@@ -1066,35 +1091,55 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, isMobile, collapsible 
         </div>
       )}
       {expanded && (
-        <div style={{ padding: "12px 14px", lineHeight: 1.6 }}>
-          <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 12 }}>{summary.paragraph}</div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-            {summary.positives?.length > 0 && (
-              <div style={{ padding: "10px 12px", background: "#f0f7f1", borderLeft: "3px solid #0a8554", borderRadius: 2 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: "#0a8554", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>What's working</div>
-                {summary.positives.map((p, i) => (
-                  <div key={i} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3 }}>✓ {p}</div>
-                ))}
-              </div>
-            )}
-            {(summary.negatives?.length > 0 || summary.flags?.length > 0) && (
-              <div style={{ padding: "10px 12px", background: "#fdf3f3", borderLeft: "3px solid #c4314b", borderRadius: 2 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: "#c4314b", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>Watch out for</div>
-                {summary.negatives?.map((n, i) => (
-                  <div key={i} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3 }}>· {n}</div>
-                ))}
-                {summary.flags?.map((f, i) => (
-                  <div key={`f${i}`} style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, marginBottom: 3, fontWeight: 600 }}>⚠ {f}</div>
-                ))}
-              </div>
-            )}
+        <div style={{ padding: "14px 16px", lineHeight: 1.6 }}>
+          {/* 1-line headline summary */}
+          <div style={{ fontSize: 13, color: "#1a1f2c", marginBottom: 14, lineHeight: 1.55 }}>{summary.paragraph}</div>
+
+          {/* Key Numbers strip — what every investor wants to see immediately */}
+          <div style={{ padding: "12px 14px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10, fontWeight: 600 }}>Key Numbers</div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 8 }}>
+              {cur != null && <Num label="Price" value={`$${fmt(cur, 2)}`} sub={change != null ? `${change >= 0 ? "+" : ""}${fmt(change, 2)}% today` : null} color={change == null ? "#1a1f2c" : change >= 0 ? "#0a8554" : "#c4314b"} />}
+              {target != null && (
+                <Num label="Analyst Target" value={`$${fmt(target, 0)}`}
+                  sub={upside != null ? `${upside >= 0 ? "+" : ""}${fmt(upside, 0)}% upside` : null}
+                  color={upside == null ? "#1a1f2c" : upside > 15 ? "#0a8554" : upside > 0 ? "#86b09c" : "#c4314b"} />
+              )}
+              {rating && <Num label="Street Rating" value={rating} color={rating?.toLowerCase().includes("buy") ? "#0a8554" : rating?.toLowerCase().includes("sell") ? "#c4314b" : "#1a1f2c"} />}
+              {pctOfHigh != null && (
+                <Num label="vs 52W High" value={`${fmt(pctOfHigh, 0)}%`}
+                  sub={w52H ? `High: $${fmt(w52H, 0)}` : null}
+                  color={pctOfHigh > 95 ? "#d4a017" : pctOfHigh > 80 ? "#1a1f2c" : "#0a8554"} />
+              )}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, paddingTop: 10, borderTop: "1px dotted #e0ddd2" }}>
+              {pe != null && (
+                <Num label="P/E (trailing)" value={fmt(pe, 1) + "×"}
+                  sub={fwdPe != null ? `Fwd: ${fmt(fwdPe, 1)}×` : null} />
+              )}
+              {peg != null && peg > 0 && (
+                <Num label="PEG Ratio" value={fmt(peg, 2)}
+                  sub={peg < 1 ? "Cheap vs growth" : peg < 1.5 ? "Fair" : peg < 2.5 ? "Premium" : "Expensive"}
+                  color={peg < 1 ? "#0a8554" : peg < 1.5 ? "#86b09c" : peg < 2.5 ? "#d4a017" : "#c4314b"} />
+              )}
+              {roe != null && (
+                <Num label="ROE" value={`${fmt(roe, 0)}%`}
+                  sub={roe > 20 ? "Exceptional" : roe > 15 ? "Strong" : roe > 8 ? "Average" : "Weak"}
+                  color={roe > 20 ? "#0a8554" : roe > 15 ? "#86b09c" : roe > 8 ? "#1a1f2c" : "#c4314b"} />
+              )}
+              {revG != null && (
+                <Num label="Revenue Growth" value={`${revG >= 0 ? "+" : ""}${fmt(revG, 0)}%`}
+                  sub={revG > 20 ? "Fast grower" : revG > 10 ? "Solid" : revG > 0 ? "Slow" : "Declining"}
+                  color={revG > 20 ? "#0a8554" : revG > 10 ? "#86b09c" : revG > 0 ? "#1a1f2c" : "#c4314b"} />
+              )}
+            </div>
           </div>
 
           {/* === Multi-Master Investor Check (Buffett, Lynch, Simons, Marks, Druckenmiller, Munger) === */}
           <MultiMasterCheck summary={summary} symbol={symbol} data={data} ly={ly} f={f} op={op} isMobile={isMobile} />
 
-          <div style={{ marginTop: 10, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
-            <em>This summary is rule-based, computed from dashboard data — not AI commentary. It synthesizes the layers below for a quick read. Always do your own work before any trade.</em>
+          <div style={{ marginTop: 12, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
+            <em>Summary is rule-based from dashboard data. Always do your own work before any trade.</em>
           </div>
         </div>
       )}
@@ -1308,39 +1353,39 @@ function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
                          "#5a6573";
 
   return (
-    <div style={{ marginTop: 14, padding: "14px 16px", background: "#222837", color: "#fff", borderRadius: 4 }}>
+    <div style={{ marginTop: 14, padding: "14px 16px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
-        <span style={{ fontSize: 11, color: "#d4a017", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>Multi-Master Check · {symbol}</span>
+        <span style={{ fontSize: 11, color: "#5a6573", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>Multi-Master Check · {symbol}</span>
         <span className="pill" style={{ background: consensusColor === "#5a6573" ? "#7a8497" : consensusColor, color: "#fff", fontWeight: 700 }}>{consensus}</span>
       </div>
-      <div style={{ fontSize: 11, color: "#c0c6d0", lineHeight: 1.5, marginBottom: 14 }}>
-        How would the great investors evaluate this stock based on actual data? Click a master to see their detailed checks.
+      <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5, marginBottom: 12 }}>
+        How would the great investors evaluate this stock? Click a master to see detailed checks.
       </div>
 
       {/* Master cards grid */}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
         {masters.map((m) => {
           const isOpen = expandedMaster === m.name;
-          // Verdict color — semantic (green/red/yellow/gray based on score, not which master)
-          const verdictBg = m.color === "#0a8554" ? "rgba(10, 133, 84, 0.18)"
-                         : m.color === "#86b09c" ? "rgba(134, 176, 156, 0.18)"
-                         : m.color === "#d4a017" ? "rgba(212, 160, 23, 0.18)"
-                         : m.color === "#c4314b" ? "rgba(196, 49, 75, 0.18)"
-                         : "rgba(255, 255, 255, 0.06)";
-          const verdictText = m.color === "#0a8554" ? "#7fd9a8"
-                            : m.color === "#86b09c" ? "#a8d4be"
-                            : m.color === "#d4a017" ? "#f4cc4d"
-                            : m.color === "#c4314b" ? "#f08fa0"
-                            : "#c0c6d0";
+          // Verdict bg/text — light, semantic
+          const verdictBg = m.color === "#0a8554" ? "#dcf0e3"
+                         : m.color === "#86b09c" ? "#e6f0e8"
+                         : m.color === "#d4a017" ? "#fff4d0"
+                         : m.color === "#c4314b" ? "#fde0e3"
+                         : "#ebe9e0";
+          const verdictText = m.color === "#0a8554" ? "#0a6e44"
+                            : m.color === "#86b09c" ? "#3d7a5b"
+                            : m.color === "#d4a017" ? "#8b6914"
+                            : m.color === "#c4314b" ? "#a3203a"
+                            : "#5a6573";
           return (
             <div key={m.name}
               onClick={() => setExpandedMaster(isOpen ? null : m.name)}
-              style={{ padding: "10px 12px", background: isOpen ? "#3a4150" : "#2a3040", border: isOpen ? `2px solid ${verdictText}` : "1px solid #3a4150", borderRadius: 4, cursor: "pointer", transition: "background 0.15s" }}>
+              style={{ padding: "10px 12px", background: isOpen ? "#fff" : "#ffffff", border: isOpen ? `2px solid ${verdictText}` : "1px solid #e6e3db", borderRadius: 3, cursor: "pointer", transition: "border 0.15s" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", letterSpacing: "0.02em" }}>{m.name}</div>
-                <div style={{ fontSize: 9, color: "#fff", opacity: 0.5 }}>{isOpen ? "▼" : "▶"}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c", letterSpacing: "0.02em" }}>{m.name}</div>
+                <div style={{ fontSize: 9, color: "#8a93a3" }}>{isOpen ? "▼" : "▶"}</div>
               </div>
-              <div style={{ fontSize: 10, color: "#a4abb8", marginBottom: 8, lineHeight: 1.3 }}>{m.lens}</div>
+              <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 8, lineHeight: 1.3 }}>{m.lens}</div>
               <div style={{ display: "inline-block", padding: "3px 8px", background: verdictBg, color: verdictText, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", borderRadius: 2, textTransform: "uppercase" }}>{m.label}</div>
             </div>
           );
@@ -1351,21 +1396,27 @@ function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
       {expandedMaster && (() => {
         const m = masters.find((x) => x.name === expandedMaster);
         if (!m) return null;
+        const borderColor = m.color === "#1a1f2c" ? "#5a6573"
+                          : m.color === "#0a8554" ? "#0a6e44"
+                          : m.color === "#86b09c" ? "#3d7a5b"
+                          : m.color === "#d4a017" ? "#8b6914"
+                          : m.color === "#c4314b" ? "#a3203a"
+                          : "#5a6573";
         return (
-          <div style={{ padding: "12px 14px", background: "#2a3040", border: `2px solid ${m.color === "#1a1f2c" ? "#5a6573" : m.color}`, borderRadius: 4, marginBottom: 4 }}>
-            <div style={{ fontSize: 12, color: "#fff", marginBottom: 10 }}>
-              <strong>{m.name}'s perspective:</strong> <span style={{ color: "#c0c6d0" }}>{m.lens}</span>
+          <div style={{ padding: "12px 14px", background: "#fff", border: `2px solid ${borderColor}`, borderRadius: 3, marginBottom: 4 }}>
+            <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 10 }}>
+              <strong>{m.name}'s perspective:</strong> <span style={{ color: "#5a6573" }}>{m.lens}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {m.checks.map((c, i) => {
                 const icon = c.verdict === "match" ? "✓" : c.verdict === "diverge" ? "✗" : "·";
-                const color = c.verdict === "match" ? "#7fd9a8" : c.verdict === "diverge" ? "#f08fa0" : "#c0c6d0";
+                const color = c.verdict === "match" ? "#0a8554" : c.verdict === "diverge" ? "#c4314b" : "#5a6573";
                 return (
                   <div key={i} style={{ display: "flex", gap: 10, fontSize: 11, lineHeight: 1.55 }}>
-                    <span style={{ color, fontWeight: 700, fontSize: 15, flexShrink: 0, width: 16, textAlign: "center" }}>{icon}</span>
+                    <span style={{ color, fontWeight: 700, fontSize: 16, flexShrink: 0, width: 16, textAlign: "center" }}>{icon}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#fff", fontWeight: 600, marginBottom: 3, fontSize: 12 }}>{c.q}</div>
-                      <div style={{ color: "#c0c6d0", fontSize: 11, lineHeight: 1.5 }}>{c.remark}</div>
+                      <div style={{ color: "#1a1f2c", fontWeight: 600, marginBottom: 3, fontSize: 12 }}>{c.q}</div>
+                      <div style={{ color: "#5a6573", fontSize: 11, lineHeight: 1.5 }}>{c.remark}</div>
                     </div>
                   </div>
                 );
@@ -1376,8 +1427,8 @@ function MultiMasterCheck({ summary, symbol, data, ly, f, op, isMobile }) {
       })()}
 
       {/* Overall consensus interpretation */}
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #3a4150", fontSize: 11, color: "#c0c6d0", lineHeight: 1.65 }}>
-        <strong style={{ color: "#fff" }}>Overall:</strong> <span style={{ color: consensusColor === "#5a6573" ? "#c0c6d0" : consensusColor, fontWeight: 600 }}>{approveCount}/{masters.length} approve, {passCount}/{masters.length} cautious.</span>{" "}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e6e3db", fontSize: 11, color: "#5a6573", lineHeight: 1.65 }}>
+        <strong style={{ color: "#1a1f2c" }}>Overall:</strong> <span style={{ color: consensusColor === "#5a6573" ? "#5a6573" : consensusColor, fontWeight: 600 }}>{approveCount}/{masters.length} approve, {passCount}/{masters.length} cautious.</span>{" "}
         {consensus === "Broad approval" && "Strong multi-framework support. Position with conviction."}
         {consensus === "Most masters approve" && "Solid setup with some dissenting views worth noting."}
         {consensus === "Masters split" && "Each lens shows a different angle. No clear consensus — your conviction has to come from elsewhere."}
