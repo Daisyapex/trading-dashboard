@@ -121,10 +121,11 @@ async function yahooSummary(symbol) {
   const modules = [
     "financialData", "defaultKeyStatistics", "summaryDetail", "price",
     "recommendationTrend", "upgradeDowngradeHistory",
-    "earningsTrend", "earningsHistory",
+    "earningsTrend", "earningsHistory", "earnings",
     "insiderTransactions", "majorHoldersBreakdown",
     "calendarEvents",
     "cashflowStatementHistory", "incomeStatementHistory",
+    "incomeStatementHistoryQuarterly",
   ].join(",");
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=${modules}&crumb=${encodeURIComponent(YAHOO_CRUMB)}`;
   try {
@@ -438,6 +439,41 @@ async function fetchTicker(t) {
   const epsStdev = epsValues.length > 1 ? Math.sqrt(epsValues.reduce((s, x) => s + (x - epsMean) ** 2, 0) / epsValues.length) : null;
   const epsCoefVar = epsMean && epsStdev ? Math.abs(epsStdev / epsMean) : null;
 
+  // ===== Quarterly EPS with labels (estimate vs actual) =====
+  // Yahoo's "earnings.earningsChart.quarterly" gives labeled quarters like "1Q2025"
+  const epsQuartersRaw = summary?.earnings?.earningsChart?.quarterly || [];
+  const epsQuarters = epsQuartersRaw.slice(-5).map((q) => ({
+    label: q.date || null,             // e.g. "1Q2025"
+    estimate: v(q, "estimate") ?? null,
+    actual: v(q, "actual") ?? null,
+  })).filter((q) => q.label);
+  // Add the next-quarter estimate (forward-looking) from earningsChart.currentQuarterEstimate
+  const nextQEstimate = v(summary?.earnings?.earningsChart, "currentQuarterEstimate");
+  const nextQLabel = summary?.earnings?.earningsChart?.currentQuarterEstimateDate
+    ? `${summary.earnings.earningsChart.currentQuarterEstimateDate}${summary.earnings.earningsChart.currentQuarterEstimateYear ?? ""}`
+    : null;
+  if (nextQEstimate != null && nextQLabel) {
+    epsQuarters.push({ label: nextQLabel, estimate: nextQEstimate, actual: null });
+  }
+
+  // ===== Quarterly Revenue + Earnings (Net Income) =====
+  const incomeQ = summary?.incomeStatementHistoryQuarterly?.incomeStatementHistory || [];
+  // Build labels from endDate
+  const revEarnQuarters = incomeQ.slice(0, 5).reverse().map((row) => {
+    const endDate = row.endDate?.fmt || null;
+    let label = null;
+    if (endDate) {
+      const [yr, mo] = endDate.split("-");
+      const q = mo === "03" ? "1Q" : mo === "06" ? "2Q" : mo === "09" ? "3Q" : mo === "12" ? "4Q" : "?Q";
+      label = `${q}${yr}`;
+    }
+    return {
+      label,
+      revenue: v(row, "totalRevenue") ?? null,
+      earnings: v(row, "netIncome") ?? null,
+    };
+  }).filter((r) => r.label && (r.revenue != null || r.earnings != null));
+
   const insiderTxs = summary?.insiderTransactions?.transactions || [];
   let insiderBuys = 0, insiderSells = 0, insiderBuyValue = 0, insiderSellValue = 0;
   insiderTxs.forEach((tx) => {
@@ -474,6 +510,8 @@ async function fetchTicker(t) {
     epsGrowth5Yr: fiveYrGrowth != null ? fiveYrGrowth * 100 : null,
     epsCoefVar: epsCoefVar != null ? +epsCoefVar.toFixed(3) : null,
     epsHistory: epsHistory.slice(0, 8),
+    epsQuarters,         // labeled quarterly EPS with estimate/actual
+    revEarnQuarters,     // labeled quarterly revenue + earnings
     insiderBuys, insiderSells,
     insiderBuyValue: Math.round(insiderBuyValue),
     insiderSellValue: Math.round(insiderSellValue),
