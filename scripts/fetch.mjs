@@ -440,39 +440,79 @@ async function fetchTicker(t) {
   const epsCoefVar = epsMean && epsStdev ? Math.abs(epsStdev / epsMean) : null;
 
   // ===== Quarterly EPS with labels (estimate vs actual) =====
-  // Yahoo's "earnings.earningsChart.quarterly" gives labeled quarters like "1Q2025"
+  // Yahoo's "earnings.earningsChart.quarterly" gives compact labels like "1Q2026"
+  // Convert to Yahoo display style "Q1 FY26"
+  const toFiscalLabel = (compact) => {
+    if (!compact) return null;
+    // Handle "1Q2026" format
+    const m = String(compact).match(/^(\d)Q(\d{2,4})$/);
+    if (m) {
+      const q = m[1];
+      const yr = m[2].length === 4 ? m[2].slice(-2) : m[2];
+      return `Q${q} FY${yr}`;
+    }
+    return compact;  // fallback to raw if format unexpected
+  };
   const epsQuartersRaw = summary?.earnings?.earningsChart?.quarterly || [];
+  // Keep original compact label too for revenue-side matching
   const epsQuarters = epsQuartersRaw.slice(-5).map((q) => ({
-    label: q.date || null,             // e.g. "1Q2025"
+    label: toFiscalLabel(q.date),   // e.g. "Q1 FY26"
+    rawLabel: q.date || null,        // e.g. "1Q2026"
     estimate: v(q, "estimate") ?? null,
     actual: v(q, "actual") ?? null,
   })).filter((q) => q.label);
-  // Add the next-quarter estimate (forward-looking) from earningsChart.currentQuarterEstimate
+  // Add the next-quarter estimate (forward-looking)
+  const nextQDate = summary?.earnings?.earningsChart?.currentQuarterEstimateDate;
+  const nextQYear = summary?.earnings?.earningsChart?.currentQuarterEstimateYear;
   const nextQEstimate = v(summary?.earnings?.earningsChart, "currentQuarterEstimate");
-  const nextQLabel = summary?.earnings?.earningsChart?.currentQuarterEstimateDate
-    ? `${summary.earnings.earningsChart.currentQuarterEstimateDate}${summary.earnings.earningsChart.currentQuarterEstimateYear ?? ""}`
-    : null;
-  if (nextQEstimate != null && nextQLabel) {
-    epsQuarters.push({ label: nextQLabel, estimate: nextQEstimate, actual: null });
+  if (nextQEstimate != null && nextQDate && nextQYear) {
+    // nextQDate is like "1Q", nextQYear is like 2026 — build "1Q2026" then convert
+    const rawNext = `${nextQDate}${nextQYear}`;
+    epsQuarters.push({ label: toFiscalLabel(rawNext), rawLabel: rawNext, estimate: nextQEstimate, actual: null });
   }
 
   // ===== Quarterly Revenue + Earnings (Net Income) =====
+  // Match revenue quarters to fiscal labels by walking backward from the most-recent
+  // reported quarter, which should be the latest EPS quarter with actual != null.
   const incomeQ = summary?.incomeStatementHistoryQuarterly?.incomeStatementHistory || [];
-  // Build labels from endDate
-  const revEarnQuarters = incomeQ.slice(0, 5).reverse().map((row) => {
+  // Helper: get fiscal year and quarter from a compact "1Q2026" label
+  const parseCompact = (raw) => {
+    const m = String(raw || "").match(/^(\d)Q(\d{2,4})$/);
+    if (!m) return null;
+    return { q: parseInt(m[1], 10), fy: m[2].length === 4 ? parseInt(m[2], 10) : 2000 + parseInt(m[2], 10) };
+  };
+  // Get the most-recently-reported EPS quarter (one with non-null actual)
+  const reportedEps = [...(epsQuartersRaw || [])].reverse().find((q) => v(q, "actual") != null);
+  const anchorFiscal = parseCompact(reportedEps?.date);
+  // Walk backward through income quarters, applying decrementing fiscal labels
+  const monthToCalQuarter = (mo) => {
+    const m = parseInt(mo, 10);
+    if (m >= 1 && m <= 3) return "Q1";
+    if (m >= 4 && m <= 6) return "Q2";
+    if (m >= 7 && m <= 9) return "Q3";
+    if (m >= 10 && m <= 12) return "Q4";
+    return "Q?";
+  };
+  const revEarnQuarters = incomeQ.slice(0, 5).map((row, i) => {
     const endDate = row.endDate?.fmt || null;
     let label = null;
-    if (endDate) {
+    if (anchorFiscal) {
+      // Decrement quarter/year as we go further back (i=0 is most recent)
+      let q = anchorFiscal.q - i;
+      let fy = anchorFiscal.fy;
+      while (q < 1) { q += 4; fy -= 1; }
+      label = `Q${q} FY${String(fy).slice(-2)}`;
+    } else if (endDate) {
+      // Fallback: calendar quarter
       const [yr, mo] = endDate.split("-");
-      const q = mo === "03" ? "1Q" : mo === "06" ? "2Q" : mo === "09" ? "3Q" : mo === "12" ? "4Q" : "?Q";
-      label = `${q}${yr}`;
+      label = `${monthToCalQuarter(mo)} ${yr.slice(-2)}`;
     }
     return {
       label,
       revenue: v(row, "totalRevenue") ?? null,
       earnings: v(row, "netIncome") ?? null,
     };
-  }).filter((r) => r.label && (r.revenue != null || r.earnings != null));
+  }).filter((r) => r.label && (r.revenue != null || r.earnings != null)).reverse();
 
   const insiderTxs = summary?.insiderTransactions?.transactions || [];
   let insiderBuys = 0, insiderSells = 0, insiderBuyValue = 0, insiderSellValue = 0;
