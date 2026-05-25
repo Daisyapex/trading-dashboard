@@ -948,7 +948,7 @@ function MacroStrip({ macro, isMobile }) {
 // SECTOR HEATMAP — grid of ETF day-changes, color-coded
 // ============================================================
 function SectorHeatmap({ macro, isMobile }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   if (!macro?.benchmarks?.length) return null;
 
   // Sort by day change descending (best first) for natural reading
