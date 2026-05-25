@@ -980,16 +980,21 @@ function SectorHeatmap({ macro, isMobile }) {
         </span>
       </div>
       {expanded && (
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(8, 1fr)", gap: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(6, 1fr)", gap: 4 }}>
           {sorted.map((b) => {
             const { bg, fg } = heatColor(b.dayChange);
             return (
               <div key={b.symbol} title={`${b.name}${b.category ? ` (${b.category})` : ""}\n${b.dayChange >= 0 ? "+" : ""}${b.dayChange?.toFixed(2)}% today, ${b.monthChange >= 0 ? "+" : ""}${b.monthChange?.toFixed(1)}% this month`}
-                style={{ padding: "6px 4px", background: bg, color: fg, borderRadius: 2, textAlign: "center", lineHeight: 1.2 }}>
+                style={{ padding: "8px 6px", background: bg, color: fg, borderRadius: 2, textAlign: "center", lineHeight: 1.2 }}>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 700 }}>{b.symbol}</div>
-                <div className="mono" style={{ fontSize: 10, fontWeight: 600, opacity: 0.95 }}>
+                <div className="mono" style={{ fontSize: 11, fontWeight: 600, opacity: 0.95, marginTop: 2 }}>
                   {b.dayChange >= 0 ? "+" : ""}{b.dayChange?.toFixed(2)}%
                 </div>
+                {b.category && (
+                  <div style={{ fontSize: 9, opacity: 0.85, marginTop: 3, letterSpacing: "0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {b.category}
+                  </div>
+                )}
               </div>
             );
           })}
