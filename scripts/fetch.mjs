@@ -1093,6 +1093,8 @@ async function main() {
         symbol: t.symbol, name: t.name, sector: t.sector,
         holding: !!t.holding,
         price: data.quote.current, change: data.quote.change, changePct: data.quote.changePct,
+        stance: data.summary?.stance || null,
+        stanceColor: data.summary?.stanceColor || null,
       });
       const fwd = data.fundamentals.fwdPe;
       const pcr = data.options?.pcrVolume;
