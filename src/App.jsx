@@ -625,6 +625,7 @@ export default function App() {
       </header>
 
       {macro && <MacroStrip macro={macro} isMobile={isMobile} />}
+      {macro && <SectorHeatmap macro={macro} isMobile={isMobile} />}
 
       {isMobile && sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 40, top: 50 }} />
@@ -939,6 +940,61 @@ function MacroStrip({ macro, isMobile }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+// ============================================================
+// SECTOR HEATMAP — grid of ETF day-changes, color-coded
+// ============================================================
+function SectorHeatmap({ macro, isMobile }) {
+  const [expanded, setExpanded] = useState(true);
+  if (!macro?.benchmarks?.length) return null;
+
+  // Sort by day change descending (best first) for natural reading
+  const sorted = [...macro.benchmarks].sort((a, b) => (b.dayChange || 0) - (a.dayChange || 0));
+
+  // Map day change % to a background color. Caps at ±2% for color intensity.
+  const heatColor = (chg) => {
+    if (chg == null || isNaN(chg)) return { bg: "#f5f3ed", fg: "#5a6573" };
+    const intensity = Math.min(Math.abs(chg) / 2, 1); // 0-1 saturation
+    if (chg > 0) {
+      // Green: from #f0f7f1 (light) to #0a8554 (dark)
+      const alpha = 0.15 + intensity * 0.75;
+      return { bg: `rgba(10, 133, 84, ${alpha})`, fg: intensity > 0.5 ? "#fff" : "#0a4d31" };
+    } else {
+      const alpha = 0.15 + intensity * 0.75;
+      return { bg: `rgba(196, 49, 75, ${alpha})`, fg: intensity > 0.5 ? "#fff" : "#7a1d2b" };
+    }
+  };
+
+  return (
+    <div style={{ background: "#fafaf7", borderBottom: "1px solid #e6e3db", padding: isMobile ? "6px 10px" : "8px 16px" }}>
+      <div onClick={() => setExpanded(!expanded)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", userSelect: "none", marginBottom: expanded ? 8 : 0 }}>
+        <span style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <span style={{ marginRight: 6 }}>{expanded ? "▼" : "▶"}</span>
+          Sector Heatmap · {sorted.length} ETFs
+        </span>
+        <span style={{ fontSize: 10, color: "#5a6573" }}>
+          {sorted.filter((b) => b.dayChange > 0).length} up · {sorted.filter((b) => b.dayChange < 0).length} down
+        </span>
+      </div>
+      {expanded && (
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(8, 1fr)", gap: 4 }}>
+          {sorted.map((b) => {
+            const { bg, fg } = heatColor(b.dayChange);
+            return (
+              <div key={b.symbol} title={`${b.name}${b.category ? ` (${b.category})` : ""}\n${b.dayChange >= 0 ? "+" : ""}${b.dayChange?.toFixed(2)}% today, ${b.monthChange >= 0 ? "+" : ""}${b.monthChange?.toFixed(1)}% this month`}
+                style={{ padding: "6px 4px", background: bg, color: fg, borderRadius: 2, textAlign: "center", lineHeight: 1.2 }}>
+                <div className="mono" style={{ fontSize: 11, fontWeight: 700 }}>{b.symbol}</div>
+                <div className="mono" style={{ fontSize: 10, fontWeight: 600, opacity: 0.95 }}>
+                  {b.dayChange >= 0 ? "+" : ""}{b.dayChange?.toFixed(2)}%
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -3831,17 +3887,33 @@ const AnalystRow = ({ label, value }) => (
   </div>
 );
 
-const TickerButton = ({ t, active, onClick, isHolding }) => (
-  <button onClick={onClick} className={`ticker-btn ${active ? "active" : ""}`} style={{ borderLeftColor: isHolding && !active ? "#d4a017" : undefined }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-      <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{t.symbol}</span>
-      <span className="mono" style={{ fontSize: 10, color: t.changePct > 0 ? "#0a8554" : t.changePct < 0 ? "#c4314b" : "inherit", opacity: 0.9 }}>
-        {t.changePct != null ? pct(t.changePct) : "—"}
-      </span>
-    </div>
-    <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>{t.name}</div>
-  </button>
-);
+const TickerButton = ({ t, active, onClick, isHolding }) => {
+  const stanceColor = t.stanceColor === "positive" ? "#0a8554"
+                    : t.stanceColor === "negative" ? "#c4314b"
+                    : t.stanceColor === "neutral" ? "#8a93a3"
+                    : null;
+  return (
+    <button onClick={onClick} className={`ticker-btn ${active ? "active" : ""}`} style={{ borderLeftColor: isHolding && !active ? "#d4a017" : undefined }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{t.symbol}</span>
+        <span className="mono" style={{ fontSize: 11, fontWeight: 500 }}>
+          {t.price != null ? `$${fmt(t.price, 2)}` : "—"}
+        </span>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 2 }}>
+        <span style={{ fontSize: 9, opacity: 0.65, textTransform: "uppercase", letterSpacing: "0.04em" }}>{t.sector || "—"}</span>
+        <span className="mono" style={{ fontSize: 10, color: t.changePct > 0 ? "#0a8554" : t.changePct < 0 ? "#c4314b" : "inherit", opacity: 0.9 }}>
+          {t.changePct != null ? pct(t.changePct) : "—"}
+        </span>
+      </div>
+      {t.stance && stanceColor && (
+        <div style={{ marginTop: 4 }}>
+          <span style={{ fontSize: 8, padding: "1px 6px", background: stanceColor, color: "#fff", letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 600, borderRadius: 1 }}>{t.stance}</span>
+        </div>
+      )}
+    </button>
+  );
+};
 
 const LiveStatus = ({ status, lastUpdate, compact }) => {
   const config = {
