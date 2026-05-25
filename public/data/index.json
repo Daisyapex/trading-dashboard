@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-24T14:58:41.923Z",
+  "generatedAt": "2026-05-25T15:30:11.424Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -8,7 +8,9 @@
       "holding": true,
       "price": 215.35,
       "change": -4.16,
-      "changePct": -1.8951
+      "changePct": -1.8951,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "MSFT",
@@ -17,7 +19,9 @@
       "holding": true,
       "price": 418.59,
       "change": -0.5,
-      "changePct": -0.1193
+      "changePct": -0.1193,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "TSM",
@@ -26,7 +30,9 @@
       "holding": true,
       "price": 404.54,
       "change": -2.61,
-      "changePct": -0.641
+      "changePct": -0.641,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "NOW",
@@ -35,7 +41,9 @@
       "holding": true,
       "price": 102.15,
       "change": 2.46,
-      "changePct": 2.4676
+      "changePct": 2.4676,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "VOO",
@@ -44,7 +52,9 @@
       "holding": false,
       "price": 685.57,
       "change": 2.73,
-      "changePct": 0.3998
+      "changePct": 0.3998,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "QQQ",
@@ -53,7 +63,9 @@
       "holding": false,
       "price": 717.56,
       "change": 3.05,
-      "changePct": 0.4269
+      "changePct": 0.4269,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "VTI",
@@ -62,7 +74,9 @@
       "holding": false,
       "price": 366.81,
       "change": 1.72,
-      "changePct": 0.4711
+      "changePct": 0.4711,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "VGK",
@@ -71,7 +85,9 @@
       "holding": false,
       "price": 88.48,
       "change": -0.28,
-      "changePct": -0.3155
+      "changePct": -0.3155,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "SMH",
@@ -80,7 +96,9 @@
       "holding": false,
       "price": 576.34,
       "change": 8.46,
-      "changePct": 1.4898
+      "changePct": 1.4898,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "ARKK",
@@ -89,7 +107,9 @@
       "holding": false,
       "price": 76.42,
       "change": -0.2,
-      "changePct": -0.261
+      "changePct": -0.261,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "AVGO",
@@ -98,7 +118,9 @@
       "holding": false,
       "price": 414.16,
       "change": -0.41,
-      "changePct": -0.0989
+      "changePct": -0.0989,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "AMD",
@@ -107,7 +129,9 @@
       "holding": false,
       "price": 467.53,
       "change": 17.94,
-      "changePct": 3.9903
+      "changePct": 3.9903,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "MU",
@@ -116,7 +140,9 @@
       "holding": false,
       "price": 751.02,
       "change": -11.08,
-      "changePct": -1.4539
+      "changePct": -1.4539,
+      "stance": "Negative",
+      "stanceColor": "negative"
     },
     {
       "symbol": "ASML",
@@ -125,7 +151,9 @@
       "holding": false,
       "price": 1632.92,
       "change": 40.92,
-      "changePct": 2.5704
+      "changePct": 2.5704,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "MRVL",
@@ -134,7 +162,9 @@
       "holding": false,
       "price": 196.35,
       "change": 5.66,
-      "changePct": 2.9682
+      "changePct": 2.9682,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "ARM",
@@ -143,7 +173,9 @@
       "holding": false,
       "price": 306.53,
       "change": 8.3,
-      "changePct": 2.7831
+      "changePct": 2.7831,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "QCOM",
@@ -152,7 +184,9 @@
       "holding": false,
       "price": 238.18,
       "change": 24.77,
-      "changePct": 11.6068
+      "changePct": 11.6068,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "INTC",
@@ -161,7 +195,9 @@
       "holding": false,
       "price": 119.86,
       "change": 1.36,
-      "changePct": 1.1477
+      "changePct": 1.1477,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "SMCI",
@@ -170,7 +206,9 @@
       "holding": false,
       "price": 35.59,
       "change": 2.13,
-      "changePct": 6.3658
+      "changePct": 6.3658,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "ANET",
@@ -179,7 +217,9 @@
       "holding": false,
       "price": 154.05,
       "change": 5.46,
-      "changePct": 3.6745
+      "changePct": 3.6745,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "DELL",
@@ -188,7 +228,9 @@
       "holding": false,
       "price": 295.21,
       "change": 42.41,
-      "changePct": 16.7761
+      "changePct": 16.7761,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "VRT",
@@ -197,7 +239,9 @@
       "holding": false,
       "price": 327.48,
       "change": 4.08,
-      "changePct": 1.2616
+      "changePct": 1.2616,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "PLTR",
@@ -206,7 +250,9 @@
       "holding": false,
       "price": 136.9,
       "change": -0.515,
-      "changePct": -0.3748
+      "changePct": -0.3748,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "ORCL",
@@ -215,7 +261,9 @@
       "holding": false,
       "price": 192.1,
       "change": 2.33,
-      "changePct": 1.2278
+      "changePct": 1.2278,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "CRWD",
@@ -224,7 +272,9 @@
       "holding": false,
       "price": 663.48,
       "change": 15.25,
-      "changePct": 2.3526
+      "changePct": 2.3526,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "PANW",
@@ -233,7 +283,9 @@
       "holding": false,
       "price": 260.6,
       "change": 7.68,
-      "changePct": 3.0365
+      "changePct": 3.0365,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "NBIS",
@@ -242,7 +294,9 @@
       "holding": false,
       "price": 214.79,
       "change": -5.14,
-      "changePct": -2.3371
+      "changePct": -2.3371,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "TEM",
@@ -251,7 +305,9 @@
       "holding": false,
       "price": 46.19,
       "change": -0.3,
-      "changePct": -0.6453
+      "changePct": -0.6453,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "PATH",
@@ -260,7 +316,9 @@
       "holding": false,
       "price": 10.94,
       "change": 0.37,
-      "changePct": 3.5005
+      "changePct": 3.5005,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "VST",
@@ -269,7 +327,9 @@
       "holding": false,
       "price": 156.29,
       "change": 7.21,
-      "changePct": 4.8363
+      "changePct": 4.8363,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "CEG",
@@ -278,7 +338,9 @@
       "holding": false,
       "price": 294.09,
       "change": 8.26,
-      "changePct": 2.8898
+      "changePct": 2.8898,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "RKLB",
@@ -287,7 +349,9 @@
       "holding": false,
       "price": 135.78,
       "change": 10.33,
-      "changePct": 8.2344
+      "changePct": 8.2344,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "ASTS",
@@ -296,7 +360,9 @@
       "holding": false,
       "price": 105.88,
       "change": 9.65,
-      "changePct": 10.0281
+      "changePct": 10.0281,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "IBM",
@@ -305,7 +371,9 @@
       "holding": false,
       "price": 253.86,
       "change": 0.89,
-      "changePct": 0.3518
+      "changePct": 0.3518,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "GFS",
@@ -314,7 +382,9 @@
       "holding": false,
       "price": 85.66,
       "change": 4.31,
-      "changePct": 5.2981
+      "changePct": 5.2981,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "RGTI",
@@ -323,7 +393,9 @@
       "holding": false,
       "price": 26.43,
       "change": 4.39,
-      "changePct": 19.9183
+      "changePct": 19.9183,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "AAPL",
@@ -332,7 +404,9 @@
       "holding": false,
       "price": 308.84,
       "change": 3.85,
-      "changePct": 1.2623
+      "changePct": 1.2623,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "GOOGL",
@@ -341,7 +415,9 @@
       "holding": false,
       "price": 382.99,
       "change": -4.67,
-      "changePct": -1.2047
+      "changePct": -1.2047,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "META",
@@ -350,7 +426,9 @@
       "holding": false,
       "price": 610.28,
       "change": 2.9,
-      "changePct": 0.4775
+      "changePct": 0.4775,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "AMZN",
@@ -359,7 +437,9 @@
       "holding": false,
       "price": 266.34,
       "change": -2.12,
-      "changePct": -0.7897
+      "changePct": -0.7897,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "TSLA",
@@ -368,7 +448,9 @@
       "holding": false,
       "price": 426.03,
       "change": 8.18,
-      "changePct": 1.9576
+      "changePct": 1.9576,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "NFLX",
@@ -377,7 +459,9 @@
       "holding": false,
       "price": 88.62,
       "change": -0.68,
-      "changePct": -0.7615
+      "changePct": -0.7615,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "RDDT",
@@ -386,7 +470,9 @@
       "holding": false,
       "price": 141.69,
       "change": -8.35,
-      "changePct": -5.5652
+      "changePct": -5.5652,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "OPEN",
@@ -395,7 +481,9 @@
       "holding": false,
       "price": 4.54,
       "change": -0.03,
-      "changePct": -0.6565
+      "changePct": -0.6565,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "HOOD",
@@ -404,7 +492,9 @@
       "holding": false,
       "price": 73.66,
       "change": -2.26,
-      "changePct": -2.9768
+      "changePct": -2.9768,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "COIN",
@@ -413,7 +503,9 @@
       "holding": false,
       "price": 185.01,
       "change": -8.55,
-      "changePct": -4.4172
+      "changePct": -4.4172,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "MSTR",
@@ -422,7 +514,9 @@
       "holding": false,
       "price": 159.91,
       "change": -4.94,
-      "changePct": -2.9967
+      "changePct": -2.9967,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "SOFI",
@@ -431,7 +525,9 @@
       "holding": false,
       "price": 15.63,
       "change": -0.02,
-      "changePct": -0.1278
+      "changePct": -0.1278,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "HIMS",
@@ -440,7 +536,9 @@
       "holding": false,
       "price": 23.76,
       "change": -0.25,
-      "changePct": -1.0412
+      "changePct": -1.0412,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "AXP",
@@ -449,7 +547,9 @@
       "holding": false,
       "price": 311.8,
       "change": 2.1,
-      "changePct": 0.6781
+      "changePct": 0.6781,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "CVX",
@@ -458,7 +558,9 @@
       "holding": false,
       "price": 191.45,
       "change": 0.44,
-      "changePct": 0.2304
+      "changePct": 0.2304,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "OXY",
@@ -467,7 +569,9 @@
       "holding": false,
       "price": 58.83,
       "change": 0,
-      "changePct": 0
+      "changePct": 0,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "CMG",
@@ -476,7 +580,9 @@
       "holding": false,
       "price": 32.9,
       "change": 0.1,
-      "changePct": 0.3049
+      "changePct": 0.3049,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "PYPL",
@@ -485,7 +591,9 @@
       "holding": false,
       "price": 44.24,
       "change": -0.06,
-      "changePct": -0.1354
+      "changePct": -0.1354,
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "JPM",
@@ -494,7 +602,9 @@
       "holding": false,
       "price": 306.4,
       "change": 3.4,
-      "changePct": 1.1221
+      "changePct": 1.1221,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "GS",
@@ -503,7 +613,9 @@
       "holding": false,
       "price": 996.75,
       "change": 8.58,
-      "changePct": 0.8683
+      "changePct": 0.8683,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "LLY",
@@ -512,7 +624,9 @@
       "holding": false,
       "price": 1065.02,
       "change": 23.37,
-      "changePct": 2.2436
+      "changePct": 2.2436,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "UNH",
@@ -521,7 +635,9 @@
       "holding": false,
       "price": 388.49,
       "change": 6.01,
-      "changePct": 1.5713
+      "changePct": 1.5713,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "DIS",
@@ -530,7 +646,9 @@
       "holding": false,
       "price": 103.02,
       "change": -0.56,
-      "changePct": -0.5406
+      "changePct": -0.5406,
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     }
   ]
 }
