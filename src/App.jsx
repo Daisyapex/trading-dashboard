@@ -2306,6 +2306,13 @@ function RiskHelper({ isMobile, macro }) {
         </CollapsibleSection>
       )}
 
+      {/* Institutional Risk Lens — what big hedge funds worry about */}
+      {enriched.length > 0 && (
+        <CollapsibleSection title="Institutional Risk Lens · What hedge funds worry about" subtitle="Your exposure to systemic risks cited by Citadel, Goldman, BlackRock" defaultOpen={false}>
+          <InstitutionalRiskLens positions={enriched} totalValue={totalValue} cashRemaining={cashRemaining} macro={macro} isMobile={isMobile} embedded />
+        </CollapsibleSection>
+      )}
+
       {/* Macro Stress Test — collapsed */}
       {enriched.length > 0 && enriched.some((p) => p.correlations && Object.keys(p.correlations).length > 0) && (
         <CollapsibleSection title="Macro Stress Test · Scripted Scenarios" subtitle="5 macro shocks" defaultOpen={false}>
@@ -2605,15 +2612,15 @@ function ValuationRiskPanel({ positions, isMobile, embedded }) {
   // Each stock has its OWN realistic bear-case PE, based on sector norms
   // Format: { sectorKeyword: { typical, bear, severe } }
   const SECTOR_PE_HISTORY = {
-    "Semiconductor": { typical: 25, bear: 18, severe: 14, desc: "Semi sector typical PE 22-28. 2022 bottomed near 14x." },
-    "Hyperscaler":   { typical: 28, bear: 22, severe: 18, desc: "Mega-cap tech typical PE 25-30. 2022 lows around 18x." },
-    "AI Software":   { typical: 45, bear: 30, severe: 22, desc: "Growth SaaS typical PE 40-60. 2022 SaaS bear bottomed at 22x." },
-    "Software":      { typical: 40, bear: 28, severe: 20, desc: "Software typical PE 30-45. Bear case 20-28x." },
-    "Healthcare":    { typical: 22, bear: 17, severe: 14, desc: "Healthcare typical PE 18-25. Bear case 14-17x." },
-    "Financial":     { typical: 14, bear: 10, severe: 7,  desc: "Banks typical PE 11-15. Bear case 7-10x." },
-    "Energy":        { typical: 14, bear: 9,  severe: 6,  desc: "Energy cyclical. Bear case 6-9x." },
-    "Consumer":      { typical: 22, bear: 16, severe: 12, desc: "Consumer typical PE 18-25. Bear case 12-16x." },
-    "Default":       { typical: 20, bear: 15, severe: 12, desc: "S&P 500 historical average ~18x. Bear ~15x. Severe ~12x." },
+    "Semiconductor": { typical: 25, bear: 18, severe: 14, desc: "Semi sector 10Y range: 15-32×. 2022 bottomed near 14× (briefly). Typical 22-28×." },
+    "Hyperscaler":   { typical: 28, bear: 22, severe: 18, desc: "Mega-cap tech 10Y range: 20-38×. 2022 lows around 18× (MSFT briefly). Typical 25-32×." },
+    "AI Software":   { typical: 45, bear: 30, severe: 22, desc: "Growth SaaS 10Y range: 25-80×. 2022 SaaS bear bottomed at 22-30×. Typical 35-55× since 2020." },
+    "Software":      { typical: 40, bear: 28, severe: 20, desc: "Software 10Y range: 22-55×. Bear case 20-28× (2022 lows)." },
+    "Healthcare":    { typical: 22, bear: 17, severe: 14, desc: "Healthcare 10Y range: 14-28×. Bear case 14-17× (recession lows)." },
+    "Financial":     { typical: 14, bear: 10, severe: 7,  desc: "Banks 10Y range: 8-18×. Bear case 7-10× (2020 COVID, 2008 GFC)." },
+    "Energy":        { typical: 14, bear: 9,  severe: 6,  desc: "Energy cyclical, 10Y range: 6-25×. Bear case 6-9× (oil crashes)." },
+    "Consumer":      { typical: 22, bear: 16, severe: 12, desc: "Consumer 10Y range: 14-28×. Bear case 12-16× (recessions)." },
+    "Default":       { typical: 20, bear: 15, severe: 12, desc: "S&P 500 10Y range: 15-25×. Bear ~15×. Severe ~12× (rare, 2009/2020-style)." },
   };
   const getSectorAnchors = (sectorRaw) => {
     if (!sectorRaw) return SECTOR_PE_HISTORY.Default;
@@ -2687,42 +2694,65 @@ function ValuationRiskPanel({ positions, isMobile, embedded }) {
         {/* Per-stock breakdown - compact, single line each */}
         <div className="panel-title" style={{ fontSize: 10, marginBottom: 6 }}>Per-Position Detail</div>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 600 }}>
+          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 700 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
                 <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
                 <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
                 <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Now PE</th>
+                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Fwd PE</th>
                 <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Typical</th>
                 <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Bear</th>
                 <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Severe</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
-                  <td className="mono" style={{ padding: "6px 8px", fontWeight: 600 }}>{r.symbol}</td>
-                  <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sectorAnchors.label}</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(r.pe, 1)}×</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: r.dollarToTypical >= 0 ? "#0a8554" : "#c4314b" }}>
-                    <div>{r.sectorAnchors.typical}×</div>
-                    <div style={{ fontSize: 9 }}>{r.dollarToTypical >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarToTypical))}</div>
-                  </td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>
-                    <div>{r.sectorAnchors.bear}×</div>
-                    <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToBear))}</div>
-                  </td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>
-                    <div>{r.sectorAnchors.severe}×</div>
-                    <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToSevere))}</div>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                // Forward PE — if available, calculate the implied "real" current pe based on growth
+                // If Fwd PE is significantly lower than trailing, growth is moderating the picture
+                const fwdPctLower = r.fwdPe && r.pe ? ((r.fwdPe / r.pe) - 1) * 100 : null;
+                const fwdNote = fwdPctLower != null
+                  ? (fwdPctLower < -25 ? "Strong forward growth" : fwdPctLower < -10 ? "Forward growth helps" : fwdPctLower < 5 ? "Flat forward" : "Earnings declining")
+                  : null;
+                const fwdColor = fwdPctLower != null
+                  ? (fwdPctLower < -25 ? "#0a8554" : fwdPctLower < -10 ? "#86b09c" : fwdPctLower < 5 ? "#5a6573" : "#c4314b")
+                  : "#5a6573";
+                return (
+                  <tr key={r.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
+                    <td className="mono" style={{ padding: "6px 8px", fontWeight: 600 }}>{r.symbol}</td>
+                    <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sectorAnchors.label}</td>
+                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(r.pe, 1)}×</td>
+                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: fwdColor }}>
+                      <div>{r.fwdPe != null ? fmt(r.fwdPe, 1) + "×" : "—"}</div>
+                      {fwdNote && <div style={{ fontSize: 8, color: fwdColor, fontWeight: 500 }}>{fwdNote}</div>}
+                    </td>
+                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: r.dollarToTypical >= 0 ? "#0a8554" : "#c4314b" }}>
+                      <div>{r.sectorAnchors.typical}×</div>
+                      <div style={{ fontSize: 9 }}>{r.dollarToTypical >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarToTypical))}</div>
+                    </td>
+                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>
+                      <div>{r.sectorAnchors.bear}×</div>
+                      <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToBear))}</div>
+                    </td>
+                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>
+                      <div>{r.sectorAnchors.severe}×</div>
+                      <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToSevere))}</div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
         <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
-          <strong>How to read:</strong> "Bear" = your stock's PE falls to its sector's typical 2022-bear-low. "Severe" = like a full sector crash. Tech rarely goes below ~14x (semis) or ~22x (software) even in crashes. NVDA at 18x like the broad market isn't realistic — it would re-rate to ~14-18x in a true semi crash.
+          <strong>How to read:</strong>
+          <ul style={{ margin: "6px 0 0 16px", padding: 0, fontSize: 11, lineHeight: 1.6 }}>
+            <li><strong>Now PE / Fwd PE:</strong> Trailing earnings vs forward 12-month estimate. A much lower Fwd PE = earnings are projected to grow into the price.</li>
+            <li><strong>Typical:</strong> Sector's normal P/E based on 10-year history. If your stock has higher, it carries a premium that could compress.</li>
+            <li><strong>Bear:</strong> Sector P/E at the 2022 low — a realistic "bad year" target.</li>
+            <li><strong>Severe:</strong> Like 2008 or 2022-trough levels. Tech rarely goes below ~14× (semis) or ~22× (software) even in crashes — these are real historical floors, not arbitrary.</li>
+            <li><strong>Forward-looking caveat:</strong> If a stock's Fwd PE is much lower than trailing, the "bear" scenario may not happen — the company can grow into the price. But that depends on the growth materializing.</li>
+          </ul>
         </div>
       </div>
   );
@@ -2925,10 +2955,15 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
                   const benchLabel = bench?.vol_label || "S&P 500";
                   const vsSP500 = dailyVol / spyVol;
                   const vsBench = dailyVol / benchVol;
-                  const assessment = vsBench > 1.4 ? { text: "Well above sector", color: "#c4314b" }
-                                   : vsBench > 1.15 ? { text: "Above sector", color: "#d4a017" }
-                                   : vsBench > 0.85 ? { text: "Normal for sector", color: "#0a8554" }
-                                   : { text: "Below sector", color: "#0a8554" };
+                  // Honest framing: any single stock will be ~1.3-1.8× a diversified ETF by definition
+                  // (idiosyncratic risk doesn't average out for one stock). So the threshold for
+                  // "elevated" must be relative to this expectation, not arbitrary 1.4×.
+                  // Standard single-stock vs broad-ETF ratio: ~1.4-1.6 is NORMAL.
+                  // Above 2.0× = genuinely elevated. Above 2.5× = high. Above 3.0× = extreme.
+                  const assessment = vsBench > 3.0 ? { text: "Extreme vs ETF", color: "#c4314b" }
+                                   : vsBench > 2.0 ? { text: "Elevated vs ETF", color: "#d4a017" }
+                                   : vsBench > 1.3 ? { text: "Typical single-stock", color: "#0a8554" }
+                                   : { text: "Lower than ETF", color: "#0a8554" };
                   return (
                     <tr key={p.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
                       <td className="mono" style={{ padding: "6px 8px", fontWeight: 600 }}>{p.symbol}</td>
@@ -2946,7 +2981,7 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
           </table>
         </div>
         <div style={{ marginTop: 8, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
-          <strong>Daily Vol</strong> = the typical 1-day price move (std dev from last 90 days). <strong>Benchmark</strong> = the volatility of the sector ETF most relevant to that stock (e.g., NVDA → SMH, MU → HBM, NOW → IGV, MSFT → OEF). Benchmark numbers are <strong>computed from real market data</strong>, not hardcoded. S&P 500 (SPY) is the baseline for "average stock."
+          <strong>Daily Vol</strong> = the typical 1-day price move (std dev from last 90 days). <strong>Benchmark</strong> = the sector ETF most relevant to that stock. <strong>Honest note:</strong> ANY single stock is naturally 1.3-1.8× more volatile than a diversified ETF (idiosyncratic risk doesn't average out). So "1.5×" alone isn't elevated — it's expected. Only ratios above 2.0× indicate genuinely above-normal volatility for that sector.
         </div>
 
         <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
@@ -3193,6 +3228,222 @@ function DalioSuggestionsPanel({ positions, totalValue, cashRemaining, macro, is
 // ============================================================
 // MACRO STRESS TEST — what happens to portfolio in scripted scenarios
 // ============================================================
+// ============================================================
+// INSTITUTIONAL RISK LENS — Maps your portfolio against systemic risks
+// that big hedge funds (Citadel, Goldman, BlackRock) actually worry about
+// Sources: BofA fund manager survey, BlackRock 2026 outlook,
+// Morgan Stanley hedge fund outlook, J.P. Morgan institutional reports
+// ============================================================
+function InstitutionalRiskLens({ positions, totalValue, cashRemaining, macro, isMobile, embedded }) {
+  if (!positions?.length || !totalValue) return null;
+
+  // Categorize positions by sector exposure
+  const sectorMap = {
+    semis: 0, hyperscaler: 0, aiSoftware: 0, aiInfra: 0,
+    crypto: 0, taiwan: 0, financial: 0, energy: 0,
+    healthcare: 0, staple: 0, intl: 0, smallCap: 0,
+  };
+  for (const p of positions) {
+    if (!p.value) continue;
+    const pct = p.value / totalValue;
+    const s = (p.sector || "").toLowerCase();
+    if (s.includes("semi")) sectorMap.semis += pct;
+    if (s.includes("hyperscaler") || s.includes("internet content")) sectorMap.hyperscaler += pct;
+    if (s.includes("ai software") || s.includes("software")) sectorMap.aiSoftware += pct;
+    if (s.includes("ai infrastructure")) sectorMap.aiInfra += pct;
+    if (s.includes("crypto") || s.includes("bitcoin")) sectorMap.crypto += pct;
+    if (p.symbol === "TSM" || p.symbol === "ASML") sectorMap.taiwan += pct;
+    if (s.includes("financ") || s.includes("bank") || s.includes("payment")) sectorMap.financial += pct;
+    if (s.includes("energ") || s.includes("oil")) sectorMap.energy += pct;
+    if (s.includes("health")) sectorMap.healthcare += pct;
+    if (s.includes("staple")) sectorMap.staple += pct;
+  }
+  // AI-adjacent = anything that depends on AI capex spending continuing
+  const aiAdjacent = sectorMap.semis + sectorMap.hyperscaler + sectorMap.aiSoftware + sectorMap.aiInfra;
+  const cashPct = totalValue > 0 ? (cashRemaining || 0) / (totalValue + (cashRemaining || 0)) : 0;
+  // Top 3 concentration
+  const sortedByValue = [...positions].sort((a, b) => b.value - a.value);
+  const top3 = sortedByValue.slice(0, 3).reduce((s, p) => s + p.value, 0);
+  const top3Pct = totalValue > 0 ? top3 / totalValue : 0;
+
+  // ===== Score each risk =====
+  const risks = [
+    {
+      id: "crowded",
+      severity:
+        aiAdjacent > 0.7 && top3Pct > 0.7 ? "high" :
+        aiAdjacent > 0.4 || top3Pct > 0.7 ? "med" : "low",
+      title: "Crowded Trades",
+      cite: "Cited by Citadel CIO, Goldman prime brokerage, BofA Feb 2026 survey",
+      summary: 'The #1 risk for hedge funds in 2026. Every major fund holds the same AI/tech names. When sentiment shifts, the exit becomes a stampede — multiple "worst trading days in a year" hit in early 2026 from this exact dynamic.',
+      yourExposure: aiAdjacent > 0.4
+        ? `${(aiAdjacent * 100).toFixed(0)}% of your portfolio is in AI-adjacent names (semis, hyperscalers, AI software). These ARE the crowded trades.`
+        : "Limited exposure to crowded AI names.",
+      concentration: top3Pct > 0.7
+        ? `Top 3 positions = ${(top3Pct * 100).toFixed(0)}% of portfolio. When hedge funds unwind, you can't escape — you ARE the unwind.`
+        : `Top 3 = ${(top3Pct * 100).toFixed(0)}%. Less concentrated than typical hedge fund exposure.`,
+      action: aiAdjacent > 0.7
+        ? "Trim 1-2 tech holdings. Diversify into non-crowded names (international, value, staples) to reduce co-movement with hedge fund flows."
+        : aiAdjacent > 0.4
+        ? "You're partly exposed. Watch for hedge fund deleveraging signals (sudden -3% tech days with no news)."
+        : "Position is manageable. Monitor crowding indicators.",
+    },
+    {
+      id: "aibubble",
+      severity: aiAdjacent > 0.5 ? "high" : aiAdjacent > 0.2 ? "med" : "low",
+      title: "AI Bubble / Capex Failure",
+      cite: "Morgan Stanley 2026 Outlook, Deutsche Bank survey, IMF Oct 2025 GFSR",
+      summary: 'Morgan Stanley warns of "capital excess" and "creative destruction" if AI infrastructure spending fails to generate revenue. BofA: AI bubble is the #1 tail risk per institutional investors (Feb 2026).',
+      yourExposure: aiAdjacent > 0.5
+        ? `${(aiAdjacent * 100).toFixed(0)}% of portfolio depends on AI capex continuing. If MSFT/META/GOOGL/AMZN cut spending guidance, every name you hold drops together.`
+        : `${(aiAdjacent * 100).toFixed(0)}% AI exposure. Some risk from capex pullback but more diversified.`,
+      concentration: sectorMap.semis > 0.3
+        ? `Semis at ${(sectorMap.semis * 100).toFixed(0)}% — the most leveraged play on AI capex. Will lead any drawdown.`
+        : `Semis at ${(sectorMap.semis * 100).toFixed(0)}%. Manageable.`,
+      action: aiAdjacent > 0.5
+        ? "Watch hyperscaler capex guidance quarterly. FIRST miss (any of MSFT/META/GOOGL/AMZN) = early warning. Consider trimming semis first since they're most rate-sensitive to capex."
+        : "Monitor but not urgent.",
+    },
+    {
+      id: "geopolitical",
+      severity: sectorMap.taiwan > 0.15 || sectorMap.semis > 0.3 ? "med" : "low",
+      title: "Geopolitical · Taiwan & Supply Chains",
+      cite: "Wellington Mgmt 2026, BlackRock outlook",
+      summary: "TSM produces ~65% of global advanced chips. Any Taiwan Strait escalation hits TSM directly AND indirectly via NVDA/AAPL/AMD (all rely on TSM as foundry). Energy supply shocks from Middle East tensions also disrupt quant models.",
+      yourExposure: sectorMap.taiwan > 0
+        ? `Direct Taiwan exposure: ${(sectorMap.taiwan * 100).toFixed(0)}% (TSM). Plus indirect via NVDA — NVDA can't produce chips without TSM.`
+        : sectorMap.semis > 0.3
+        ? `Indirect Taiwan exposure: semis ${(sectorMap.semis * 100).toFixed(0)}%. All advanced chips route through TSM.`
+        : "Limited direct Taiwan exposure.",
+      concentration: "Watch the news flow as a leading indicator. Cross-strait tension events historically caused 10-20% drawdowns in TSM and 5-10% in NVDA on the same day.",
+      action: sectorMap.taiwan > 0.15
+        ? "Consider trimming TSM. Don't replace with NVDA — same supply chain. Look at Intel/Samsung/SK Hynix for geographic diversification."
+        : sectorMap.semis > 0.3
+        ? "Aware but acceptable. Cash position helps absorb shock."
+        : "Low concern.",
+    },
+    {
+      id: "leverage",
+      severity: cashPct < 0.1 ? "med" : "low",
+      title: "Leverage / Margin Squeeze",
+      cite: "BlackRock CIO Helen Jewell (Dec 2025), IMF GFSR",
+      summary: "Hedge funds at near-record leverage. When markets drop, prime brokers raise margin requirements — forced liquidations follow. This caused November 2025's selloff. Their forced selling temporarily depresses YOUR stocks too, even though you didn't borrow.",
+      yourExposure: `You hold ${(cashPct * 100).toFixed(0)}% cash. ${cashPct > 0.2 ? "Strong buffer." : cashPct > 0.1 ? "Modest buffer." : "Low buffer — forced selling environments hit you too."}`,
+      concentration: `Your stocks (NVDA, MSFT, TSM, etc.) are the FIRST things hedge funds sell when margin called. Expect 3-8% drops on rumor of major fund deleveraging — independent of company fundamentals.`,
+      action: cashPct < 0.1
+        ? "Build cash reserve to 15-20% before next earnings season. Lets you buy quality on hedge-fund-forced dips."
+        : "Cash position is reasonable. Use forced-selling drops as accumulation opportunities (NOT to chase).",
+    },
+    {
+      id: "inflation",
+      severity: aiAdjacent > 0.5 ? "med" : "low",
+      title: "Inflation Resurgence · Rate Spike",
+      cite: "Wellington 2026, J.P. Morgan asset management",
+      summary: "Sticky inflation (tariffs, deglobalization, tight labor) threatens the low-rate regime that supports tech multiples. When 10Y Treasury rises, tech P/E compresses — DCF math forces it. The 2022 selloff was exactly this dynamic.",
+      yourExposure: aiAdjacent > 0.5
+        ? `${(aiAdjacent * 100).toFixed(0)}% in long-duration tech assets (most rate-sensitive). 10Y rising from 4.4% → 5%+ historically compresses tech P/E by 15-25%.`
+        : `${(aiAdjacent * 100).toFixed(0)}% tech exposure. Some sensitivity but manageable.`,
+      concentration: macro?.items?.find((m) => m.symbol === "^TNX") ?
+        `Current 10Y yield: ${macro.items.find((m) => m.symbol === "^TNX").value.toFixed(2)}%. Watch 5%+ as compression trigger.`
+        : "Watch 10Y Treasury yield as the canary.",
+      action: aiAdjacent > 0.5
+        ? "Set a mental stop at 10Y > 5% — that's when tech P/E compresses hard. Either trim or hedge with TLT/IEF if it gets there."
+        : "Not your primary concern.",
+    },
+  ];
+
+  const sevColor = (s) => s === "high" ? { bg: "#fde0e3", fg: "#a3203a", border: "#c4314b", label: "HIGH" }
+                       : s === "med" ? { bg: "#fff4d0", fg: "#8b6914", border: "#d4a017", label: "MEDIUM" }
+                       : { bg: "#dcf0e3", fg: "#0a6e44", border: "#0a8554", label: "LOW" };
+
+  const highCount = risks.filter((r) => r.severity === "high").length;
+  const medCount = risks.filter((r) => r.severity === "med").length;
+
+  const inner = (
+    <div style={{ padding: "14px 16px" }}>
+      <div style={{ fontSize: 12, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 14 }}>
+        Multi-strategy hedge funds publish their top concerns quarterly. These are the 5 systemic risks they actually worry about in 2026 — and how YOUR portfolio is exposed to each. Citations from Citadel, Goldman, BlackRock, BofA fund manager survey, Morgan Stanley, IMF Global Financial Stability Report.
+      </div>
+
+      {/* Summary scorecard */}
+      <div style={{ padding: "10px 14px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 600 }}>Your portfolio's institutional risk profile:</span>
+          <span style={{ fontSize: 11 }}>
+            <span style={{ color: "#c4314b", fontWeight: 700 }}>{highCount} High</span>
+            {" · "}
+            <span style={{ color: "#d4a017", fontWeight: 700 }}>{medCount} Medium</span>
+            {" · "}
+            <span style={{ color: "#0a8554", fontWeight: 700 }}>{5 - highCount - medCount} Low</span>
+          </span>
+        </div>
+        {highCount >= 2 && (
+          <div style={{ fontSize: 11, color: "#a3203a", marginTop: 6, lineHeight: 1.5 }}>
+            <strong>Honest takeaway:</strong> Your portfolio carries elevated systemic risk on multiple dimensions. The biggest source is concentration in AI/tech — exactly what hedge funds are crowded into. When they de-risk, you de-risk with them, regardless of company fundamentals.
+          </div>
+        )}
+        {highCount === 1 && (
+          <div style={{ fontSize: 11, color: "#8b6914", marginTop: 6, lineHeight: 1.5 }}>
+            <strong>Honest takeaway:</strong> One high-severity risk worth managing. The institutional flows can drive short-term volatility even when long-term thesis is intact.
+          </div>
+        )}
+        {highCount === 0 && (
+          <div style={{ fontSize: 11, color: "#0a6e44", marginTop: 6, lineHeight: 1.5 }}>
+            <strong>Honest takeaway:</strong> Manageable institutional risk profile. Cash buffer and diversification protect against most hedge fund deleveraging scenarios.
+          </div>
+        )}
+      </div>
+
+      {/* Risk cards */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {risks.map((r) => {
+          const sev = sevColor(r.severity);
+          return (
+            <div key={r.id} style={{ padding: "12px 14px", background: "#fff", border: `1px solid #e6e3db`, borderLeft: `4px solid ${sev.border}`, borderRadius: 3 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, flexWrap: "wrap", gap: 6 }}>
+                <span style={{ fontSize: 12, color: "#1a1f2c", fontWeight: 700 }}>{r.title}</span>
+                <span style={{ padding: "2px 8px", background: sev.bg, color: sev.fg, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", borderRadius: 2 }}>
+                  {sev.label} EXPOSURE
+                </span>
+              </div>
+              <div style={{ fontSize: 9, color: "#8a93a3", marginBottom: 8, fontStyle: "italic" }}>
+                Cited by: {r.cite}
+              </div>
+              <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5, marginBottom: 8 }}>
+                {r.summary}
+              </div>
+              <div style={{ padding: "8px 10px", background: "#fafaf7", borderRadius: 2, marginBottom: 6, fontSize: 11, color: "#1a1f2c", lineHeight: 1.5 }}>
+                <strong style={{ color: sev.fg }}>Your exposure:</strong> {r.yourExposure}
+              </div>
+              <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5, marginBottom: 6 }}>
+                {r.concentration}
+              </div>
+              <div style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5, padding: "6px 10px", background: "#f0f7f1", borderLeft: `3px solid ${sev.border}`, borderRadius: 2 }}>
+                <strong>Action:</strong> {r.action}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 14, padding: 10, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
+        <strong>How to use this:</strong> This isn't a sell signal — it's a "know what you own and what could hurt you" map. Hedge fund-driven risks are systemic, not company-specific. Even if NVDA's business is fine, hedge fund deleveraging can drop the stock 10% in a week. Cash buffer + diversification away from crowded names are the two universal defenses.
+      </div>
+    </div>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Institutional Risk Lens · What Hedge Funds Worry About</span>
+        <AlertTriangle size={13} color="#d4a017" />
+      </div>
+      {inner}
+    </div>
+  );
+}
+
 function MacroStressPanel({ positions, totalValue, isMobile, embedded }) {
   if (!totalValue) return null;
   // Scenarios: each defines a shock to a macro asset and we use stock correlations to estimate impact
