@@ -10,12 +10,18 @@
     { "symbol": "VTI",   "name": "Vanguard Total Market",  "sector": "ETF · Broad",             "peers": ["VOO", "ITOT", "SCHB", "SPTM"] },
     { "symbol": "VGK",   "name": "Vanguard FTSE Europe",   "sector": "ETF · Europe",            "peers": ["IEUR", "EZU", "FEZ", "HEDJ"] },
     { "symbol": "SMH",   "name": "VanEck Semiconductor",   "sector": "ETF · Tech",              "peers": ["SOXX", "XSD", "QQQ", "VGT"] },
+    { "symbol": "DRAM",  "name": "Roundhill Memory ETF",   "sector": "ETF · Memory",            "peers": ["SMH", "SOXX", "MU", "QQQ"] },
     { "symbol": "ARKK",  "name": "ARK Innovation",         "sector": "ETF · Innovation",        "peers": ["ARKQ", "QQQ", "WCLD", "SKYY"] },
 
     { "symbol": "AVGO",  "name": "Broadcom Inc.",         "sector": "Semiconductors",          "peers": ["NVDA", "AMD", "MRVL", "QCOM"] },
     { "symbol": "AMD",   "name": "Advanced Micro Dev",    "sector": "Semiconductors",          "peers": ["NVDA", "INTC", "AVGO", "QCOM"] },
-    { "symbol": "MU",    "name": "Micron Technology",     "sector": "Semiconductors",          "peers": ["WDC", "STX", "TSM", "AVGO"] },
-    { "symbol": "ASML",  "name": "ASML Holding",          "sector": "Semiconductors",          "peers": ["AMAT", "LRCX", "KLAC", "TSM"] },
+    { "symbol": "MU",    "name": "Micron Technology",     "sector": "Semiconductors · Memory", "peers": ["WDC", "STX", "TSM", "AVGO"] },
+    { "symbol": "ASML",  "name": "ASML Holding",          "sector": "Semiconductors · Equip",  "peers": ["AMAT", "LRCX", "KLAC", "TSM"] },
+    { "symbol": "AMAT",  "name": "Applied Materials",     "sector": "Semiconductors · Equip",  "peers": ["LRCX", "KLAC", "ASML", "TSM"] },
+    { "symbol": "LRCX",  "name": "Lam Research",          "sector": "Semiconductors · Equip",  "peers": ["AMAT", "KLAC", "ASML", "TSM"] },
+    { "symbol": "KLAC",  "name": "KLA Corp.",             "sector": "Semiconductors · Equip",  "peers": ["AMAT", "LRCX", "ASML", "TSM"] },
+    { "symbol": "CDNS",  "name": "Cadence Design Systems","sector": "Semiconductors · EDA",    "peers": ["SNPS", "ANSS", "MSFT", "NVDA"] },
+    { "symbol": "SNPS",  "name": "Synopsys",              "sector": "Semiconductors · EDA",    "peers": ["CDNS", "ANSS", "MSFT", "NVDA"] },
     { "symbol": "MRVL",  "name": "Marvell Technology",    "sector": "Semiconductors",          "peers": ["AVGO", "NVDA", "AMD", "QCOM"] },
     { "symbol": "ARM",   "name": "Arm Holdings",          "sector": "Semiconductors",          "peers": ["NVDA", "AMD", "QCOM", "INTC"] },
     { "symbol": "QCOM",  "name": "Qualcomm",              "sector": "Semiconductors",          "peers": ["AVGO", "AMD", "NVDA", "ARM"] },
@@ -30,9 +36,6 @@
     { "symbol": "ORCL",  "name": "Oracle",                "sector": "Hyperscaler",             "peers": ["MSFT", "GOOGL", "AMZN", "CRM"] },
     { "symbol": "CRWD",  "name": "CrowdStrike",           "sector": "Cybersecurity",           "peers": ["PANW", "ZS", "S", "FTNT"] },
     { "symbol": "PANW",  "name": "Palo Alto Networks",    "sector": "Cybersecurity",           "peers": ["CRWD", "ZS", "FTNT", "S"] },
-    { "symbol": "NBIS",  "name": "Nebius Group",          "sector": "AI Cloud",                "peers": ["NVDA", "ORCL", "MSFT", "GOOGL"] },
-    { "symbol": "TEM",   "name": "Tempus AI",             "sector": "AI Software",             "peers": ["PLTR", "VEEV", "ILMN", "DNA"] },
-    { "symbol": "PATH",  "name": "UiPath",                "sector": "AI Software",             "peers": ["NOW", "PLTR", "MSFT", "CRM"] },
 
     { "symbol": "VST",   "name": "Vistra Corp.",          "sector": "AI Power",                "peers": ["CEG", "NRG", "TLN", "PWR"] },
     { "symbol": "CEG",   "name": "Constellation Energy",  "sector": "AI Power",                "peers": ["VST", "NRG", "TLN", "EXC"] },
@@ -40,7 +43,7 @@
     { "symbol": "RKLB",  "name": "Rocket Lab",            "sector": "Space",                   "peers": ["ASTS", "LMT", "RTX", "BA"] },
     { "symbol": "ASTS",  "name": "AST SpaceMobile",       "sector": "Space",                   "peers": ["RKLB", "IRDM", "VSAT", "GSAT"] },
 
-    { "symbol": "IBM",   "name": "IBM (Quantum + AI)",    "sector": "Quantum/Mega Tech",       "peers": ["MSFT", "ORCL", "GOOGL", "RGTI"] },
+    { "symbol": "IBM",   "name": "IBM (Quantum + AI)",    "sector": "Quantum/Mega Tech",       "peers": ["MSFT", "ORCL", "GOOGL", "IONQ"] },
     { "symbol": "GFS",   "name": "GlobalFoundries",       "sector": "Semiconductors",          "peers": ["TSM", "INTC", "ASML", "AVGO"] },
     { "symbol": "RGTI",  "name": "Rigetti Computing",     "sector": "Quantum Pure-Play",       "peers": ["IBM", "GFS", "AMD", "NVDA"] },
 
@@ -52,13 +55,10 @@
     { "symbol": "TSLA",  "name": "Tesla, Inc.",           "sector": "Active Retail",           "peers": ["F", "GM", "RIVN", "LCID"] },
     { "symbol": "NFLX",  "name": "Netflix",               "sector": "Streaming",               "peers": ["DIS", "WBD", "AMZN", "GOOGL"] },
     { "symbol": "RDDT",  "name": "Reddit Inc.",           "sector": "Active Retail",           "peers": ["META", "PINS", "SNAP", "GOOGL"] },
-    { "symbol": "OPEN",  "name": "Opendoor Technologies", "sector": "Active Retail",           "peers": ["Z", "RDFN", "EXPI", "COMP"] },
 
     { "symbol": "HOOD",  "name": "Robinhood Markets",     "sector": "Fintech",                 "peers": ["SCHW", "COIN", "SOFI", "IBKR"] },
     { "symbol": "COIN",  "name": "Coinbase Global",       "sector": "Crypto/Fintech",          "peers": ["HOOD", "MSTR", "SCHW", "IBKR"] },
-    { "symbol": "MSTR",  "name": "Strategy (MicroStrat)", "sector": "Crypto/Fintech",          "peers": ["COIN", "HOOD", "RIOT", "MARA"] },
     { "symbol": "SOFI",  "name": "SoFi Technologies",     "sector": "Fintech",                 "peers": ["HOOD", "UPST", "SCHW", "ALLY"] },
-    { "symbol": "HIMS",  "name": "Hims & Hers Health",    "sector": "Active Retail",           "peers": ["TDOC", "WBA", "AMWL", "GDRX"] },
 
     { "symbol": "AXP",   "name": "American Express",      "sector": "Buffett",                 "peers": ["V", "MA", "DFS", "COF"] },
     { "symbol": "CVX",   "name": "Chevron",               "sector": "Buffett",                 "peers": ["XOM", "OXY", "COP", "SLB"] },
