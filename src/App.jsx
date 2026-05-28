@@ -822,6 +822,9 @@ export default function App() {
           {/* === Risk Flags directly after summary === */}
           <RiskFlagsPanel data={data} ly={ly} f={f} op={op} displayQuote={displayQuote} isMobile={isMobile} />
 
+          {/* === Research Links: external sources for deep dives === */}
+          <ResearchLinks symbol={data.symbol} isMobile={isMobile} />
+
           {/* === Catalysts: what's coming up === */}
           {data.catalysts && <CatalystPanel catalysts={data.catalysts} symbol={data.symbol} isMobile={isMobile} />}
 
@@ -1843,6 +1846,145 @@ function CatalystPanel({ catalysts, symbol, isMobile }) {
 // ============================================================
 // BEHAVIOR TRACKER — your trades, your reasoning, your patterns
 // ============================================================
+// ============================================================
+// RESEARCH LINKS — deep-link to external research sources
+// Each ticker gets a panel with curated links: SEC filings, news,
+// transcripts, IR pages. Designed for the weekly review workflow.
+// ============================================================
+function ResearchLinks({ symbol, isMobile }) {
+  if (!symbol) return null;
+  const [expanded, setExpanded] = useState(false);
+
+  // Group links by purpose
+  const groups = [
+    {
+      title: "News & Earnings",
+      icon: "📰",
+      links: [
+        { label: "Yahoo Finance news", url: `https://finance.yahoo.com/quote/${symbol}/news` },
+        { label: "Seeking Alpha (free transcripts)", url: `https://seekingalpha.com/symbol/${symbol}/earnings/transcripts` },
+        { label: "CNBC ticker page", url: `https://www.cnbc.com/quotes/${symbol}` },
+        { label: "MarketWatch news", url: `https://www.marketwatch.com/investing/stock/${symbol}` },
+      ],
+    },
+    {
+      title: "SEC Filings & Official Docs",
+      icon: "📄",
+      links: [
+        { label: "SEC EDGAR (10-K, 10-Q, 8-K)", url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${symbol}&type=&dateb=&owner=include&count=40` },
+        { label: "Latest 10-K (full-text search)", url: `https://efts.sec.gov/LATEST/search-index?q=%22${symbol}%22&dateRange=custom&startdt=2024-01-01&forms=10-K` },
+        { label: "Insider transactions (Form 4)", url: `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${symbol}&type=4&dateb=&owner=include&count=40` },
+      ],
+    },
+    {
+      title: "Analyst & Institutional",
+      icon: "🏢",
+      links: [
+        { label: "TipRanks analyst ratings", url: `https://www.tipranks.com/stocks/${symbol.toLowerCase()}/forecast` },
+        { label: "WhaleWisdom (13F filings)", url: `https://whalewisdom.com/stock/${symbol.toLowerCase()}` },
+        { label: "Finviz (technical + ownership)", url: `https://finviz.com/quote.ashx?t=${symbol}` },
+        { label: "StockAnalysis.com fundamentals", url: `https://stockanalysis.com/stocks/${symbol.toLowerCase()}/` },
+      ],
+    },
+    {
+      title: "Community & Sentiment",
+      icon: "🔍",
+      links: [
+        { label: `Reddit search (r/investing)`, url: `https://www.reddit.com/r/investing/search/?q=${symbol}&restrict_sr=on&sort=new` },
+        { label: `Reddit search (r/stocks)`, url: `https://www.reddit.com/r/stocks/search/?q=${symbol}&restrict_sr=on&sort=new` },
+        { label: "Stocktwits", url: `https://stocktwits.com/symbol/${symbol}` },
+        { label: "X/Twitter (cashtag)", url: `https://twitter.com/search?q=%24${symbol}&src=typed_query&f=live` },
+      ],
+    },
+  ];
+
+  // Pre-built AI prompts to copy
+  const aiPrompts = [
+    {
+      label: "Earnings summary prompt",
+      text: `I hold ${symbol}. Paste their latest earnings transcript or press release. Then ask me: "Summarize ${symbol}'s latest earnings. Focus on: (1) what changed vs last quarter, (2) management's tone, (3) any surprise positive or negative items, (4) guidance changes. Skip boilerplate."`,
+    },
+    {
+      label: "Thesis check prompt",
+      text: `I hold ${symbol} as a long-term investment. My thesis is [YOUR THESIS]. Based on the last 30 days of news for ${symbol}, has anything fundamentally changed? Be specific and don't speculate.`,
+    },
+    {
+      label: "Risk scan prompt",
+      text: `For ${symbol}: scan recent SEC filings (10-K, 10-Q, 8-K) and identify the top 3 risks management is currently disclosing. Compare to last year's filings - what NEW risks have been added? What's been removed?`,
+    },
+  ];
+
+  const copyPrompt = (text) => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert("Prompt copied! Paste into Claude or ChatGPT.");
+      }).catch(() => {
+        alert("Copy failed. Select and copy manually.");
+      });
+    } else {
+      alert("Copy not supported. Select and copy manually.");
+    }
+  };
+
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div onClick={() => setExpanded(!expanded)} className="panel-head" style={{ cursor: "pointer", userSelect: "none" }}>
+        <span className="panel-title">
+          <span style={{ marginRight: 6 }}>{expanded ? "▼" : "▶"}</span>
+          Research Links · {symbol} · External sources for deep dives
+        </span>
+        <span style={{ fontSize: 10, color: "#8a93a3" }}>{expanded ? "click to collapse" : "click to expand"}</span>
+      </div>
+      {expanded && (
+        <div style={{ padding: "10px 14px" }}>
+          <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 10, lineHeight: 1.5 }}>
+            For weekly review: open Yahoo news + Seeking Alpha transcript + SEC EDGAR. Use AI prompts at the bottom to compress your analysis time.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
+            {groups.map((g) => (
+              <div key={g.title} style={{ padding: "8px 10px", background: "#fafaf7", borderRadius: 3, border: "1px solid #e6e3db" }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#1a1f2c", marginBottom: 6 }}>
+                  <span style={{ marginRight: 6 }}>{g.icon}</span>{g.title}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {g.links.map((link) => (
+                    <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#0a6e44", textDecoration: "none", padding: "2px 0" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.textDecoration = "underline"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.textDecoration = "none"; }}>
+                      → {link.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* AI Prompts Section */}
+          <div style={{ marginTop: 12, padding: "10px 12px", background: "#f5f3ed", border: "1px solid #e6e3db", borderRadius: 3 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#1a1f2c", marginBottom: 8 }}>
+              🤖 AI Research Prompts <span style={{ fontSize: 10, color: "#5a6573", fontWeight: 400 }}>(copy → paste into Claude or ChatGPT)</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {aiPrompts.map((p) => (
+                <button key={p.label} onClick={() => copyPrompt(p.text)}
+                  style={{ padding: "6px 10px", background: "#fff", border: "1px solid #d4a017", borderRadius: 2, cursor: "pointer", textAlign: "left", fontSize: 11, color: "#1a1f2c", fontFamily: "inherit" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "#fff4d0"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}>
+                  📋 Copy: <strong>{p.label}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, padding: 8, background: "#f9f7f1", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
+            <strong>Honest note:</strong> Links open in new tabs. Reddit/Twitter are noisy — read for sentiment, not for analysis. SEC EDGAR + earnings transcripts + IR press releases are the highest-signal sources. AI prompts help compress reading time but always verify against primary sources.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BehaviorTracker({ isMobile }) {
   const [trades, setTrades] = useState([]);
   const [form, setForm] = useState({ symbol: "", action: "BUY", shares: "", price: "", thesis: "", exitPlan: "", stopLoss: "", date: new Date().toISOString().slice(0, 10) });
