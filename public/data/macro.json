@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-05-28T17:16:25.983Z",
+  "fetchedAt": "2026-05-29T08:59:30.448Z",
   "items": [
     {
       "symbol": "^TNX",
@@ -15,26 +15,26 @@
       "name": "Volatility Index",
       "explain": "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear.",
       "value": 15.81,
-      "dayChange": -2.95,
-      "monthChange": -15.95,
-      "dailyVol": 7.38
+      "dayChange": 0.44,
+      "monthChange": -6.39,
+      "dailyVol": 7.33
     },
     {
       "symbol": "DX-Y.NYB",
       "name": "Dollar Index",
       "explain": "Strong dollar hurts US multinationals' overseas revenue.",
-      "value": 98.98,
-      "dayChange": -0.23,
-      "monthChange": 0.37,
+      "value": 99.14,
+      "dayChange": 0.12,
+      "monthChange": 0.22,
       "dailyVol": 0.37
     },
     {
       "symbol": "SPY",
       "name": "S&P 500 ETF",
       "explain": "Overall US market direction.",
-      "value": 754.28,
-      "dayChange": 0.51,
-      "monthChange": 5.98,
+      "value": 754.6,
+      "dayChange": 0.55,
+      "monthChange": 6.03,
       "dailyVol": 0.92,
       "category": "Broad market",
       "vol_label": "S&P 500"
@@ -43,9 +43,9 @@
       "symbol": "QQQ",
       "name": "NASDAQ-100 ETF",
       "explain": "Tech-heavy index. Growth stock proxy.",
-      "value": 735.89,
-      "dayChange": 0.88,
-      "monthChange": 11.91,
+      "value": 735.6,
+      "dayChange": 0.84,
+      "monthChange": 11.87,
       "dailyVol": 1.2,
       "category": "Mega tech",
       "vol_label": "Nasdaq-100"
@@ -54,9 +54,9 @@
       "symbol": "SOXX",
       "name": "Semiconductor ETF",
       "explain": "Sector context — moves NVDA, AMD, TSM, etc together.",
-      "value": 574.35,
-      "dayChange": 1.84,
-      "monthChange": 30.92,
+      "value": 569.47,
+      "dayChange": 0.97,
+      "monthChange": 29.81,
       "dailyVol": 2.76,
       "category": "Semis",
       "vol_label": "Semis (SOXX)"
@@ -65,9 +65,9 @@
       "symbol": "TLT",
       "name": "20Y Treasury ETF",
       "explain": "Bond proxy. Negative correlation with growth stocks.",
-      "value": 85.61,
-      "dayChange": 0.36,
-      "monthChange": -0.88,
+      "value": 85.74,
+      "dayChange": 0.52,
+      "monthChange": -0.73,
       "dailyVol": 0.64,
       "category": "Bonds",
       "vol_label": "Bonds (TLT)"
@@ -78,9 +78,9 @@
       "symbol": "SPY",
       "name": "S&P 500 ETF",
       "explain": "Overall US market direction.",
-      "value": 754.28,
-      "dayChange": 0.51,
-      "monthChange": 5.98,
+      "value": 754.6,
+      "dayChange": 0.55,
+      "monthChange": 6.03,
       "dailyVol": 0.92,
       "category": "Broad market",
       "vol_label": "S&P 500"
@@ -89,9 +89,9 @@
       "symbol": "QQQ",
       "name": "NASDAQ-100 ETF",
       "explain": "Tech-heavy index. Growth stock proxy.",
-      "value": 735.89,
-      "dayChange": 0.88,
-      "monthChange": 11.91,
+      "value": 735.6,
+      "dayChange": 0.84,
+      "monthChange": 11.87,
       "dailyVol": 1.2,
       "category": "Mega tech",
       "vol_label": "Nasdaq-100"
@@ -100,9 +100,9 @@
       "symbol": "SOXX",
       "name": "Semiconductor ETF",
       "explain": "Sector context — moves NVDA, AMD, TSM, etc together.",
-      "value": 574.35,
-      "dayChange": 1.84,
-      "monthChange": 30.92,
+      "value": 569.47,
+      "dayChange": 0.97,
+      "monthChange": 29.81,
       "dailyVol": 2.76,
       "category": "Semis",
       "vol_label": "Semis (SOXX)"
@@ -111,9 +111,9 @@
       "symbol": "TLT",
       "name": "20Y Treasury ETF",
       "explain": "Bond proxy. Negative correlation with growth stocks.",
-      "value": 85.61,
-      "dayChange": 0.36,
-      "monthChange": -0.88,
+      "value": 85.74,
+      "dayChange": 0.52,
+      "monthChange": -0.73,
       "dailyVol": 0.64,
       "category": "Bonds",
       "vol_label": "Bonds (TLT)"
@@ -121,9 +121,9 @@
     {
       "symbol": "SMH",
       "name": "Semi Logic ETF",
-      "value": 603.14,
-      "dayChange": 1.28,
-      "monthChange": 22.79,
+      "value": 599.83,
+      "dayChange": 0.73,
+      "monthChange": 22.11,
       "dailyVol": 2.39,
       "category": "Semi Logic",
       "vol_label": "Semi Logic (SMH)"
@@ -131,19 +131,19 @@
     {
       "symbol": "HBM",
       "name": "Memory Tech ETF",
-      "value": 28.48,
-      "dayChange": 7.11,
-      "monthChange": 23.93,
-      "dailyVol": 4.22,
+      "value": 28.23,
+      "dayChange": 6.17,
+      "monthChange": 22.85,
+      "dailyVol": 4.2,
       "category": "Memory/DRAM",
       "vol_label": "Memory (HBM)"
     },
     {
       "symbol": "IGV",
       "name": "Software ETF",
-      "value": 95.7,
-      "dayChange": 2.85,
-      "monthChange": 12.59,
+      "value": 95.68,
+      "dayChange": 2.83,
+      "monthChange": 12.56,
       "dailyVol": 2,
       "category": "Software",
       "vol_label": "Software (IGV)"
@@ -151,39 +151,39 @@
     {
       "symbol": "CIBR",
       "name": "Cybersecurity ETF",
-      "value": 84.08,
-      "dayChange": 2.49,
-      "monthChange": 25.21,
-      "dailyVol": 1.8,
+      "value": 83.68,
+      "dayChange": 2,
+      "monthChange": 24.62,
+      "dailyVol": 1.79,
       "category": "Cybersecurity",
       "vol_label": "Cyber (CIBR)"
     },
     {
       "symbol": "ARTY",
       "name": "AI & Big Data ETF",
-      "value": 73.08,
-      "dayChange": 2.8,
-      "monthChange": 22.15,
-      "dailyVol": 2.52,
+      "value": 72.71,
+      "dayChange": 2.28,
+      "monthChange": 21.53,
+      "dailyVol": 2.51,
       "category": "AI Infra",
       "vol_label": "AI Infra (ARTY)"
     },
     {
       "symbol": "XLK",
       "name": "Technology Sector",
-      "value": 187.35,
-      "dayChange": 1.58,
-      "monthChange": 18.69,
-      "dailyVol": 1.55,
+      "value": 186.85,
+      "dayChange": 1.31,
+      "monthChange": 18.37,
+      "dailyVol": 1.54,
       "category": "Broad Tech",
       "vol_label": "Tech (XLK)"
     },
     {
       "symbol": "OEF",
       "name": "S&P 100 Mega Cap",
-      "value": 375.65,
-      "dayChange": 0.47,
-      "monthChange": 6.72,
+      "value": 376.46,
+      "dayChange": 0.68,
+      "monthChange": 6.95,
       "dailyVol": 0.96,
       "category": "Mega Cap",
       "vol_label": "Mega Cap (OEF)"
@@ -191,9 +191,9 @@
     {
       "symbol": "MDY",
       "name": "Mid-Cap ETF",
-      "value": 680.92,
-      "dayChange": 0.35,
-      "monthChange": 3.46,
+      "value": 679.25,
+      "dayChange": 0.1,
+      "monthChange": 3.21,
       "dailyVol": 1.15,
       "category": "Mid Cap",
       "vol_label": "Mid Cap (MDY)"
@@ -201,9 +201,9 @@
     {
       "symbol": "IWM",
       "name": "Russell 2000",
-      "value": 292.11,
-      "dayChange": 0.6,
-      "monthChange": 6.64,
+      "value": 292.03,
+      "dayChange": 0.57,
+      "monthChange": 6.62,
       "dailyVol": 1.34,
       "category": "Small Cap",
       "vol_label": "Small Cap (IWM)"
@@ -211,9 +211,9 @@
     {
       "symbol": "BITQ",
       "name": "Crypto Industry",
-      "value": 28.48,
-      "dayChange": 0.6,
-      "monthChange": 21.97,
+      "value": 28.51,
+      "dayChange": 0.71,
+      "monthChange": 22.1,
       "dailyVol": 3.39,
       "category": "Crypto Equity",
       "vol_label": "Crypto Cos (BITQ)"
@@ -221,9 +221,9 @@
     {
       "symbol": "IBIT",
       "name": "iShares Bitcoin",
-      "value": 41.54,
-      "dayChange": -2.14,
-      "monthChange": -4,
+      "value": 41.56,
+      "dayChange": -2.1,
+      "monthChange": -3.95,
       "dailyVol": 2.25,
       "category": "Bitcoin",
       "vol_label": "Bitcoin (IBIT)"
@@ -231,9 +231,9 @@
     {
       "symbol": "XLV",
       "name": "Healthcare Sector",
-      "value": 150.57,
-      "dayChange": 1.2,
-      "monthChange": 4.68,
+      "value": 150.88,
+      "dayChange": 1.4,
+      "monthChange": 4.89,
       "dailyVol": 0.97,
       "category": "Healthcare",
       "vol_label": "Healthcare (XLV)"
@@ -241,9 +241,9 @@
     {
       "symbol": "XLF",
       "name": "Financial Sector",
-      "value": 51.21,
-      "dayChange": -0.41,
-      "monthChange": -1.23,
+      "value": 51.27,
+      "dayChange": -0.29,
+      "monthChange": -1.12,
       "dailyVol": 0.87,
       "category": "Financials",
       "vol_label": "Financials (XLF)"
@@ -251,9 +251,9 @@
     {
       "symbol": "XLE",
       "name": "Energy Sector",
-      "value": 57.1,
-      "dayChange": 0.19,
-      "monthChange": -1.06,
+      "value": 56.95,
+      "dayChange": -0.07,
+      "monthChange": -1.32,
       "dailyVol": 1.54,
       "category": "Energy",
       "vol_label": "Energy (XLE)"
@@ -261,9 +261,9 @@
     {
       "symbol": "XLY",
       "name": "Consumer Disc.",
-      "value": 121.6,
-      "dayChange": 0.04,
-      "monthChange": 3.92,
+      "value": 122.06,
+      "dayChange": 0.42,
+      "monthChange": 4.32,
       "dailyVol": 1.31,
       "category": "Consumer Disc",
       "vol_label": "Cons Disc (XLY)"
@@ -271,9 +271,9 @@
     {
       "symbol": "XLP",
       "name": "Consumer Staples",
-      "value": 84.57,
-      "dayChange": -0.01,
-      "monthChange": 1.79,
+      "value": 84.43,
+      "dayChange": -0.18,
+      "monthChange": 1.62,
       "dailyVol": 0.9,
       "category": "Consumer Stpl",
       "vol_label": "Cons Stpl (XLP)"
@@ -281,9 +281,9 @@
     {
       "symbol": "GLD",
       "name": "Gold ETF",
-      "value": 413.38,
-      "dayChange": 1.2,
-      "monthChange": -2.02,
+      "value": 412.77,
+      "dayChange": 1.05,
+      "monthChange": -2.17,
       "dailyVol": 1.74,
       "category": "Gold",
       "vol_label": "Gold (GLD)",
@@ -292,10 +292,10 @@
     {
       "symbol": "DBC",
       "name": "Commodities ETF",
-      "value": 29.59,
-      "dayChange": 0.34,
-      "monthChange": -2.47,
-      "dailyVol": 1.55,
+      "value": 29.72,
+      "dayChange": 0.78,
+      "monthChange": -2.04,
+      "dailyVol": 1.56,
       "category": "Commodities",
       "vol_label": "Commodities (DBC)",
       "dalio": "Inflation hedge"
@@ -303,9 +303,9 @@
     {
       "symbol": "VEA",
       "name": "Developed Markets ex-US",
-      "value": 71.74,
-      "dayChange": 0.46,
-      "monthChange": 5.92,
+      "value": 71.66,
+      "dayChange": 0.35,
+      "monthChange": 5.8,
       "dailyVol": 1.53,
       "category": "Intl Developed",
       "vol_label": "Intl Dev (VEA)",
@@ -314,10 +314,10 @@
     {
       "symbol": "VWO",
       "name": "Emerging Markets",
-      "value": 60.04,
-      "dayChange": -0.41,
-      "monthChange": 2.95,
-      "dailyVol": 1.44,
+      "value": 59.9,
+      "dayChange": -0.65,
+      "monthChange": 2.71,
+      "dailyVol": 1.45,
       "category": "Emerging Markets",
       "vol_label": "Emerging (VWO)",
       "dalio": "Different macro cycle"
@@ -325,9 +325,9 @@
     {
       "symbol": "IEF",
       "name": "7-10Y Treasury",
-      "value": 94.52,
-      "dayChange": 0.21,
-      "monthChange": -0.77,
+      "value": 94.54,
+      "dayChange": 0.23,
+      "monthChange": -0.75,
       "dailyVol": 0.35,
       "category": "Intermediate Bonds",
       "vol_label": "7-10Y Treas (IEF)",
@@ -336,9 +336,9 @@
     {
       "symbol": "VNQ",
       "name": "Real Estate",
-      "value": 97.04,
-      "dayChange": 0.12,
-      "monthChange": 1.45,
+      "value": 96.55,
+      "dayChange": -0.38,
+      "monthChange": 0.94,
       "dailyVol": 0.93,
       "category": "Real Estate",
       "vol_label": "REITs (VNQ)",
@@ -358,9 +358,9 @@
     {
       "symbol": "TIP",
       "name": "TIPS Inflation-Protected",
-      "value": 111.14,
-      "dayChange": 0.23,
-      "monthChange": -0.53,
+      "value": 111.18,
+      "dayChange": 0.27,
+      "monthChange": -0.49,
       "dailyVol": 0.24,
       "category": "TIPS",
       "vol_label": "TIPS (TIP)",
@@ -369,9 +369,9 @@
     {
       "symbol": "EWJ",
       "name": "Japan",
-      "value": 92.87,
-      "dayChange": 0.63,
-      "monthChange": 6.06,
+      "value": 92.7,
+      "dayChange": 0.44,
+      "monthChange": 5.87,
       "dailyVol": 1.59,
       "category": "Japan",
       "vol_label": "Japan (EWJ)"
@@ -379,9 +379,9 @@
     {
       "symbol": "VGK",
       "name": "Europe",
-      "value": 89.25,
-      "dayChange": -0.08,
-      "monthChange": 3.59,
+      "value": 89.03,
+      "dayChange": -0.32,
+      "monthChange": 3.33,
       "dailyVol": 1.46,
       "category": "Europe",
       "vol_label": "Europe (VGK)"
@@ -389,9 +389,9 @@
     {
       "symbol": "INDA",
       "name": "India",
-      "value": 48.56,
-      "dayChange": 0.02,
-      "monthChange": -1.36,
+      "value": 48.69,
+      "dayChange": 0.29,
+      "monthChange": -1.1,
       "dailyVol": 1.31,
       "category": "India",
       "vol_label": "India (INDA)"
@@ -399,9 +399,9 @@
     {
       "symbol": "FXI",
       "name": "China Large Cap",
-      "value": 34.98,
-      "dayChange": -0.96,
-      "monthChange": -3.5,
+      "value": 34.99,
+      "dayChange": -0.93,
+      "monthChange": -3.48,
       "dailyVol": 1.29,
       "category": "China",
       "vol_label": "China (FXI)"
@@ -409,9 +409,9 @@
     {
       "symbol": "VYM",
       "name": "US Dividend Stocks",
-      "value": 158.66,
-      "dayChange": 0.18,
-      "monthChange": 2.83,
+      "value": 158.32,
+      "dayChange": -0.03,
+      "monthChange": 2.61,
       "dailyVol": 0.73,
       "category": "Dividend Value",
       "vol_label": "Dividend (VYM)"
@@ -419,9 +419,9 @@
     {
       "symbol": "AVUV",
       "name": "Small Cap Value",
-      "value": 121.06,
-      "dayChange": 0.03,
-      "monthChange": 1.36,
+      "value": 121.09,
+      "dayChange": 0.06,
+      "monthChange": 1.38,
       "dailyVol": 0.97,
       "category": "Small Cap Value",
       "vol_label": "SC Value (AVUV)"
