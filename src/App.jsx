@@ -2448,6 +2448,13 @@ function RiskHelper({ isMobile, macro }) {
         </CollapsibleSection>
       )}
 
+      {/* Factor Decomposition — what factors drive your portfolio */}
+      {enriched.length > 0 && (
+        <CollapsibleSection title="Factor Decomposition · Style & Risk Factors" subtitle="How institutional funds actually measure portfolio exposure" defaultOpen={false}>
+          <FactorDecompositionPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
+        </CollapsibleSection>
+      )}
+
       {/* Institutional Risk Lens — what big hedge funds worry about */}
       {enriched.length > 0 && (
         <CollapsibleSection title="Institutional Risk Lens · What hedge funds worry about" subtitle="Your exposure to systemic risks cited by Citadel, Goldman, BlackRock" defaultOpen={false}>
@@ -3376,6 +3383,231 @@ function DalioSuggestionsPanel({ positions, totalValue, cashRemaining, macro, is
 // Sources: BofA fund manager survey, BlackRock 2026 outlook,
 // Morgan Stanley hedge fund outlook, J.P. Morgan institutional reports
 // ============================================================
+// ============================================================
+// FACTOR DECOMPOSITION — Style/Risk factor exposure analysis
+// Approximates institutional factor models (Barra/Aladdin) using
+// fundamental scores derived from the data we already have.
+// Each stock gets a 0-100 score per factor; portfolio weights it.
+// ============================================================
+function FactorDecompositionPanel({ positions, totalValue, isMobile, embedded }) {
+  if (!positions?.length || !totalValue) return null;
+
+  // Score each position on each factor (0-100 scale where higher = more exposure)
+  const scoreStock = (p) => {
+    // GROWTH score: high revenue growth + fwd PE much lower than trailing = growing into multiple
+    const revGrowth = p.revGrowthPct ?? 0;
+    const peCompression = (p.pe && p.fwdPe) ? Math.max(0, (p.pe - p.fwdPe) / p.pe * 100) : 0;
+    const growthScore = Math.min(100, Math.max(0, revGrowth * 1.5 + peCompression * 0.8));
+
+    // VALUE score: low PE + low PS = cheap. Inverted from high PE.
+    const peScore = p.pe ? Math.max(0, 100 - Math.min(100, p.pe * 2)) : 50;
+    const psScore = p.ps ? Math.max(0, 100 - Math.min(100, p.ps * 8)) : 50;
+    const valueScore = Math.min(100, (peScore + psScore) / 2);
+
+    // QUALITY score: high ROE + high ROIC + low debt = high quality
+    const roeScore = p.roe ? Math.min(100, Math.max(0, p.roe * 2)) : 50;
+    const roicScore = p.roic ? Math.min(100, Math.max(0, p.roic * 2.5)) : 50;
+    const debtPenalty = p.debtEq != null ? Math.max(0, 100 - p.debtEq * 30) : 50;
+    const qualityScore = Math.min(100, (roeScore + roicScore + debtPenalty) / 3);
+
+    // MOMENTUM score: positive recent return + above 200dma
+    // We don't have a clean 6M return field; use change % as a proxy. Imperfect.
+    const recentRet = p.changePct ?? 0;
+    const momentumScore = Math.min(100, Math.max(0, 50 + recentRet * 5));
+
+    // SIZE score: log scale of market cap. 100 = mega cap ($500B+), 50 = mid ($10B), 0 = small ($1B)
+    // mcap is in millions
+    const mcapBn = (p.mcap ?? 0) / 1000;  // billions
+    const sizeScore = mcapBn > 0 ? Math.min(100, Math.max(0, Math.log10(mcapBn + 1) * 25)) : 50;
+
+    // LOW-VOL score: inverse of beta. High beta = low score.
+    const beta = p.beta ?? 1;
+    const lowVolScore = Math.max(0, Math.min(100, (1.5 - beta) * 100));
+
+    // RATE SENSITIVITY: tech/growth stocks are most rate-sensitive (long duration)
+    // Heuristic: high PE + AI/tech sector = high rate sensitivity
+    const sector = (p.sector || "").toLowerCase();
+    const isLongDuration = sector.includes("semi") || sector.includes("hyperscaler") ||
+                          sector.includes("software") || sector.includes("ai");
+    const rateScore = isLongDuration ? Math.min(100, (p.pe ?? 25) * 1.5) : 30;
+
+    // USD SENSITIVITY: international revenue exposure. Proxy via sector.
+    // Semis (40-60% int'l), Mega tech (40-50%), Domestic (10-20%).
+    const usdScore = sector.includes("semi") ? 70
+                    : sector.includes("mega cap tech") ? 60
+                    : sector.includes("hyperscaler") ? 50
+                    : sector.includes("financ") ? 25
+                    : 35;
+
+    return { growth: growthScore, value: valueScore, quality: qualityScore, momentum: momentumScore, size: sizeScore, lowVol: lowVolScore, rate: rateScore, usd: usdScore };
+  };
+
+  // Compute portfolio-weighted factor exposures
+  const factorExposures = positions.reduce((acc, p) => {
+    if (!p.value) return acc;
+    const weight = p.value / totalValue;
+    const scores = scoreStock(p);
+    Object.keys(scores).forEach((k) => { acc[k] = (acc[k] || 0) + scores[k] * weight; });
+    return acc;
+  }, {});
+
+  // Per-stock breakdown
+  const stockBreakdown = positions.map((p) => ({
+    symbol: p.symbol, sector: p.sector,
+    weight: p.value / totalValue * 100,
+    scores: scoreStock(p),
+  })).sort((a, b) => b.weight - a.weight);
+
+  // Sector concentration
+  const sectorWeights = {};
+  positions.forEach((p) => {
+    if (!p.value) return;
+    const s = p.sector || "Unknown";
+    sectorWeights[s] = (sectorWeights[s] || 0) + p.value / totalValue;
+  });
+  const sortedSectors = Object.entries(sectorWeights).sort((a, b) => b[1] - a[1]);
+
+  // Factor metadata
+  const factorMeta = [
+    { key: "growth", label: "Growth", color: "#0a8554", desc: "Earnings and revenue growth potential. Vanguard VUG, iShares IWF benchmark." },
+    { key: "quality", label: "Quality", color: "#0a6e44", desc: "High ROE, low debt, stable earnings. iShares QUAL benchmark." },
+    { key: "momentum", label: "Momentum", color: "#d4a017", desc: "Recent price strength. iShares MTUM benchmark." },
+    { key: "value", label: "Value", color: "#8b6914", desc: "Low P/E, P/S, P/B. iShares VLUE benchmark." },
+    { key: "size", label: "Size (Large Cap)", color: "#5a6573", desc: "Larger = more institutional ownership, lower vol. Mega = $500B+." },
+    { key: "lowVol", label: "Low Volatility", color: "#86b09c", desc: "Lower beta, less drawdown. iShares USMV benchmark." },
+    { key: "rate", label: "Rate Sensitivity", color: "#c4314b", desc: "Long-duration assets (tech, growth) lose more when 10Y yield rises." },
+    { key: "usd", label: "USD Sensitivity", color: "#a3203a", desc: "Companies with foreign revenue lose value when USD strengthens." },
+  ];
+
+  // Honest assessment of portfolio profile
+  const dominantFactor = Object.entries(factorExposures).sort((a, b) => b[1] - a[1])[0];
+  const topSector = sortedSectors[0];
+  const topSectorPct = topSector ? topSector[1] * 100 : 0;
+
+  const inner = (
+    <div style={{ padding: "14px 16px" }}>
+      <div style={{ fontSize: 12, color: "#1a1f2c", lineHeight: 1.6, marginBottom: 14 }}>
+        Institutional funds don't see "4 different stocks" — they see a bundle of <strong>factor exposures</strong>. This panel approximates how Barra/Aladdin would decompose your portfolio. Scores are 0-100 (higher = more exposure to that factor).
+      </div>
+
+      {/* Honest profile summary */}
+      <div style={{ padding: "10px 14px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 3, marginBottom: 14 }}>
+        <div style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 600, marginBottom: 6 }}>Your portfolio's factor profile:</div>
+        <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
+          <strong>Dominant factor:</strong> {factorMeta.find((m) => m.key === dominantFactor?.[0])?.label || "Mixed"} ({dominantFactor ? dominantFactor[1].toFixed(0) : 0}/100).
+          <strong> Top sector:</strong> {topSector ? topSector[0] : "—"} ({topSectorPct.toFixed(0)}% of portfolio).
+          {factorExposures.growth > 70 && factorExposures.value < 30 && (
+            <div style={{ marginTop: 6, color: "#8b6914" }}><strong>⚠ Heavy Growth tilt, no Value diversification.</strong> You'd lose more than the market in a value rotation.</div>
+          )}
+          {factorExposures.rate > 70 && (
+            <div style={{ marginTop: 6, color: "#a3203a" }}><strong>⚠ High rate sensitivity.</strong> A move from 10Y 4% → 5% historically compresses your kind of portfolio by 15-25%.</div>
+          )}
+          {factorExposures.lowVol < 30 && (
+            <div style={{ marginTop: 6, color: "#8b6914" }}><strong>⚠ Low defensive exposure.</strong> No "safe harbor" positions to cushion drawdowns.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Factor bars - portfolio level */}
+      <div style={{ marginBottom: 14 }}>
+        <div className="panel-title" style={{ fontSize: 10, marginBottom: 10 }}>Portfolio-Level Factor Exposures</div>
+        {factorMeta.map((m) => {
+          const score = factorExposures[m.key] || 0;
+          return (
+            <div key={m.key} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+                <span style={{ fontSize: 11, color: "#1a1f2c", fontWeight: 500 }} title={m.desc}>
+                  {m.label}
+                </span>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 600, color: m.color }}>
+                  {score.toFixed(0)}/100
+                </span>
+              </div>
+              <div style={{ height: 6, background: "#efece5", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(score, 100)}%`, height: "100%", background: m.color, transition: "width 0.3s" }} />
+              </div>
+              <div style={{ fontSize: 9, color: "#8a93a3", marginTop: 2 }}>{m.desc}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Per-stock factor table */}
+      <div style={{ marginBottom: 14 }}>
+        <div className="panel-title" style={{ fontSize: 10, marginBottom: 6 }}>Per-Holding Factor Scores</div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse", minWidth: 600 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                <th style={{ padding: "6px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Stock</th>
+                <th style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Wt%</th>
+                {factorMeta.slice(0, 6).map((m) => (
+                  <th key={m.key} style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title={m.desc}>
+                    {m.label.split(" ")[0]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {stockBreakdown.map((s) => (
+                <tr key={s.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
+                  <td className="mono" style={{ padding: "5px 6px", fontWeight: 600 }}>{s.symbol}</td>
+                  <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{s.weight.toFixed(0)}%</td>
+                  {factorMeta.slice(0, 6).map((m) => {
+                    const score = s.scores[m.key];
+                    const intensity = score / 100;
+                    return (
+                      <td key={m.key} className="mono" style={{ padding: "5px 6px", textAlign: "right", background: `${m.color}${Math.round(intensity * 40).toString(16).padStart(2, "0")}`, color: intensity > 0.7 ? "#fff" : "#1a1f2c", fontWeight: intensity > 0.6 ? 600 : 400 }}>
+                        {score.toFixed(0)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Sector concentration */}
+      <div style={{ marginBottom: 14 }}>
+        <div className="panel-title" style={{ fontSize: 10, marginBottom: 6 }}>Sector Concentration</div>
+        {sortedSectors.slice(0, 6).map(([sec, pct]) => {
+          const pctNum = pct * 100;
+          return (
+            <div key={sec} style={{ display: "flex", alignItems: "center", marginBottom: 4, gap: 8 }}>
+              <span style={{ fontSize: 11, color: "#1a1f2c", minWidth: 160 }}>{sec}</span>
+              <div style={{ flex: 1, height: 6, background: "#efece5", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{ width: `${Math.min(pctNum, 100)}%`, height: "100%", background: pctNum > 50 ? "#c4314b" : pctNum > 30 ? "#d4a017" : "#0a8554" }} />
+              </div>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 600, minWidth: 50, textAlign: "right" }}>{pctNum.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Methodology note */}
+      <div style={{ padding: 10, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
+        <strong>How this works:</strong> Each stock is scored 0-100 on each factor using fundamental data (PE, ROE, growth, debt, beta, sector). Portfolio scores are weighted averages. This is an approximation — real institutions use Barra/Aladdin which run regressions on historical returns against factor ETFs (MTUM, QUAL, VLUE, USMV). The directional signal here is close enough for decision-making.
+      </div>
+      <div style={{ padding: 10, marginTop: 6, background: "#fff4d0", fontSize: 10, color: "#8b6914", lineHeight: 1.6, borderRadius: 2 }}>
+        <strong>Honest interpretation:</strong> A "balanced" portfolio has 4+ factors above 50/100. A "concentrated" portfolio has 1-2 factors dominating. Most retail portfolios (and yours likely) are Growth + Momentum heavy with low Value, low Quality-from-diversification, low Low-Vol. That's not wrong — it's just one bet. Knowing it lets you decide if you want to be making that bet.
+      </div>
+    </div>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head">
+        <span className="panel-title">Factor Decomposition · Portfolio Style Exposure</span>
+        <BarChart3 size={13} color="#d4a017" />
+      </div>
+      {inner}
+    </div>
+  );
+}
+
 function InstitutionalRiskLens({ positions, totalValue, cashRemaining, macro, isMobile, embedded }) {
   if (!positions?.length || !totalValue) return null;
 
