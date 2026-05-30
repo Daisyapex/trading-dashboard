@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-05-29T21:25:00.410Z",
+  "fetchedAt": "2026-05-30T07:33:11.922Z",
   "items": [
     {
       "symbol": "^TNX",
@@ -23,9 +23,9 @@
       "symbol": "DX-Y.NYB",
       "name": "Dollar Index",
       "explain": "Strong dollar hurts US multinationals' overseas revenue.",
-      "value": 98.94,
-      "dayChange": -0.08,
-      "monthChange": 0.02,
+      "value": 98.91,
+      "dayChange": -0.11,
+      "monthChange": -0.01,
       "dailyVol": 0.37
     },
     {
