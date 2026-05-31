@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, ReferenceLine, Cell, ComposedChart,
 } from "recharts";
 import {
-  Activity, DollarSign, Users, MessageSquare, AlertCircle,
+  Activity, DollarSign, Users, MessageSquare, AlertCircle, AlertTriangle,
   Search, ChevronRight, Sigma, GitCompare, Briefcase, Loader2,
   Menu, X, TrendingUp, TrendingDown, BarChart3, Zap, Target,
 } from "lucide-react";
@@ -1109,7 +1109,7 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                   const curPct = Math.max(15, Math.min(85, pctOf(cur)));
 
                   return (
-                    <div style={{ position: "relative", padding: "60px 0 60px", marginTop: 6 }}>
+                    <div style={{ position: "relative", padding: "60px 0 90px", marginTop: 6 }}>
                       {/* AVERAGE callout — above the bar */}
                       <div style={{ position: "absolute", top: 0, left: `${avgPct}%`, transform: "translateX(-50%)", textAlign: "center" }}>
                         <div style={{ padding: "6px 10px", background: "#fff", border: "1.5px solid #7ba2cc", borderRadius: 4, minWidth: 70 }}>
@@ -1123,31 +1123,32 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                       {/* The horizontal bar */}
                       <div style={{ position: "absolute", top: 56, left: 0, right: 0, height: 4, background: "#d6d2c7", borderRadius: 2 }} />
 
-                      {/* Low number label - left end */}
-                      <div style={{ position: "absolute", top: 66, left: 0, fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>
-                        <span className="mono">${fmt(targetLow, 2)}</span>
-                      </div>
-
-                      {/* High number label - right end */}
-                      <div style={{ position: "absolute", top: 66, right: 0, textAlign: "right", fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>
-                        <div className="mono">${fmt(targetHigh, 2)}</div>
-                        <div style={{ fontSize: 9, color: "#5a6573", marginTop: 1 }}>High</div>
-                      </div>
-
                       {/* Average dot on the bar */}
                       <div style={{ position: "absolute", top: 53, left: `${avgPct}%`, transform: "translateX(-50%)", width: 10, height: 10, borderRadius: "50%", background: "#7ba2cc", border: "2px solid #fff", boxShadow: "0 0 0 1px #7ba2cc" }} />
 
                       {/* Current dot on the bar */}
                       <div style={{ position: "absolute", top: 53, left: `${curPct}%`, transform: "translateX(-50%)", width: 10, height: 10, borderRadius: "50%", background: "#fff", border: "2px solid #5a6573" }} />
 
-                      {/* CURRENT callout — below the bar */}
-                      <div style={{ position: "absolute", bottom: 0, left: `${curPct}%`, transform: "translateX(-50%)", textAlign: "center" }}>
+                      {/* CURRENT callout — directly below the bar */}
+                      <div style={{ position: "absolute", top: 66, left: `${curPct}%`, transform: "translateX(-50%)", textAlign: "center" }}>
                         {/* Pointer arrow up */}
                         <div style={{ width: 0, height: 0, borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderBottom: "6px solid #5a6573", margin: "0 auto", marginBottom: -1 }} />
                         <div style={{ padding: "6px 10px", background: "#fff", border: "1.5px solid #5a6573", borderRadius: 4, minWidth: 70 }}>
                           <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: "#1a1f2c", lineHeight: 1 }}>${fmt(cur, 2)}</div>
                           <div style={{ fontSize: 9, color: "#5a6573", marginTop: 2, letterSpacing: "0.04em" }}>Current</div>
                         </div>
+                      </div>
+
+                      {/* Low number label - bottom left, below the Current callout */}
+                      <div style={{ position: "absolute", bottom: 0, left: 0, fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>
+                        <div className="mono">${fmt(targetLow, 2)}</div>
+                        <div style={{ fontSize: 9, color: "#5a6573", marginTop: 1 }}>Low</div>
+                      </div>
+
+                      {/* High number label - bottom right, below the Current callout */}
+                      <div style={{ position: "absolute", bottom: 0, right: 0, textAlign: "right", fontSize: 11, color: "#1a1f2c", fontWeight: 700 }}>
+                        <div className="mono">${fmt(targetHigh, 2)}</div>
+                        <div style={{ fontSize: 9, color: "#5a6573", marginTop: 1 }}>High</div>
                       </div>
                     </div>
                   );
