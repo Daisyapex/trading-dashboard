@@ -1,5 +1,33 @@
 // scripts/fetch.mjs — direct HTTP, manual Yahoo crumb auth (no external library)
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+
+// ====================================================================
+// EPS history accumulation — Yahoo's earningsHistory endpoint only returns
+// 4 most recent quarters. By reading the previously-saved JSON for each
+// ticker before re-writing it, we accumulate quarters over time and build
+// a deeper history naturally (cap at 20 quarters = 5 years).
+// ====================================================================
+function mergeEpsHistory(existing, fresh) {
+  if (!Array.isArray(existing) || !existing.length) return fresh || [];
+  if (!Array.isArray(fresh) || !fresh.length) return existing;
+  const byKey = new Map();
+  const keyFor = (row) => row.quarter || `pos:${row.actual}|${row.estimate}|${row.surprise}`;
+  for (const row of existing) {
+    if (row.actual == null) continue;
+    byKey.set(keyFor(row), row);
+  }
+  for (const row of fresh) {
+    if (row.actual == null) continue;
+    byKey.set(keyFor(row), row); // new data wins for revisions
+  }
+  return Array.from(byKey.values())
+    .sort((a, b) => {
+      const da = a.quarter ? new Date(a.quarter).getTime() : 0;
+      const db = b.quarter ? new Date(b.quarter).getTime() : 0;
+      return da - db;
+    })
+    .slice(-20);
+}
 
 const FINNHUB_KEY = process.env.FINNHUB_KEY;
 if (!FINNHUB_KEY) {
@@ -430,10 +458,17 @@ async function fetchTicker(t) {
   const epsGrowthNext = v(nextYrTrend, "growth");
   const fiveYrGrowth = v(fiveYrTrend, "growth");
   const earningsHistoryArr = summary?.earningsHistory?.history || [];
-  const epsHistory = earningsHistoryArr.map((e) => ({
-    actual: v(e, "epsActual"), estimate: v(e, "epsEstimate"),
-    surprise: v(e, "epsDifference"), surprisePct: v(e, "surprisePercent"),
-  })).filter((e) => e.actual != null);
+  const epsHistory = earningsHistoryArr.map((e) => {
+    // Yahoo's `quarter` field has shape { raw: epoch_seconds, fmt: "yyyy-mm-dd" }
+    // We store as ISO date string for stable sorting and deduplication across runs.
+    const qRaw = e?.quarter?.raw;
+    const quarter = qRaw ? new Date(qRaw * 1000).toISOString().slice(0, 10) : (e?.quarter?.fmt || null);
+    return {
+      quarter,
+      actual: v(e, "epsActual"), estimate: v(e, "epsEstimate"),
+      surprise: v(e, "epsDifference"), surprisePct: v(e, "surprisePercent"),
+    };
+  }).filter((e) => e.actual != null);
   const epsValues = epsHistory.map((e) => e.actual).filter((x) => x != null);
   const epsMean = epsValues.length ? epsValues.reduce((s, x) => s + x, 0) / epsValues.length : null;
   const epsStdev = epsValues.length > 1 ? Math.sqrt(epsValues.reduce((s, x) => s + (x - epsMean) ** 2, 0) / epsValues.length) : null;
@@ -1088,7 +1123,29 @@ async function main() {
       const data = await fetchTicker(t);
       // Compute correlations vs macro tickers using candles1Y (last 30 trading days)
       data.correlations = computeCorrelations(data.candles, macroCandles);
-      writeFileSync(`public/data/${t.symbol}.json`, JSON.stringify(data));
+
+      // Accumulate EPS history across fetch runs. Yahoo only gives us 4 most recent
+      // quarters per call, so we read what we previously saved and merge in the new
+      // ones. After 2+ years of running, we naturally build 8-20 quarters of history.
+      const tickerPath = `public/data/${t.symbol}.json`;
+      try {
+        if (existsSync(tickerPath)) {
+          const oldData = JSON.parse(readFileSync(tickerPath, "utf8"));
+          const oldEps = oldData?.lynch?.epsHistory;
+          if (Array.isArray(oldEps) && oldEps.length && data.lynch) {
+            const beforeCount = data.lynch.epsHistory?.length || 0;
+            data.lynch.epsHistory = mergeEpsHistory(oldEps, data.lynch.epsHistory);
+            const afterCount = data.lynch.epsHistory.length;
+            if (afterCount > beforeCount) {
+              console.log(`    (merged EPS history: ${beforeCount} fresh + ${oldEps.length} stored → ${afterCount} unique quarters)`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`    (eps merge skipped for ${t.symbol}: ${e.message})`);
+      }
+
+      writeFileSync(tickerPath, JSON.stringify(data));
       out.tickers.push({
         symbol: t.symbol, name: t.name, sector: t.sector,
         holding: !!t.holding,
