@@ -448,6 +448,33 @@ async function fetchTicker(t) {
   const fd = summary?.financialData || {};
   const pr = summary?.price || {};
 
+  // ====== Finnhub historical valuation series (free, ALREADY in the response we fetch) ======
+  // The /stock/metric endpoint returns `series.quarterly` with historical PE/PS/PB time series.
+  // Free tier may sometimes return empty arrays — code below handles that gracefully.
+  const seriesQ = metrics?.series?.quarterly || {};
+  // Try multiple possible key names Finnhub has used for TTM P/E over the years
+  const pickFirstSeries = (obj, keys) => {
+    for (const k of keys) {
+      const arr = obj?.[k];
+      if (Array.isArray(arr) && arr.length) return { key: k, arr };
+    }
+    return null;
+  };
+  const peSeriesPick = pickFirstSeries(seriesQ, ["pe", "peTTM", "peBasicExclExtraTTM", "peInclExtraTTM", "peNormalizedAnnual"]);
+  const psSeriesPick = pickFirstSeries(seriesQ, ["psTTM", "ps"]);
+  const pbSeriesPick = pickFirstSeries(seriesQ, ["pb", "pbAnnual", "pbQuarterly"]);
+
+  const normalizeSeries = (arr) => arr
+    .filter((e) => e?.period && typeof e?.v === "number" && isFinite(e.v) && e.v > 0)
+    .map((e) => ({ period: e.period, v: +e.v.toFixed(2) }))
+    .sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
+
+  const valuationSeries = {
+    pe: peSeriesPick ? { key: peSeriesPick.key, data: normalizeSeries(peSeriesPick.arr) } : { key: null, data: [] },
+    ps: psSeriesPick ? { key: psSeriesPick.key, data: normalizeSeries(psSeriesPick.arr) } : { key: null, data: [] },
+    pb: pbSeriesPick ? { key: pbSeriesPick.key, data: normalizeSeries(pbSeriesPick.arr) } : { key: null, data: [] },
+  };
+
   const latestRec = recs?.[0] || {};
   const totalRecs = (latestRec.strongBuy || 0) + (latestRec.buy || 0) + (latestRec.hold || 0) + (latestRec.sell || 0) + (latestRec.strongSell || 0);
   const buys = (latestRec.strongBuy || 0) + (latestRec.buy || 0);
@@ -785,6 +812,7 @@ async function fetchTicker(t) {
       high: quote?.h ?? null, low: quote?.l ?? null, open: quote?.o ?? null, prevClose: quote?.pc ?? null,
     },
     candles: candles1Y || [], candles5Y: candles5Y || [],
+    valuationSeries,  // Finnhub historical P/E, P/S, P/B quarterly series (may be empty on free tier)
     fundamentals: {
       pe: v(sd, "trailingPE") ?? m.peBasicExclExtraTTM ?? m.peTTM ?? null,
       fwdPe: v(ks, "forwardPE") ?? v(sd, "forwardPE") ?? null,
@@ -1194,7 +1222,9 @@ async function main() {
       const pcr = data.options?.pcrVolume;
       const fwdStr = (typeof fwd === "number" && isFinite(fwd)) ? fwd.toFixed(1) : "—";
       const pcrStr = (typeof pcr === "number" && isFinite(pcr)) ? pcr.toFixed(2) : "—";
-      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwdStr}  PCR=${pcrStr}  ${t.holding ? "★" : ""}`);
+      const peSeriesCount = data.valuationSeries?.pe?.data?.length || 0;
+      const peSeriesNote = peSeriesCount > 0 ? `peHist=${peSeriesCount}q` : "peHist=0";
+      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwdStr}  PCR=${pcrStr}  ${peSeriesNote}  ${t.holding ? "★" : ""}`);
     } catch (e) {
       console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
     }
