@@ -11,14 +11,17 @@ function mergeEpsHistory(existing, fresh) {
   if (!Array.isArray(existing) || !existing.length) return fresh || [];
   if (!Array.isArray(fresh) || !fresh.length) return existing;
   const byKey = new Map();
-  const keyFor = (row) => row.quarter || `pos:${row.actual}|${row.estimate}|${row.surprise}`;
+  // Dedup by the actual EPS values (which don't change for a given quarter, regardless
+  // of whether the row has a `quarter` date field — important for cleanly transitioning
+  // from old format (no quarter field) to new format (with quarter field).
+  const keyFor = (row) => `${row.actual}|${row.estimate}|${row.surprise}`;
   for (const row of existing) {
     if (row.actual == null) continue;
     byKey.set(keyFor(row), row);
   }
   for (const row of fresh) {
     if (row.actual == null) continue;
-    byKey.set(keyFor(row), row); // new data wins for revisions
+    byKey.set(keyFor(row), row); // new data wins — it has the quarter date the old row may lack
   }
   return Array.from(byKey.values())
     .sort((a, b) => {
