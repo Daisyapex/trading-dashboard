@@ -1505,37 +1505,22 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                 Peer averages: P/E {peerAvg("pe") != null ? `${fmt(peerAvg("pe"), 1)}×` : "—"} · Fwd P/E {peerAvg("fwdPe") != null ? `${fmt(peerAvg("fwdPe"), 1)}×` : "—"} · P/S {peerAvg("ps") != null ? `${fmt(peerAvg("ps"), 1)}×` : "—"} · EV/EBITDA {peerAvg("evEbitda") != null ? `${fmt(peerAvg("evEbitda"), 1)}×` : "—"}
               </div>
             )}
-            {/* P/E History Context for the current ticker — adaptive: shows full chart when 6+ quarters of EPS, snapshot when 4-5 */}
+            {/* P/E History Context — uses data.peSnapshots (daily TTM-EPS snapshots that match
+                the methodology of the displayed P/E) when available. Falls back to the per-quarter
+                EPS accumulator if no snapshots have been collected yet. */}
             {(() => {
               const candles = data?.candles || [];
-              const epsQs = ly?.epsHistory || ly?.epsQuarters || [];
               const currentPe = f?.pe;
-              const fwdPe = f?.fwdPe;
+              if (currentPe == null) return null;
 
-              // Bare minimum: need a current P/E and at least 4 quarters of actuals
-              if (candles.length < 100 || currentPe == null) return null;
-              const epsActuals = epsQs.map((q) => q.actual ?? q.eps ?? null).filter((v) => v != null && isFinite(v));
-              if (epsActuals.length < 4) return null;
+              // ===== Primary path: use peSnapshots if we have enough =====
+              // Each snapshot: { date, ttmEps, price, pe }. Same formula as displayed P/E.
+              const snapshots = Array.isArray(data?.peSnapshots) ? data.peSnapshots : [];
+              const validSnapshots = snapshots.filter((s) => s?.pe != null && isFinite(s.pe) && s.pe > 0);
 
-              // Try to build a TTM P/E timeseries. Each quarter ≈ 63 trading days.
-              // With N quarters we can compute (N - 3) TTM windows. So:
-              //   4 quarters → 1 point, 5 → 2, 6 → 3, 8 → 5, etc.
-              const peTimeseries = [];
-              const N = Math.min(epsActuals.length, 8);  // up to 2 years
-              for (let qIdx = 3; qIdx < N; qIdx++) {
-                const ttm = epsActuals.slice(qIdx - 3, qIdx + 1).reduce((s, v) => s + v, 0);
-                if (ttm <= 0) continue;
-                const daysFromEnd = (N - 1 - qIdx) * 63;
-                const candleIdx = candles.length - 1 - daysFromEnd;
-                if (candleIdx < 0 || candleIdx >= candles.length) continue;
-                const price = candles[candleIdx]?.c ?? candles[candleIdx]?.close;
-                if (!price) continue;
-                peTimeseries.push({ idx: candleIdx, pe: price / ttm });
-              }
-
-              // Branch A: enough history for a percentile chart (3+ points = 6+ quarters)
-              if (peTimeseries.length >= 3) {
-                const peValues = peTimeseries.map((p) => p.pe);
+              if (validSnapshots.length >= 10) {
+                // Enough snapshots to plot a meaningful chart. Use snapshot P/E values directly.
+                const peValues = validSnapshots.map((s) => s.pe);
                 const minPe = Math.min(...peValues);
                 const maxPe = Math.max(...peValues);
                 const avgPe = peValues.reduce((s, v) => s + v, 0) / peValues.length;
@@ -1548,6 +1533,10 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                 const color = percentile >= 75 ? "#a3203a"
                             : percentile >= 50 ? "#d4a017"
                             : "#0a6e44";
+                // Days of history we have
+                const firstDate = validSnapshots[0]?.date;
+                const lastDate = validSnapshots[validSnapshots.length - 1]?.date;
+                const daysSpan = (firstDate && lastDate) ? Math.round((new Date(lastDate).getTime() - new Date(firstDate).getTime()) / (1000 * 60 * 60 * 24)) : null;
 
                 return (
                   <div style={{ marginTop: 10, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 2 }}>
@@ -1556,7 +1545,7 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                     </div>
                     <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
                       Current P/E: <span className="mono" style={{ fontWeight: 600, color: "#1a1f2c" }}>{fmt(currentPe, 1)}×</span>
-                      {" · "}Range ({peTimeseries.length} TTM points): <span className="mono">{fmt(minPe, 1)}× – {fmt(maxPe, 1)}×</span>
+                      {" · "}Range ({validSnapshots.length} daily snapshots{daysSpan ? `, ${daysSpan}d` : ""}): <span className="mono">{fmt(minPe, 1)}× – {fmt(maxPe, 1)}×</span>
                       {" · "}Avg: <span className="mono">{fmt(avgPe, 1)}×</span>
                     </div>
                     <div style={{ marginTop: 6 }}>
@@ -1573,13 +1562,72 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                       {percentileLabel} ({percentile.toFixed(0)}th percentile)
                     </div>
                     <div style={{ marginTop: 4, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-                      Computed from {peTimeseries.length} TTM PE points (EPS × historical prices). High percentile = historically expensive; low = historically cheap.
+                      Built from {validSnapshots.length} daily snapshots stored over time. Each snapshot uses the same TTM-EPS methodology as the current displayed P/E, so numbers match what you'd see on Yahoo for any given day. High percentile = historically expensive; low = historically cheap.
                     </div>
                   </div>
                 );
               }
 
-              // Branch B: limited data (1-2 TTM points = 4-5 quarters of actuals) — snapshot view
+              // ===== Fallback path: per-quarter EPS accumulator (for early days before snapshots accumulate) =====
+              const epsQs = ly?.epsHistory || ly?.epsQuarters || [];
+              if (candles.length < 100) return null;
+              const epsActuals = epsQs.map((q) => q.actual ?? q.eps ?? null).filter((v) => v != null && isFinite(v));
+              if (epsActuals.length < 4) return null;
+
+              const peTimeseries = [];
+              const N = Math.min(epsActuals.length, 8);
+              for (let qIdx = 3; qIdx < N; qIdx++) {
+                const ttm = epsActuals.slice(qIdx - 3, qIdx + 1).reduce((s, v) => s + v, 0);
+                if (ttm <= 0) continue;
+                const daysFromEnd = (N - 1 - qIdx) * 63;
+                const candleIdx = candles.length - 1 - daysFromEnd;
+                if (candleIdx < 0 || candleIdx >= candles.length) continue;
+                const price = candles[candleIdx]?.c ?? candles[candleIdx]?.close;
+                if (!price) continue;
+                peTimeseries.push({ idx: candleIdx, pe: price / ttm });
+              }
+
+              // Note: this fallback uses sum-of-quarterly-actuals (different EPS definition than the
+              // current displayed P/E), so values may be ~10% off. The note below makes this clear.
+              if (peTimeseries.length >= 3) {
+                const peValues = peTimeseries.map((p) => p.pe);
+                const minPe = Math.min(...peValues);
+                const maxPe = Math.max(...peValues);
+                const avgPe = peValues.reduce((s, v) => s + v, 0) / peValues.length;
+                const range = maxPe - minPe || 1;
+                const percentile = Math.min(100, Math.max(0, ((currentPe - minPe) / range) * 100));
+                const color = percentile >= 75 ? "#a3203a"
+                            : percentile >= 50 ? "#d4a017"
+                            : "#0a6e44";
+                return (
+                  <div style={{ marginTop: 10, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 2 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#1a1f2c", marginBottom: 4 }}>
+                      {symbol} · P/E History Context <span style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>(approximate — quarterly EPS sums)</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
+                      Current P/E: <span className="mono" style={{ fontWeight: 600, color: "#1a1f2c" }}>{fmt(currentPe, 1)}×</span>
+                      {" · "}Approx range ({peTimeseries.length} TTM points): <span className="mono">{fmt(minPe, 1)}× – {fmt(maxPe, 1)}×</span>
+                      {" · "}Avg: <span className="mono">{fmt(avgPe, 1)}×</span>
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      <div style={{ position: "relative", height: 4, background: "#efece5", borderRadius: 2, marginBottom: 4 }}>
+                        <div style={{ position: "absolute", left: `${percentile}%`, top: -3, width: 2, height: 10, background: color }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#8a93a3" }}>
+                        <span>Cheap ({fmt(minPe, 0)}×)</span>
+                        <span>Avg ({fmt(avgPe, 0)}×)</span>
+                        <span>Rich ({fmt(maxPe, 0)}×)</span>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+                      Built from quarterly EPS sums (different EPS definition than the displayed P/E — may be ~10% off in absolute terms). Will be replaced by the more accurate daily-snapshot chart once 10+ snapshots accumulate (a few days from now).
+                    </div>
+                  </div>
+                );
+              }
+
+              // ===== Final fallback: snapshot view with whatever quarters we have =====
+              const fwdPe = f?.fwdPe;
               const fwdDelta = (fwdPe != null && currentPe > 0) ? ((fwdPe - currentPe) / currentPe) * 100 : null;
               const fwdColor = fwdDelta == null ? "#1a1f2c"
                              : fwdDelta < -15 ? "#0a6e44"
@@ -1591,6 +1639,7 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                             : fwdDelta < -5 ? "earnings growing → modestly cheaper looking forward"
                             : fwdDelta > 10 ? "earnings shrinking → forward looks more expensive"
                             : "earnings roughly flat";
+              const snapshotCount = validSnapshots.length;
 
               return (
                 <div style={{ marginTop: 10, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 2 }}>
@@ -1607,7 +1656,10 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                     )}
                   </div>
                   <div style={{ marginTop: 6, fontSize: 10, color: "#8a93a3", lineHeight: 1.5 }}>
-                    Only {epsActuals.length} quarters of EPS actuals available — need 6+ to build a historical percentile chart. Each new earnings report adds a data point. See the <strong>Valuation Risk</strong> panel below for sector-aware bear/severe scenarios in the meantime.
+                    {snapshotCount > 0
+                      ? `Accumulating daily P/E snapshots — ${snapshotCount} so far. The historical percentile chart will activate once 10+ snapshots are collected (a few days from now).`
+                      : "Daily P/E snapshots will start accumulating on the next fetch run. After ~10 days the historical percentile chart will activate."}
+                    {" "}See <strong>Valuation Risk</strong> below for sector-aware bear/severe scenarios in the meantime.
                   </div>
                 </div>
               );
