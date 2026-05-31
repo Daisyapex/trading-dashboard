@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-30T07:33:11.922Z",
+  "generatedAt": "2026-05-31T20:00:33.554Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -9,8 +9,8 @@
       "price": 211.14,
       "change": -3.11,
       "changePct": -1.4516,
-      "stance": "Negative",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "MSFT",
@@ -185,8 +185,8 @@
       "price": 318.18,
       "change": 0.18,
       "changePct": 0.0566,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "KLAC",
@@ -361,8 +361,8 @@
       "price": 160.23,
       "change": -0.05,
       "changePct": -0.0312,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Negative",
+      "stanceColor": "negative"
     },
     {
       "symbol": "CEG",
