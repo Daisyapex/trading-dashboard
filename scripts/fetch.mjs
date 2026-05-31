@@ -463,16 +463,18 @@ async function fetchTicker(t) {
   const peSeriesPick = pickFirstSeries(seriesQ, ["pe", "peTTM", "peBasicExclExtraTTM", "peInclExtraTTM", "peNormalizedAnnual"]);
   const psSeriesPick = pickFirstSeries(seriesQ, ["psTTM", "ps"]);
   const pbSeriesPick = pickFirstSeries(seriesQ, ["pb", "pbAnnual", "pbQuarterly"]);
+  const epsSeriesPick = pickFirstSeries(seriesQ, ["epsBasicExclExtraItemsTTM", "epsBasicExclExtraTTM", "epsTTM", "epsInclExtraTTM", "epsNormalizedAnnual"]);
 
   const normalizeSeries = (arr) => arr
-    .filter((e) => e?.period && typeof e?.v === "number" && isFinite(e.v) && e.v > 0)
+    .filter((e) => e?.period && typeof e?.v === "number" && isFinite(e.v))
     .map((e) => ({ period: e.period, v: +e.v.toFixed(2) }))
     .sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
 
   const valuationSeries = {
-    pe: peSeriesPick ? { key: peSeriesPick.key, data: normalizeSeries(peSeriesPick.arr) } : { key: null, data: [] },
-    ps: psSeriesPick ? { key: psSeriesPick.key, data: normalizeSeries(psSeriesPick.arr) } : { key: null, data: [] },
-    pb: pbSeriesPick ? { key: pbSeriesPick.key, data: normalizeSeries(pbSeriesPick.arr) } : { key: null, data: [] },
+    pe: peSeriesPick ? { key: peSeriesPick.key, data: normalizeSeries(peSeriesPick.arr).filter((e) => e.v > 0) } : { key: null, data: [] },
+    ps: psSeriesPick ? { key: psSeriesPick.key, data: normalizeSeries(psSeriesPick.arr).filter((e) => e.v > 0) } : { key: null, data: [] },
+    pb: pbSeriesPick ? { key: pbSeriesPick.key, data: normalizeSeries(pbSeriesPick.arr).filter((e) => e.v > 0) } : { key: null, data: [] },
+    eps: epsSeriesPick ? { key: epsSeriesPick.key, data: normalizeSeries(epsSeriesPick.arr) } : { key: null, data: [] },
   };
 
   const latestRec = recs?.[0] || {};
@@ -1223,8 +1225,9 @@ async function main() {
       const fwdStr = (typeof fwd === "number" && isFinite(fwd)) ? fwd.toFixed(1) : "—";
       const pcrStr = (typeof pcr === "number" && isFinite(pcr)) ? pcr.toFixed(2) : "—";
       const peSeriesCount = data.valuationSeries?.pe?.data?.length || 0;
-      const peSeriesNote = peSeriesCount > 0 ? `peHist=${peSeriesCount}q` : "peHist=0";
-      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwdStr}  PCR=${pcrStr}  ${peSeriesNote}  ${t.holding ? "★" : ""}`);
+      const epsSeriesCount = data.valuationSeries?.eps?.data?.length || 0;
+      const histNote = `peHist=${peSeriesCount}q epsHist=${epsSeriesCount}q`;
+      console.log(`  ✓ ${t.symbol}  $${data.quote.current ?? "?"}  fwdPE=${fwdStr}  PCR=${pcrStr}  ${histNote}  ${t.holding ? "★" : ""}`);
     } catch (e) {
       console.error(`  ✗ ${t.symbol} failed: ${e.message}`);
     }
