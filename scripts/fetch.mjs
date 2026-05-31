@@ -29,6 +29,29 @@ function mergeEpsHistory(existing, fresh) {
     .slice(-20);
 }
 
+// ====================================================================
+// P/E snapshot accumulator — saves (date, ttmEps, price) at each fetch run
+// so we can build a high-resolution historical P/E chart that uses the SAME
+// methodology as the current displayed P/E (price ÷ Yahoo's trailingEps).
+// Dedup by date (later writes win — so the post-close run is what's stored).
+// Cap at 1500 snapshots (~4 years of daily data).
+// ====================================================================
+function appendPeSnapshot(existingSnapshots, newSnapshot) {
+  if (!newSnapshot || newSnapshot.ttmEps == null || newSnapshot.price == null || !newSnapshot.date) {
+    return Array.isArray(existingSnapshots) ? existingSnapshots : [];
+  }
+  const byDate = new Map();
+  if (Array.isArray(existingSnapshots)) {
+    for (const s of existingSnapshots) {
+      if (s?.date && s.ttmEps != null && s.price != null) byDate.set(s.date, s);
+    }
+  }
+  byDate.set(newSnapshot.date, newSnapshot); // same-day overwrite (post-close run wins)
+  return Array.from(byDate.values())
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(-1500);
+}
+
 const FINNHUB_KEY = process.env.FINNHUB_KEY;
 if (!FINNHUB_KEY) {
   console.error("FATAL: FINNHUB_KEY environment variable is not set.");
@@ -1127,10 +1150,18 @@ async function main() {
       // Accumulate EPS history across fetch runs. Yahoo only gives us 4 most recent
       // quarters per call, so we read what we previously saved and merge in the new
       // ones. After 2+ years of running, we naturally build 8-20 quarters of history.
+      // We ALSO append a (date, ttmEps, price) snapshot for the historical P/E chart.
       const tickerPath = `public/data/${t.symbol}.json`;
+      const todaySnapshot = {
+        date: new Date().toISOString().slice(0, 10),
+        ttmEps: data.fundamentals?.eps ?? null,         // Yahoo's trailingEps — matches the displayed P/E
+        price: data.quote?.current ?? null,
+        pe: (data.fundamentals?.eps && data.quote?.current) ? +(data.quote.current / data.fundamentals.eps).toFixed(2) : null,
+      };
       try {
         if (existsSync(tickerPath)) {
           const oldData = JSON.parse(readFileSync(tickerPath, "utf8"));
+          // EPS history merge
           const oldEps = oldData?.lynch?.epsHistory;
           if (Array.isArray(oldEps) && oldEps.length && data.lynch) {
             const beforeCount = data.lynch.epsHistory?.length || 0;
@@ -1140,9 +1171,15 @@ async function main() {
               console.log(`    (merged EPS history: ${beforeCount} fresh + ${oldEps.length} stored → ${afterCount} unique quarters)`);
             }
           }
+          // P/E snapshot append
+          data.peSnapshots = appendPeSnapshot(oldData.peSnapshots, todaySnapshot);
+        } else {
+          // First time we see this ticker — start the snapshot history with today's point
+          data.peSnapshots = appendPeSnapshot([], todaySnapshot);
         }
       } catch (e) {
-        console.warn(`    (eps merge skipped for ${t.symbol}: ${e.message})`);
+        console.warn(`    (eps merge / pe snapshot skipped for ${t.symbol}: ${e.message})`);
+        data.peSnapshots = data.peSnapshots || appendPeSnapshot([], todaySnapshot);
       }
 
       writeFileSync(tickerPath, JSON.stringify(data));
