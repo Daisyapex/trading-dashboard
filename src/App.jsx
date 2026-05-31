@@ -40,6 +40,142 @@ function useIsMobile() {
 }
 
 // ============================================================
+// PE HISTORY CHART
+// Single-pane P/E ratio line chart with zoom controls and percentile bar.
+// Renders only when Finnhub historical PE series is available.
+// ============================================================
+function PEHistoryMultiPane({ symbol, currentPe, valuationSeries, fmt }) {
+  const [zoom, setZoom] = useState("5Y"); // "1Y" | "2Y" | "5Y" | "All"
+
+  // Cutoff date for zoom level
+  const now = Date.now();
+  const cutoff = useMemo(() => {
+    if (zoom === "All") return 0;
+    const y = zoom === "1Y" ? 1 : zoom === "2Y" ? 2 : 5;
+    return now - y * 365 * 24 * 60 * 60 * 1000;
+  }, [zoom, now]);
+
+  // PE data: quarterly line from Finnhub series + current point appended
+  const peData = useMemo(() => {
+    const arr = valuationSeries?.pe?.data || [];
+    const points = arr
+      .map((e) => ({ t: new Date(e.period).getTime(), pe: e.v }))
+      .filter((e) => e.t >= cutoff);
+    if (currentPe != null && isFinite(currentPe)) {
+      points.push({ t: now, pe: currentPe });
+    }
+    return points;
+  }, [valuationSeries, cutoff, currentPe, now]);
+
+  // X domain — fit the visible data range
+  const xDomain = useMemo(() => {
+    if (peData.length === 0) return [cutoff, now];
+    const times = peData.map((d) => d.t);
+    return [Math.min(...times), Math.max(...times, now)];
+  }, [peData, cutoff, now]);
+
+  const formatXTick = (t) => {
+    if (!t) return "";
+    const d = new Date(t);
+    return `${d.getFullYear()}`;
+  };
+  const formatTooltipLabel = (t) => {
+    if (!t) return "";
+    const d = new Date(t);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  // Compute PE percentile/range for the summary line
+  const peValues = peData.map((p) => p.pe);
+  const minPe = peValues.length ? Math.min(...peValues) : null;
+  const maxPe = peValues.length ? Math.max(...peValues) : null;
+  const avgPe = peValues.length ? peValues.reduce((s, v) => s + v, 0) / peValues.length : null;
+  const percentile = (minPe != null && maxPe != null && maxPe > minPe && currentPe != null)
+    ? Math.min(100, Math.max(0, ((currentPe - minPe) / (maxPe - minPe)) * 100))
+    : null;
+  const color = percentile == null ? "#5a6573"
+              : percentile >= 75 ? "#a3203a"
+              : percentile >= 50 ? "#d4a017"
+              : "#0a6e44";
+  const percentileLabel = percentile == null ? null
+                        : percentile >= 75 ? "Top quartile (expensive vs own history)"
+                        : percentile >= 50 ? "Above own historical average"
+                        : percentile >= 25 ? "Below own historical average"
+                        : "Bottom quartile (cheap vs own history)";
+
+  // Count of historical points (excluding current "now" point)
+  const histCount = (valuationSeries?.pe?.data || []).filter((e) => new Date(e.period).getTime() >= cutoff).length;
+
+  return (
+    <div style={{ marginTop: 10, padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c" }}>{symbol} · P/E Ratio History</span>
+        <div style={{ display: "flex", gap: 4 }}>
+          {["1Y", "2Y", "5Y", "All"].map((z) => (
+            <button
+              key={z}
+              onClick={() => setZoom(z)}
+              style={{
+                fontSize: 10, padding: "3px 8px", cursor: "pointer",
+                border: "1px solid " + (zoom === z ? "#7ba2cc" : "#e6e3db"),
+                background: zoom === z ? "#7ba2cc" : "#fff",
+                color: zoom === z ? "#fff" : "#5a6573",
+                borderRadius: 2, fontWeight: 600,
+              }}
+            >{z}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* P/E Ratio chart */}
+      <div style={{ width: "100%", height: 180 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={peData} margin={{ top: 6, right: 16, left: 0, bottom: 4 }}>
+            <XAxis type="number" dataKey="t" domain={xDomain} tickFormatter={formatXTick} tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" />
+            <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={36} />
+            {avgPe != null && (
+              <ReferenceLine y={avgPe} stroke="#8a93a3" strokeDasharray="3 3" strokeWidth={0.8} label={{ value: `avg ${avgPe.toFixed(1)}×`, fontSize: 9, fill: "#5a6573", position: "insideTopRight" }} />
+            )}
+            <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelFormatter={formatTooltipLabel} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} formatter={(value) => [`${Number(value).toFixed(1)}×`, "P/E"]} />
+            <Line type="monotone" dataKey="pe" stroke="#7ba2cc" strokeWidth={1.8} dot={{ fill: "#7ba2cc", r: 2.5 }} activeDot={{ r: 4 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Summary line */}
+      {minPe != null && (
+        <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
+          Current: <span className="mono" style={{ fontWeight: 600, color: "#1a1f2c" }}>{fmt(currentPe, 1)}×</span>
+          {" · "}Range ({zoom}): <span className="mono">{fmt(minPe, 1)}× – {fmt(maxPe, 1)}×</span>
+          {" · "}Avg: <span className="mono">{fmt(avgPe, 1)}×</span>
+          {" · "}<span style={{ fontSize: 10, color: "#8a93a3" }}>{histCount} quarters · Finnhub</span>
+        </div>
+      )}
+      {percentile != null && (
+        <>
+          <div style={{ marginTop: 6 }}>
+            <div style={{ position: "relative", height: 4, background: "#efece5", borderRadius: 2, marginBottom: 4 }}>
+              <div style={{ position: "absolute", left: `${percentile}%`, top: -3, width: 2, height: 10, background: color }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#8a93a3" }}>
+              <span>Cheap ({fmt(minPe, 0)}×)</span>
+              <span>Avg ({fmt(avgPe, 0)}×)</span>
+              <span>Rich ({fmt(maxPe, 0)}×)</span>
+            </div>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 11, color, fontWeight: 600 }}>
+            {percentileLabel} ({percentile.toFixed(0)}th percentile)
+          </div>
+        </>
+      )}
+      <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+        Historical P/E from Finnhub's quarterly series. Current point appended uses Yahoo's trailing P/E ({fmt(currentPe, 1)}×). High percentile = historically expensive; low = historically cheap.
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // INDICATORS
 // ============================================================
 const sma = (data, period) => data.map((d, i) => {
@@ -1520,71 +1656,14 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
               const validFinnhub = finnhubPeSeries.filter((e) => e?.period && typeof e?.v === "number" && isFinite(e.v) && e.v > 0 && e.v < 500);
 
               if (validFinnhub.length >= 6) {
-                // Use Finnhub data for the chart
-                const peValues = validFinnhub.map((e) => e.v);
-                const minPe = Math.min(...peValues);
-                const maxPe = Math.max(...peValues);
-                const avgPe = peValues.reduce((s, v) => s + v, 0) / peValues.length;
-                const range = maxPe - minPe || 1;
-                const percentile = Math.min(100, Math.max(0, ((currentPe - minPe) / range) * 100));
-                const percentileLabel = percentile >= 75 ? "Top quartile (expensive vs own history)"
-                                      : percentile >= 50 ? "Above own historical average"
-                                      : percentile >= 25 ? "Below own historical average"
-                                      : "Bottom quartile (cheap vs own history)";
-                const color = percentile >= 75 ? "#a3203a"
-                            : percentile >= 50 ? "#d4a017"
-                            : "#0a6e44";
-                const firstDate = validFinnhub[0].period;
-                const lastDate = validFinnhub[validFinnhub.length - 1].period;
-                const yearsSpan = (new Date(lastDate).getTime() - new Date(firstDate).getTime()) / (1000 * 60 * 60 * 24 * 365);
-                const spanLabel = yearsSpan >= 1 ? `${yearsSpan.toFixed(1)}y` : `${Math.round(yearsSpan * 12)}mo`;
-
-                // Build chart data — include current PE as the latest point
-                const chartData = [
-                  ...validFinnhub.map((e) => ({ period: e.period, pe: e.v, label: e.period.slice(0, 7) })),
-                  { period: new Date().toISOString().slice(0, 10), pe: currentPe, label: "now", isCurrent: true },
-                ];
-
+                // Render the P/E History chart
                 return (
-                  <div style={{ marginTop: 10, padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c" }}>{symbol} · Historical P/E Ratio</span>
-                      <span style={{ fontSize: 10, color: "#5a6573" }}>{validFinnhub.length} quarters · {spanLabel} of history · Finnhub</span>
-                    </div>
-                    {/* Recharts line chart */}
-                    <div style={{ width: "100%", height: 180 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
-                          <XAxis dataKey="label" tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" interval={Math.max(0, Math.floor(chartData.length / 8))} />
-                          <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={36} domain={[Math.floor(minPe * 0.9), Math.ceil(maxPe * 1.05)]} />
-                          <ReferenceLine y={avgPe} stroke="#8a93a3" strokeDasharray="3 3" strokeWidth={0.8} label={{ value: `avg ${avgPe.toFixed(1)}×`, fontSize: 9, fill: "#5a6573", position: "insideTopRight" }} />
-                          <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} formatter={(value) => [`${Number(value).toFixed(1)}×`, "P/E"]} />
-                          <Line type="monotone" dataKey="pe" stroke="#7ba2cc" strokeWidth={2} dot={{ fill: "#7ba2cc", r: 2 }} activeDot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.6, marginTop: 6 }}>
-                      Current: <span className="mono" style={{ fontWeight: 600, color: "#1a1f2c" }}>{fmt(currentPe, 1)}×</span>
-                      {" · "}Range: <span className="mono">{fmt(minPe, 1)}× – {fmt(maxPe, 1)}×</span>
-                      {" · "}Avg: <span className="mono">{fmt(avgPe, 1)}×</span>
-                    </div>
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ position: "relative", height: 4, background: "#efece5", borderRadius: 2, marginBottom: 4 }}>
-                        <div style={{ position: "absolute", left: `${percentile}%`, top: -3, width: 2, height: 10, background: color }} />
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#8a93a3" }}>
-                        <span>Cheap ({fmt(minPe, 0)}×)</span>
-                        <span>Avg ({fmt(avgPe, 0)}×)</span>
-                        <span>Rich ({fmt(maxPe, 0)}×)</span>
-                      </div>
-                    </div>
-                    <div style={{ marginTop: 6, fontSize: 11, color, fontWeight: 600 }}>
-                      {percentileLabel} ({percentile.toFixed(0)}th percentile)
-                    </div>
-                    <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-                      Historical P/E from Finnhub's quarterly series ({validFinnhub.length} periods). Methodology may differ slightly from the current displayed P/E (32.4×) which uses Yahoo's trailingPE — but the chart shape and percentile position are reliable.
-                    </div>
-                  </div>
+                  <PEHistoryMultiPane
+                    symbol={symbol}
+                    currentPe={currentPe}
+                    valuationSeries={data?.valuationSeries}
+                    fmt={fmt}
+                  />
                 );
               }
 
