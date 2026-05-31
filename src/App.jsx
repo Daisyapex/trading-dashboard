@@ -1504,6 +1504,89 @@ function SummaryPanel({ summary, symbol, data, ly, f, op, a, c, tech, peerRows, 
                 Peer averages: P/E {peerAvg("pe") != null ? `${fmt(peerAvg("pe"), 1)}×` : "—"} · Fwd P/E {peerAvg("fwdPe") != null ? `${fmt(peerAvg("fwdPe"), 1)}×` : "—"} · P/S {peerAvg("ps") != null ? `${fmt(peerAvg("ps"), 1)}×` : "—"} · EV/EBITDA {peerAvg("evEbitda") != null ? `${fmt(peerAvg("evEbitda"), 1)}×` : "—"}
               </div>
             )}
+            {/* P/E History Context for the current ticker */}
+            {(() => {
+              const candles = data?.candles || [];
+              const epsQs = ly?.epsHistory || ly?.epsQuarters || [];
+              if (candles.length < 100 || epsQs.length < 4) return null;
+
+              // Build trailing-12-month EPS at each candle date.
+              // epsHistory rows look like: { date or label, actual }. We use rolling sum of 4 quarters.
+              // For simplicity: use the 4 most recent EPS values as constant for last quarter,
+              // back-extend for older periods (approximate).
+              const epsActuals = epsQs.map((q) => q.actual ?? q.eps ?? null).filter((v) => v != null && isFinite(v));
+              if (epsActuals.length < 4) return null;
+
+              // Trailing TTM EPS for "now" (most recent 4 quarters)
+              const ttmRecent = epsActuals.slice(-4).reduce((s, v) => s + v, 0);
+
+              // Try to compute historical TTM by walking back through quarters
+              // Each quarter is ~63 trading days. We'll approximate quarter boundaries.
+              const peTimeseries = [];
+              const quartersInData = Math.min(epsActuals.length, 8);  // up to 2 years
+              for (let qIdx = 3; qIdx < quartersInData; qIdx++) {
+                // Sum 4 consecutive quarters ending at qIdx
+                const ttm = epsActuals.slice(qIdx - 3, qIdx + 1).reduce((s, v) => s + v, 0);
+                if (ttm <= 0) continue;
+                // Approximate date: qIdx is index from oldest. Most recent quarter = end of candles.
+                const daysFromEnd = (quartersInData - 1 - qIdx) * 63;
+                const candleIdx = candles.length - 1 - daysFromEnd;
+                if (candleIdx < 0 || candleIdx >= candles.length) continue;
+                const price = candles[candleIdx]?.c ?? candles[candleIdx]?.close;
+                if (!price) continue;
+                peTimeseries.push({ idx: candleIdx, pe: price / ttm });
+              }
+              if (peTimeseries.length < 3) return null;
+
+              // Stats on the timeseries
+              const peValues = peTimeseries.map((p) => p.pe);
+              const minPe = Math.min(...peValues);
+              const maxPe = Math.max(...peValues);
+              const avgPe = peValues.reduce((s, v) => s + v, 0) / peValues.length;
+              // Current PE from fundamentals
+              const currentPe = f?.pe;
+              if (currentPe == null) return null;
+              // Percentile of current within range
+              const range = maxPe - minPe || 1;
+              const percentile = Math.min(100, Math.max(0, ((currentPe - minPe) / range) * 100));
+              const percentileLabel = percentile >= 75 ? "Top quartile (expensive vs own history)"
+                                    : percentile >= 50 ? "Above own historical average"
+                                    : percentile >= 25 ? "Below own historical average"
+                                    : "Bottom quartile (cheap vs own history)";
+              const color = percentile >= 75 ? "#a3203a"
+                          : percentile >= 50 ? "#d4a017"
+                          : "#0a6e44";
+
+              return (
+                <div style={{ marginTop: 10, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 2 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#1a1f2c", marginBottom: 4 }}>
+                    {symbol} · P/E History Context
+                  </div>
+                  <div style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
+                    Current P/E: <span className="mono" style={{ fontWeight: 600, color: "#1a1f2c" }}>{fmt(currentPe, 1)}×</span>
+                    {" · "}2yr range: <span className="mono">{fmt(minPe, 1)}× – {fmt(maxPe, 1)}×</span>
+                    {" · "}2yr avg: <span className="mono">{fmt(avgPe, 1)}×</span>
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    {/* Visual position bar */}
+                    <div style={{ position: "relative", height: 4, background: "#efece5", borderRadius: 2, marginBottom: 4 }}>
+                      <div style={{ position: "absolute", left: `${percentile}%`, top: -3, width: 2, height: 10, background: color }} />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#8a93a3" }}>
+                      <span>Cheap ({fmt(minPe, 0)}×)</span>
+                      <span>Avg ({fmt(avgPe, 0)}×)</span>
+                      <span>Rich ({fmt(maxPe, 0)}×)</span>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 11, color, fontWeight: 600 }}>
+                    {percentileLabel} ({percentile.toFixed(0)}th percentile)
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+                    Computed from last 8 quarters of EPS × historical prices. Approximate — only shows 2-year context, not full cycle. High percentile = historically expensive; low = historically cheap.
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
         {/* === Multi-Master Investor Check (Buffett, Lynch, Simons, Marks, Druckenmiller, Munger) === */}
