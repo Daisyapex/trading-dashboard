@@ -2484,6 +2484,12 @@ function RiskHelper({ isMobile, macro }) {
   const [showBulk, setShowBulk] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [index, setIndex] = useState(null);  // Watchlist tickers, used for Simulator suggestions
+
+  // Fetch the watchlist index once
+  useEffect(() => {
+    fetch(`${BASE}data/index.json?v=${Date.now()}`).then((r) => r.ok ? r.json() : null).then(setIndex).catch(() => {});
+  }, []);
 
   // Load saved positions from localStorage
   useEffect(() => {
@@ -2712,10 +2718,11 @@ function RiskHelper({ isMobile, macro }) {
         />
       )}
 
-      {/* Account size + risk tolerance + cash */}
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <div className="panel-head"><span className="panel-title">Your Setup</span></div>
-        <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12 }}>
+
+      {/* ===== SECTION 1: YOUR SETUP ===== */}
+      <CollapsibleSection title="Your Setup" subtitle={`Account · ${positions.length} ${positions.length === 1 ? "position" : "positions"}`} defaultOpen={true}>
+        {/* Account inputs */}
+        <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12, borderBottom: "1px solid #efece5" }}>
           <div>
             <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Cash ($) — Optional</div>
             <input type="number" value={cash} onChange={(e) => saveCash(e.target.value)} placeholder="3300" style={{ padding: "8px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 14, fontFamily: "monospace", width: "100%" }} />
@@ -2732,16 +2739,108 @@ function RiskHelper({ isMobile, macro }) {
             <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 4 }}>1-2% conservative. 3-5% aggressive. 10%+ suicidal.</div>
           </div>
         </div>
-      </div>
 
-      {/* Portfolio summary */}
-      {positions.length > 0 && (
-        <div className="panel" style={{ marginBottom: 16, background: totalVar95 > acctNum * 0.05 ? "#fdf3f3" : "#fff" }}>
-          <div className="panel-head">
-            <span className="panel-title">Portfolio Risk Summary</span>
-            <button onClick={refreshAll} disabled={loading} style={{ background: "transparent", border: "1px solid #d6d2c7", padding: "3px 8px", borderRadius: 2, fontSize: 10, cursor: "pointer" }}>{loading ? "Refreshing..." : "Refresh prices"}</button>
+        {/* Positions table */}
+        <div style={{ padding: "10px 14px 6px", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#1a1f2c" }}>Your Holdings</span>
+          {enriched.length > 0 && <button onClick={refreshAll} disabled={loading} style={{ background: "transparent", border: "1px solid #d6d2c7", padding: "3px 8px", borderRadius: 2, fontSize: 10, cursor: "pointer" }}>{loading ? "Refreshing..." : "Refresh prices"}</button>}
+        </div>
+        {enriched.length === 0 ? (
+          <div style={{ padding: 20, textAlign: "center", color: "#8a93a3", fontSize: 12 }}>No positions yet. Add your holdings below to see risk.</div>
+        ) : (
+          <div style={{ padding: "4px 0", overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 700 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                  <th style={{ padding: "6px 14px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Shares</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Price</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Value</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>P/L</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Bad day</th>
+                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Max DD risk</th>
+                  <th style={{ padding: "6px 14px", textAlign: "center", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {enriched.map((p, i) => (
+                  <tr key={i} style={{ borderBottom: "1px dotted #efece5" }}>
+                    <td className="mono" style={{ padding: "6px 14px", fontWeight: 600 }}>{p.symbol}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>{p.shares}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>${fmt(p.currentPrice, 2)}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 500 }}>${formatMcap(p.value)}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: p.unrealizedPct == null ? "#8a93a3" : p.unrealizedPct > 0 ? "#0a8554" : "#c4314b" }}>
+                      {p.unrealizedPct != null ? (p.unrealizedPct >= 0 ? "+" : "") + p.unrealizedPct.toFixed(1) + "%" : "—"}
+                    </td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(p.dollarVar95)}</td>
+                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(p.dollarMaxDD)}</td>
+                    <td style={{ padding: "6px 14px", textAlign: "center" }}>
+                      <button onClick={() => removePosition(i)} style={{ background: "transparent", border: "none", color: "#c4314b", fontSize: 14, cursor: "pointer" }}>×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div style={{ padding: "14px 16px", display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
+        )}
+
+        {/* Add position form */}
+        <div style={{ padding: "10px 14px 6px", borderTop: "1px solid #efece5", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#1a1f2c" }}>{showBulk ? "Bulk Paste Positions" : "Add a Position"}</span>
+          <button onClick={() => { setShowBulk(!showBulk); setError(null); }} style={{ background: "transparent", border: "1px solid #d6d2c7", padding: "3px 8px", borderRadius: 2, fontSize: 10, cursor: "pointer", letterSpacing: "0.05em" }}>
+            {showBulk ? "↶ Single entry" : "📋 Bulk paste"}
+          </button>
+        </div>
+        {showBulk ? (
+          <div style={{ padding: "8px 14px 12px" }}>
+            <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 8, lineHeight: 1.5 }}>
+              Paste your positions in any of these formats. This <strong>replaces</strong> all current positions:
+            </div>
+            <textarea
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={`Examples:\nTSM:3, NVDA:7.4, NOW:14, MSFT:6\n\nOr line by line:\nTSM 3\nNVDA 7.4\nNOW 14\nMSFT 6\n\nOr JSON:\n{"NVDA": 7.4, "MSFT": 6, "TSM": 3}`}
+              rows={isMobile ? 6 : 7}
+              style={{ width: "100%", padding: 10, border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", resize: "vertical" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={applyBulk} disabled={loading || !bulkText.trim()} style={{ padding: "8px 16px", background: "#0a8554", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "✓ APPLY"}</button>
+              <button onClick={() => setBulkText("")} disabled={!bulkText} style={{ padding: "8px 14px", background: "transparent", color: "#5a6573", border: "1px solid #d6d2c7", borderRadius: 2, cursor: "pointer", fontSize: 12 }}>Clear</button>
+              <span style={{ fontSize: 10, color: "#8a93a3" }}>{parseBulk(bulkText).length} positions parsed</span>
+            </div>
+            {error && <div style={{ marginTop: 8, color: "#c4314b", fontSize: 11 }}>{error}</div>}
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: "8px 14px 12px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "auto auto auto auto", gap: 8, alignItems: "end" }}>
+              <div>
+                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Symbol</div>
+                <input value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="NVDA" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", textTransform: "uppercase", width: isMobile ? "100%" : 100 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Shares</div>
+                <input type="number" value={form.shares} onChange={(e) => setForm({ ...form, shares: e.target.value })} placeholder="10" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 80 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Cost basis ($/share, optional)</div>
+                <input type="number" step="0.01" value={form.costBasis} onChange={(e) => setForm({ ...form, costBasis: e.target.value })} placeholder="200.50" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 120 }} />
+              </div>
+              <button onClick={addPosition} disabled={loading} style={{ padding: "8px 16px", background: "#1a1f2c", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "+ ADD"}</button>
+            </div>
+            {error && <div style={{ padding: "0 14px 12px", color: "#c4314b", fontSize: 11 }}>{error}</div>}
+          </>
+        )}
+      </CollapsibleSection>
+
+      {/* ===== SECTION 2: PORTFOLIO RISK SUMMARY ===== */}
+      {positions.length > 0 && (
+        <CollapsibleSection title="Portfolio Risk Summary" subtitle="Health check across multiple risk lenses" defaultOpen={true}>
+          {/* Regime banner */}
+          <div style={{ padding: "12px 14px 0" }}>
+            <RegimeBanner macro={macro} isMobile={isMobile} />
+          </div>
+          {/* Big numbers grid */}
+          <div style={{ padding: "0 16px 14px", display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)", gap: 14 }}>
             <div>
               <div style={{ fontSize: 10, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Portfolio value</div>
               <div className="mono" style={{ fontSize: isMobile ? 18 : 22, fontWeight: 600 }}>${formatMcap(totalValue)}</div>
@@ -2787,194 +2886,64 @@ function RiskHelper({ isMobile, macro }) {
             <div style={{ padding: "10px 14px", background: "#fff8e1", borderTop: "1px solid #efece5", fontSize: 11, color: "#1a1f2c", lineHeight: 1.5 }}>
               ⚠️ VaR data not yet available. Run the fetch workflow to compute these:{" "}
               <a href="https://github.com/Daisyapex/trading-dashboard/actions/workflows/fetch-data.yml" target="_blank" rel="noopener noreferrer" style={{ color: "#1a4c80", textDecoration: "underline" }}>Run workflow</a>
-              {" "}— then click "Refresh prices" above. The Historical Worst Case is shown using older data that was already fetched.
+              {" "}— then click "Refresh prices" above.
             </div>
           )}
-        </div>
+
+          {/* Embedded supporting panels */}
+          <div style={{ padding: "0 14px" }}>
+            <KillSwitchPanel positions={enriched} totalValue={totalValue} macro={macro} isMobile={isMobile} embedded />
+            <InstitutionalRiskLens positions={enriched} totalValue={totalValue} cashRemaining={cashRemaining} macro={macro} isMobile={isMobile} embedded />
+            <MacroStressPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
+            {enriched.some((p) => p.pe != null) && (
+              <ValuationRiskPanel positions={enriched} isMobile={isMobile} embedded />
+            )}
+          </div>
+        </CollapsibleSection>
       )}
 
-      {/* Risk Spectrum — always open, visual snapshot of where you sit */}
+      {/* ===== SECTION 3: RISK SPECTRUM ===== */}
       {positions.length > 0 && portfolioVarPct != null && (
-        <CollapsibleSection title="Risk Spectrum · Where You Sit vs Benchmarks" subtitle={`~${portfolioVarPct.toFixed(1)}% daily`} defaultOpen={true}>
+        <CollapsibleSection title="Risk Spectrum" subtitle="Where you sit + how your vol breaks down" defaultOpen={true}>
           <RiskSpectrumPanel portfolioVarPct={portfolioVarPct} isMobile={isMobile} embedded macro={macro} />
+          <div style={{ padding: "12px 14px", borderTop: "1px solid #efece5" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1f2c", marginBottom: 8 }}>Volatility Decomposition · Where Your Portfolio Vol Comes From</div>
+            <VolatilityDecomposition positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
+          </div>
+          <div style={{ borderTop: "1px solid #efece5" }}>
+            <FactorDecompositionPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
+          </div>
         </CollapsibleSection>
       )}
 
-      {/* Concentration Risk — always open, the diversification reality check */}
+      {/* ===== SECTION 4: CONCENTRATION RISK ===== */}
       {enriched.length > 0 && (
-        <CollapsibleSection title="Concentration Risk · How Diversified Are You Really" subtitle={`${enriched.length} positions`} defaultOpen={true}>
+        <CollapsibleSection title="Concentration Risk" subtitle={`${enriched.length} positions · diversification analysis`} defaultOpen={true}>
           <ConcentrationRiskPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded macro={macro} />
-        </CollapsibleSection>
-      )}
-
-      {/* Macro Regime Detector — tells you how reliable the OTHER panels are right now */}
-      {macro?.items?.length > 0 && (
-        <CollapsibleSection title="Macro Regime · Reliability of Your Other Panels" subtitle="Renaissance-style: when historical patterns stop applying" defaultOpen={true}>
-          <RegimeDetectorPanel macro={macro} isMobile={isMobile} embedded />
-        </CollapsibleSection>
-      )}
-
-      {/* Kill Switch — pre-committed risk gates with traffic-light status */}
-      {enriched.length > 0 && (
-        <CollapsibleSection title="Kill Switch · Pre-Committed Risk Gates" subtitle="STOP / CAUTION / OK signals from explicit thresholds" defaultOpen={true}>
-          <KillSwitchPanel positions={enriched} totalValue={totalValue} macro={macro} isMobile={isMobile} embedded />
-        </CollapsibleSection>
-      )}
-
-      {/* Portfolio Simulator — what-if position adjuster */}
-      {enriched.length > 0 && (
-        <CollapsibleSection title="Portfolio Simulator · What-If Position Adjuster" subtitle="Adjust shares & see how risk metrics shift — your real portfolio is unchanged" defaultOpen={false}>
-          <PortfolioSimulatorPanel
-            positions={enriched}
-            totalAccountValue={totalAccountValue}
-            cashRemaining={cashRemaining}
-            macro={macro}
-            isMobile={isMobile}
-            embedded
-            fetchRiskFor={fetchRiskFor}
-          />
-        </CollapsibleSection>
-      )}
-
-      {/* Valuation Risk — collapsed, deep dive on PE compression */}
-      {enriched.length > 0 && enriched.some((p) => p.pe != null) && (
-        <CollapsibleSection title="Valuation Risk · If P/E Compresses" subtitle="3 sector-aware scenarios" defaultOpen={false}>
-          <ValuationRiskPanel positions={enriched} isMobile={isMobile} embedded />
-        </CollapsibleSection>
-      )}
-
-      {/* Dalio-Style Diversification Suggestions */}
-      {enriched.length > 0 && macro?.benchmarks?.length > 0 && (
-        <CollapsibleSection title="Diversification Suggestions · Equity-Focused" subtitle="Stock-only · Holy Grail principle" defaultOpen={true}>
-          <DalioSuggestionsPanel positions={enriched} totalValue={totalValue} cashRemaining={cashRemaining} macro={macro} isMobile={isMobile} embedded />
-        </CollapsibleSection>
-      )}
-
-      {/* Factor Decomposition — what factors drive your portfolio */}
-      {enriched.length > 0 && (
-        <CollapsibleSection title="Factor Decomposition · Style & Risk Factors" subtitle="How institutional funds actually measure portfolio exposure" defaultOpen={false}>
-          <FactorDecompositionPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
-        </CollapsibleSection>
-      )}
-
-      {/* Institutional Risk Lens — what big hedge funds worry about */}
-      {enriched.length > 0 && (
-        <CollapsibleSection title="Institutional Risk Lens · What hedge funds worry about" subtitle="Your exposure to systemic risks cited by Citadel, Goldman, BlackRock" defaultOpen={false}>
-          <InstitutionalRiskLens positions={enriched} totalValue={totalValue} cashRemaining={cashRemaining} macro={macro} isMobile={isMobile} embedded />
-        </CollapsibleSection>
-      )}
-
-      {/* Macro Stress Test — collapsed */}
-      {enriched.length > 0 && enriched.some((p) => p.correlations && Object.keys(p.correlations).length > 0) && (
-        <CollapsibleSection title="Macro Stress Test · Scripted Scenarios" subtitle="5 macro shocks" defaultOpen={false}>
-          <MacroStressPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
-        </CollapsibleSection>
-      )}
-
-      {/* Position list */}
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <div className="panel-head"><span className="panel-title">Your Positions</span><span className="mono" style={{ fontSize: 10, color: "#5a6573" }}>{positions.length} {positions.length === 1 ? "position" : "positions"}</span></div>
-        {enriched.length === 0 ? (
-          <div style={{ padding: 20, textAlign: "center", color: "#8a93a3", fontSize: 12 }}>No positions yet. Add your holdings below to see risk.</div>
-        ) : (
-          <div style={{ padding: "8px 0", overflowX: "auto" }}>
-            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 700 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
-                  <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
-                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Shares</th>
-                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Price</th>
-                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Value</th>
-                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>P/L</th>
-                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Bad day</th>
-                  <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Max DD risk</th>
-                  <th style={{ padding: "6px 10px", textAlign: "center", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {enriched.map((p, i) => (
-                  <tr key={i} style={{ borderBottom: "1px dotted #efece5" }}>
-                    <td className="mono" style={{ padding: "6px 10px", fontWeight: 600 }}>{p.symbol}</td>
-                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>{p.shares}</td>
-                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right" }}>${fmt(p.currentPrice, 2)}</td>
-                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 500 }}>${formatMcap(p.value)}</td>
-                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: p.unrealizedPct == null ? "#8a93a3" : p.unrealizedPct > 0 ? "#0a8554" : "#c4314b" }}>
-                      {p.unrealizedPct != null ? (p.unrealizedPct >= 0 ? "+" : "") + p.unrealizedPct.toFixed(1) + "%" : "—"}
-                    </td>
-                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(p.dollarVar95)}</td>
-                    <td className="mono" style={{ padding: "6px 10px", textAlign: "right", color: "#c4314b" }}>-${formatMcap(p.dollarMaxDD)}</td>
-                    <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                      <button onClick={() => removePosition(i)} style={{ background: "transparent", border: "none", color: "#c4314b", fontSize: 14, cursor: "pointer" }}>×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Add position form */}
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <div className="panel-head">
-          <span className="panel-title">{showBulk ? "Bulk Paste Positions" : "Add Position"}</span>
-          <button onClick={() => { setShowBulk(!showBulk); setError(null); }} style={{ background: "transparent", border: "1px solid #d6d2c7", padding: "3px 8px", borderRadius: 2, fontSize: 10, cursor: "pointer", letterSpacing: "0.05em" }}>
-            {showBulk ? "↶ Single entry" : "📋 Bulk paste"}
-          </button>
-        </div>
-        {showBulk ? (
-          <div style={{ padding: "12px 14px" }}>
-            <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 8, lineHeight: 1.5 }}>
-              Paste your positions in any of these formats. This <strong>replaces</strong> all current positions:
+          {macro?.benchmarks?.length > 0 && (
+            <div style={{ borderTop: "1px solid #efece5" }}>
+              <DalioSuggestionsPanel positions={enriched} totalValue={totalValue} cashRemaining={cashRemaining} macro={macro} isMobile={isMobile} embedded />
             </div>
-            <textarea
-              value={bulkText}
-              onChange={(e) => setBulkText(e.target.value)}
-              placeholder={`Examples:\nTSM:3, NVDA:7.4, NOW:14, MSFT:6\n\nOr line by line:\nTSM 3\nNVDA 7.4\nNOW 14\nMSFT 6\n\nOr JSON:\n{"NVDA": 7.4, "MSFT": 6, "TSM": 3}`}
-              rows={isMobile ? 6 : 7}
-              style={{ width: "100%", padding: 10, border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", resize: "vertical" }}
+          )}
+        </CollapsibleSection>
+      )}
+
+      {/* ===== SECTION 5: PORTFOLIO SIMULATION ===== */}
+      {enriched.length > 0 && (
+        <CollapsibleSection title="Portfolio Simulation" subtitle="Try changes, see impact in plain English" defaultOpen={true}>
+          <div style={{ padding: "12px 14px" }}>
+            <PortfolioSimulatorPanel
+              positions={enriched}
+              totalAccountValue={totalAccountValue}
+              cashRemaining={cashRemaining}
+              macro={macro}
+              isMobile={isMobile}
+              embedded
+              fetchRiskFor={fetchRiskFor}
+              index={index}
             />
-            <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button onClick={applyBulk} disabled={loading || !bulkText.trim()} style={{ padding: "8px 16px", background: "#0a8554", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "✓ APPLY"}</button>
-              <button onClick={() => setBulkText("")} disabled={!bulkText} style={{ padding: "8px 14px", background: "transparent", color: "#5a6573", border: "1px solid #d6d2c7", borderRadius: 2, cursor: "pointer", fontSize: 12 }}>Clear</button>
-              <span style={{ fontSize: 10, color: "#8a93a3" }}>{parseBulk(bulkText).length} positions parsed</span>
-            </div>
-            {error && <div style={{ marginTop: 8, color: "#c4314b", fontSize: 11 }}>{error}</div>}
           </div>
-        ) : (
-          <>
-            <div style={{ padding: "12px 14px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "auto auto auto auto", gap: 8, alignItems: "end" }}>
-              <div>
-                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Symbol</div>
-                <input value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="NVDA" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", textTransform: "uppercase", width: isMobile ? "100%" : 100 }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Shares</div>
-                <input type="number" value={form.shares} onChange={(e) => setForm({ ...form, shares: e.target.value })} placeholder="10" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 80 }} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: "#8a93a3", marginBottom: 3 }}>Cost basis ($/share, optional)</div>
-                <input type="number" step="0.01" value={form.costBasis} onChange={(e) => setForm({ ...form, costBasis: e.target.value })} placeholder="200.50" style={{ padding: "6px 10px", border: "1px solid #d6d2c7", borderRadius: 2, fontSize: 12, fontFamily: "monospace", width: isMobile ? "100%" : 120 }} />
-              </div>
-              <button onClick={addPosition} disabled={loading} style={{ padding: "8px 16px", background: "#1a1f2c", color: "#fff", border: "none", borderRadius: 2, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "Loading..." : "+ ADD"}</button>
-            </div>
-            {error && <div style={{ padding: "0 14px 12px", color: "#c4314b", fontSize: 11 }}>{error}</div>}
-          </>
-        )}
-      </div>
-
-      {/* Position sizing helper */}
-      {acctNum > 0 && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-head"><span className="panel-title">Position Sizing Helper · For Future Trades</span></div>
-          <div style={{ padding: "12px 14px" }}>
-            <div style={{ fontSize: 12, color: "#1a1f2c", marginBottom: 12, lineHeight: 1.6 }}>
-              At <strong>{riskPct}% risk per trade</strong> on a <strong>${formatMcap(acctNum)}</strong> account, your budget per trade is <strong style={{ color: "#c4314b" }}>${formatMcap(riskBudgetPerTrade)}</strong>.
-              Using each stock's 1-day 95% VaR, this is the maximum position size to keep within that budget:
-            </div>
-            <PositionSizingTable accountSize={acctNum} riskBudget={riskBudgetPerTrade} isMobile={isMobile} />
-          </div>
-        </div>
+        </CollapsibleSection>
       )}
 
       <div style={{ padding: 12, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2, marginTop: 16 }}>
@@ -4372,6 +4341,119 @@ function RegimeDetectorPanel({ macro, isMobile, embedded }) {
 // KILL SWITCH / RISK GATES
 // Explicit thresholds with traffic-light status. Outputs a clear
 // STOP / CAUTION / OK signal per holding and at the portfolio level.
+
+// ============================================================
+// VOLATILITY DECOMPOSITION TABLE — shows how portfolio vol came from
+// individual positions. Weight × position vol = contribution.
+// (Simplified weighted view — ignores correlation effects between positions.)
+// ============================================================
+function VolatilityDecomposition({ positions, totalValue, isMobile, embedded }) {
+  if (!positions?.length || !totalValue) return null;
+  // Each position contributes: weight × daily_vol
+  // We derive daily vol from var95: daily_vol ≈ var95 / 1.645 (95th percentile parametric assumption)
+  const rows = positions
+    .filter((p) => p.value > 0 && p.var95 != null)
+    .map((p) => {
+      const weight = p.value / totalValue;
+      const dailyVol = p.var95 / 1.645;
+      const contribution = weight * dailyVol;
+      return { symbol: p.symbol, weight: weight * 100, dailyVol, contribution };
+    })
+    .sort((a, b) => b.contribution - a.contribution);
+  if (!rows.length) return null;
+  const totalContribution = rows.reduce((s, r) => s + r.contribution, 0);
+  const maxContribution = Math.max(...rows.map((r) => r.contribution));
+
+  const innerContent = (
+    <>
+      <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 8, lineHeight: 1.5 }}>
+        Your portfolio daily volatility (~<strong className="mono">{totalContribution.toFixed(2)}%</strong>) broken down by holding.
+        Sorted by contribution. Largest contributor at top.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 60px 60px 70px" : "70px 1fr 70px 70px 80px", gap: 6, fontSize: 10, fontWeight: 600, color: "#8a93a3", paddingBottom: 4, borderBottom: "1px solid #e6e3db" }}>
+        <div>Ticker</div>
+        <div>Contribution (bar)</div>
+        <div style={{ textAlign: "right" }}>Weight</div>
+        <div style={{ textAlign: "right" }}>Daily vol</div>
+        <div style={{ textAlign: "right" }}>= Contribution</div>
+      </div>
+      {rows.map((r) => {
+        const barWidth = (r.contribution / maxContribution) * 100;
+        return (
+          <div key={r.symbol} style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 60px 60px 70px" : "70px 1fr 70px 70px 80px", gap: 6, padding: "5px 0", borderBottom: "1px solid #f5f3ed", alignItems: "center" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</div>
+            <div style={{ position: "relative", height: 14, background: "#f5f3ed", borderRadius: 2 }}>
+              <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${barWidth}%`, background: "#7ba2cc", borderRadius: 2 }} />
+            </div>
+            <div className="mono" style={{ fontSize: 11, textAlign: "right", color: "#1a1f2c" }}>{r.weight.toFixed(0)}%</div>
+            <div className="mono" style={{ fontSize: 11, textAlign: "right", color: "#5a6573" }}>{r.dailyVol.toFixed(2)}%</div>
+            <div className="mono" style={{ fontSize: 11, textAlign: "right", color: "#1a4c80", fontWeight: 600 }}>{r.contribution.toFixed(2)}%</div>
+          </div>
+        );
+      })}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 60px 60px 70px" : "70px 1fr 70px 70px 80px", gap: 6, padding: "6px 0 0", fontSize: 11, fontWeight: 700, color: "#1a1f2c", borderTop: "2px solid #1a1f2c", marginTop: 4 }}>
+        <div>Total</div>
+        <div></div>
+        <div className="mono" style={{ textAlign: "right" }}>100%</div>
+        <div></div>
+        <div className="mono" style={{ textAlign: "right", color: "#1a4c80" }}>≈ {totalContribution.toFixed(2)}%</div>
+      </div>
+      <div style={{ marginTop: 8, padding: "6px 8px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, background: "#fafaf7", borderRadius: 2 }}>
+        Simplified weighted view (ignores correlation effects between holdings — true value may differ slightly).
+        Action: to lower portfolio volatility, reduce the position contributing most (top row), or add low-correlation positions to dilute.
+      </div>
+    </>
+  );
+
+  if (embedded) return innerContent;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head"><span className="panel-title">Volatility Decomposition · Where Your 3.3% Comes From</span></div>
+      <div style={{ padding: "12px 14px" }}>{innerContent}</div>
+    </div>
+  );
+}
+
+// ============================================================
+// REGIME BANNER — small inline banner showing macro regime + reliability
+// Used at the top of Portfolio Risk Summary section.
+// ============================================================
+function RegimeBanner({ macro, isMobile }) {
+  if (!macro?.items?.length) return null;
+  const find = (sym) => macro.items.find((m) => m.symbol === sym);
+  const vix = find("^VIX")?.value;
+  const spyMo = find("SPY")?.monthChange;
+  const tnx = find("^TNX")?.value;
+  if (vix == null) return null;
+  // Score using same rules as RegimeDetectorPanel
+  let score = 0, count = 0;
+  if (vix != null) { count++; score += vix < 15 ? 0 : vix < 20 ? 0.5 : vix < 25 ? 1 : vix < 30 ? 1.5 : 2; }
+  if (spyMo != null) { count++; score += spyMo > 3 ? 0 : spyMo > 0 ? 0.5 : spyMo > -3 ? 1 : spyMo > -7 ? 1.5 : 2; }
+  if (tnx != null) { count++; score += tnx < 3 ? 0 : tnx < 4 ? 0.5 : tnx < 4.5 ? 1 : tnx < 5 ? 1.5 : 2; }
+  const pct = count > 0 ? (score / (count * 2)) * 100 : 50;
+  let label, color, bg, reliability;
+  if (pct < 25) { label = "Calm Bull"; color = "#0a6e44"; bg = "#dcf0e3"; reliability = "HIGH"; }
+  else if (pct < 50) { label = "Choppy"; color = "#5f7a4f"; bg = "#e8f0d8"; reliability = "MEDIUM-HIGH"; }
+  else if (pct < 75) { label = "Risk-Off"; color = "#a06010"; bg = "#fff4d0"; reliability = "MEDIUM-LOW"; }
+  else { label = "Crisis"; color = "#a3203a"; bg = "#fde0e3"; reliability = "LOW"; }
+
+  return (
+    <div style={{ padding: "8px 12px", background: bg, border: `1px solid ${color}33`, borderRadius: 3, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 10, color: "#5a6573", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" }}>Regime:</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color }}>{label}</span>
+        <span style={{ fontSize: 10, color: "#5a6573" }}>
+          VIX {vix?.toFixed(1)}{tnx != null ? ` · 10Y ${tnx.toFixed(2)}%` : ""}{spyMo != null ? ` · SPY 30d ${spyMo >= 0 ? "+" : ""}${spyMo.toFixed(1)}%` : ""}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span style={{ fontSize: 9, color: "#5a6573" }}>Reliability of metrics:</span>
+        <span style={{ fontSize: 11, color, fontWeight: 700 }}>{reliability}</span>
+      </div>
+    </div>
+  );
+}
+
 // ============================================================
 function KillSwitchPanel({ positions, totalValue, macro, isMobile, embedded }) {
   if (!positions?.length || !totalValue) return null;
@@ -4526,74 +4608,87 @@ function KillSwitchPanel({ positions, totalValue, macro, isMobile, embedded }) {
 // side-by-side comparison of portfolio risk metrics. Uses the same VaR/CVaR/
 // correlation math as the rest of the dashboard. No fictional alpha numbers.
 // ============================================================
-function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, macro, isMobile, embedded, fetchRiskFor }) {
-  // hypothetical[i] = { ...position, hypShares, isNew }
-  const [hypothetical, setHypothetical] = useState(() =>
-    positions.map((p) => ({ ...p, hypShares: p.shares, isNew: false }))
-  );
-  const [addingSym, setAddingSym] = useState("");
-  const [addingShares, setAddingShares] = useState("");
-  const [addLoading, setAddLoading] = useState(false);
-  const [addError, setAddError] = useState("");
+// PORTFOLIO SIMULATOR (v2) — plain-English, button-driven
+// Hub for trying portfolio changes. Shows impact in plain English,
+// not just numbers. Includes curated suggestions + optimization hints.
+// ============================================================
+function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, macro, isMobile, embedded, fetchRiskFor, index }) {
+  // Adjustments: { SYMBOL: hypShares } overrides for existing positions
+  // Additions: array of new hypothetical positions
+  const [adjustments, setAdjustments] = useState({});
+  const [additions, setAdditions] = useState([]);
+  const [addLoading, setAddLoading] = useState({});  // { SYMBOL: bool }
+  const [showAllMetrics, setShowAllMetrics] = useState(false);
 
-  // If parent positions change, reset
-  useEffect(() => {
-    setHypothetical(positions.map((p) => ({ ...p, hypShares: p.shares, isNew: false })));
-  }, [positions]);
+  const reset = () => { setAdjustments({}); setAdditions([]); };
 
-  const reset = () => {
-    setHypothetical(positions.map((p) => ({ ...p, hypShares: p.shares, isNew: false })));
-    setAddError(""); setAddingSym(""); setAddingShares("");
+  // Helpers for adjusting by $ amount
+  const adjustByDollars = (symbol, currentPrice, dollarChange) => {
+    if (!currentPrice) return;
+    const currentEffectiveShares = adjustments[symbol] != null ? adjustments[symbol] : (positions.find(p => p.symbol === symbol)?.shares ?? 0);
+    const newShares = Math.max(0, currentEffectiveShares + (dollarChange / currentPrice));
+    setAdjustments((a) => ({ ...a, [symbol]: +newShares.toFixed(4) }));
+  };
+  const adjustAdditionByDollars = (symbol, currentPrice, dollarChange) => {
+    if (!currentPrice) return;
+    setAdditions((adds) => adds.map((a) => {
+      if (a.symbol !== symbol) return a;
+      const newShares = Math.max(0, (a.shares || 0) + (dollarChange / currentPrice));
+      return { ...a, shares: +newShares.toFixed(4) };
+    }));
+  };
+  const removeAddition = (symbol) => {
+    setAdditions((adds) => adds.filter((a) => a.symbol !== symbol));
   };
 
-  const updateShares = (idx, value) => {
-    const val = value === "" ? 0 : parseFloat(value);
-    if (isNaN(val) || val < 0) return;
-    setHypothetical((h) => h.map((p, i) => i === idx ? { ...p, hypShares: val } : p));
-  };
-  const removeHypNew = (idx) => {
-    setHypothetical((h) => h.filter((_, i) => i !== idx));
+  // Add a curated suggestion at 5% of portfolio value
+  const addSuggestion = async (symbol) => {
+    if (additions.some((a) => a.symbol === symbol)) return;
+    setAddLoading((l) => ({ ...l, [symbol]: true }));
+    const risk = await fetchRiskFor(symbol);
+    setAddLoading((l) => ({ ...l, [symbol]: false }));
+    if (!risk?.currentPrice) return;
+    // Calculate shares for 5% of CURRENT portfolio value
+    const currentTotal = positions.reduce((s, p) => s + ((p.shares || 0) * (p.currentPrice || 0)), 0);
+    const targetDollar = currentTotal * 0.05;
+    const shares = +(targetDollar / risk.currentPrice).toFixed(4);
+    setAdditions((adds) => [...adds, { symbol, shares, ...risk, isNew: true, holding: true }]);
   };
 
-  const addNew = async () => {
-    const sym = addingSym.trim().toUpperCase();
-    const sh = parseFloat(addingShares);
-    if (!sym || isNaN(sh) || sh <= 0) { setAddError("Enter a ticker and a positive share count"); return; }
-    if (hypothetical.some((p) => p.symbol === sym)) {
-      setAddError(`${sym} is already in your portfolio above — adjust its shares there instead`);
-      return;
-    }
-    setAddLoading(true); setAddError("");
-    const risk = await fetchRiskFor(sym);
-    setAddLoading(false);
-    if (!risk) { setAddError(`No risk data found for ${sym}. Try a ticker from your watchlist.`); return; }
-    setHypothetical((h) => [...h, {
-      symbol: sym, shares: 0, hypShares: sh, ...risk, isNew: true, holding: true,
-    }]);
-    setAddingSym(""); setAddingShares("");
-  };
+  // ===== Curated suggestions =====
+  // Same-theme (AI/tech extensions) and Diversifiers (different drivers)
+  // Filter to ones actually in the watchlist
+  const heldSymbols = new Set(positions.map((p) => p.symbol));
+  const addedSymbols = new Set(additions.map((a) => a.symbol));
+  const indexSymbols = new Set((index?.tickers || []).map((t) => t.symbol));
+  const isAvailable = (sym) => indexSymbols.has(sym) && !heldSymbols.has(sym) && !addedSymbols.has(sym);
+
+  const sameThemeCandidates = ["MU", "AVGO", "AMD", "ASML", "AMAT", "LRCX", "KLAC"].filter(isAvailable).slice(0, 4);
+  const diversifierCandidates = ["GOOGL", "META", "ORCL", "AAPL", "AMZN", "CRM"].filter(isAvailable).slice(0, 4);
 
   // ===== Metrics =====
-  const computeMetrics = (posList, sharesField) => {
-    const total = posList.reduce((s, p) => s + ((p[sharesField] || 0) * (p.currentPrice || 0)), 0);
-    if (!total) return null;
-    let totalVar = 0, totalCvar = 0, betaSum = 0, corrSum = 0, corrCount = 0;
+  const computeMetrics = (positionsList, sharesGetter) => {
+    let total = 0, totalVar = 0, totalCvar = 0, betaSum = 0, corrSum = 0, corrCount = 0;
     const byValue = [];
-    for (const p of posList) {
-      const value = (p[sharesField] || 0) * (p.currentPrice || 0);
-      if (!value) continue;
+    for (const p of positionsList) {
+      const sh = sharesGetter(p);
+      if (!sh || !p.currentPrice) continue;
+      const value = sh * p.currentPrice;
+      total += value;
       byValue.push({ symbol: p.symbol, value });
       if (p.var95 != null) totalVar += value * (p.var95 / 100);
       if (p.cvar95 != null) totalCvar += value * (p.cvar95 / 100);
       if (p.beta != null) betaSum += value * p.beta;
-      else betaSum += value; // assume beta=1 if missing
+      else betaSum += value;
       if (p.correlations?.SPY != null) { corrSum += p.correlations.SPY; corrCount++; }
     }
+    if (!total) return null;
     byValue.sort((a, b) => b.value - a.value);
     const largestPct = byValue[0] ? (byValue[0].value / total) * 100 : 0;
     const top3 = byValue.slice(0, 3).reduce((s, p) => s + p.value, 0);
     return {
-      total, totalVar, varPct: (totalVar / total) * 100,
+      total,
+      totalVar, varPct: (totalVar / total) * 100,
       totalCvar, cvarPct: (totalCvar / total) * 100,
       largestPct, largestSym: byValue[0]?.symbol,
       top3Pct: (top3 / total) * 100,
@@ -4603,125 +4698,285 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
     };
   };
 
-  const curMetrics = useMemo(() => computeMetrics(hypothetical, "shares"), [hypothetical]);
-  const hypMetrics = useMemo(() => computeMetrics(hypothetical, "hypShares"), [hypothetical]);
+  // Combined list: current positions (possibly adjusted) + additions
+  const combinedList = [...positions, ...additions];
+  const curMetrics = useMemo(() => computeMetrics(positions, (p) => p.shares), [positions]);
+  const hypMetrics = useMemo(() => computeMetrics(combinedList, (p) => {
+    if (p.isNew) return p.shares;
+    return adjustments[p.symbol] != null ? adjustments[p.symbol] : p.shares;
+  }), [combinedList, adjustments]);
 
-  // Hypothetical cash assuming user keeps total account value fixed
-  const hypCash = (totalAccountValue && hypMetrics) ? Math.max(0, totalAccountValue - hypMetrics.total) : null;
+  if (!curMetrics) return <div style={{ padding: 12, color: "#8a93a3", fontSize: 12 }}>Add positions to use the simulator.</div>;
 
-  // ===== Comparison rows =====
-  // betterDir: -1 = lower is better, 0 = neutral, +1 = higher is better
-  const rows = [
-    { label: "Total invested", cur: curMetrics ? `$${curMetrics.total.toFixed(0)}` : "—", hyp: hypMetrics ? `$${hypMetrics.total.toFixed(0)}` : "—", curRaw: curMetrics?.total, hypRaw: hypMetrics?.total, betterDir: 0, fmt: (v) => `$${v.toFixed(0)}` },
-    cashRemaining != null ? { label: "Cash remaining", cur: `$${cashRemaining.toFixed(0)}`, hyp: hypCash != null ? `$${hypCash.toFixed(0)}` : "—", curRaw: cashRemaining, hypRaw: hypCash, betterDir: 0, fmt: (v) => `$${v.toFixed(0)}` } : null,
-    { label: "Portfolio VaR (1d, 95%)", cur: curMetrics ? `-${curMetrics.varPct.toFixed(2)}%` : "—", hyp: hypMetrics ? `-${hypMetrics.varPct.toFixed(2)}%` : "—", curRaw: curMetrics?.varPct, hypRaw: hypMetrics?.varPct, betterDir: -1, fmt: (v) => `-${v.toFixed(2)}%` },
-    { label: "Portfolio CVaR (tail)", cur: curMetrics ? `-${curMetrics.cvarPct.toFixed(2)}%` : "—", hyp: hypMetrics ? `-${hypMetrics.cvarPct.toFixed(2)}%` : "—", curRaw: curMetrics?.cvarPct, hypRaw: hypMetrics?.cvarPct, betterDir: -1, fmt: (v) => `-${v.toFixed(2)}%` },
-    { label: "Largest position", cur: curMetrics?.largestSym ? `${curMetrics.largestPct.toFixed(0)}% (${curMetrics.largestSym})` : "—", hyp: hypMetrics?.largestSym ? `${hypMetrics.largestPct.toFixed(0)}% (${hypMetrics.largestSym})` : "—", curRaw: curMetrics?.largestPct, hypRaw: hypMetrics?.largestPct, betterDir: -1, fmt: (v) => `${v.toFixed(0)}%` },
-    { label: "Top-3 concentration", cur: curMetrics ? `${curMetrics.top3Pct.toFixed(0)}%` : "—", hyp: hypMetrics ? `${hypMetrics.top3Pct.toFixed(0)}%` : "—", curRaw: curMetrics?.top3Pct, hypRaw: hypMetrics?.top3Pct, betterDir: -1, fmt: (v) => `${v.toFixed(0)}%` },
-    (curMetrics?.avgCorr != null && hypMetrics?.avgCorr != null) ? { label: "Avg SPY correlation", cur: curMetrics.avgCorr.toFixed(2), hyp: hypMetrics.avgCorr.toFixed(2), curRaw: curMetrics.avgCorr, hypRaw: hypMetrics.avgCorr, betterDir: -1, fmt: (v) => v.toFixed(2) } : null,
-    (curMetrics && hypMetrics) ? { label: "Portfolio beta", cur: curMetrics.beta.toFixed(2), hyp: hypMetrics.beta.toFixed(2), curRaw: curMetrics.beta, hypRaw: hypMetrics.beta, betterDir: 0, fmt: (v) => v.toFixed(2) } : null,
-    { label: "Number of positions", cur: curMetrics?.count ?? "—", hyp: hypMetrics?.count ?? "—", curRaw: curMetrics?.count, hypRaw: hypMetrics?.count, betterDir: +1, fmt: (v) => String(v) },
-  ].filter(Boolean);
+  const hasChanges = Object.keys(adjustments).length > 0 || additions.length > 0;
+  const hypCashRemaining = (totalAccountValue && hypMetrics) ? Math.max(0, totalAccountValue - hypMetrics.total) : null;
 
-  const deltaColor = (cur, hyp, betterDir) => {
-    if (cur == null || hyp == null) return "#8a93a3";
-    if (Math.abs(hyp - cur) < 0.001 * Math.abs(cur || 1)) return "#8a93a3";
-    if (betterDir === 0) return "#5a6573";
-    const isBetter = (betterDir === -1 && hyp < cur) || (betterDir === +1 && hyp > cur);
-    return isBetter ? "#0a6e44" : "#a3203a";
+  // ===== Plain English impact bullets =====
+  const buildImpactBullets = () => {
+    if (!hasChanges || !hypMetrics) return null;
+    const bullets = [];
+    // Bad-day loss (VaR)
+    if (curMetrics.totalVar != null && hypMetrics.totalVar != null) {
+      const delta = hypMetrics.totalVar - curMetrics.totalVar;
+      const better = delta < -1;
+      const worse = delta > 1;
+      const arrow = better ? "↓" : worse ? "↑" : "≈";
+      const verdict = better ? "better — less at risk on bad days" : worse ? "worse — more at risk on bad days" : "about the same";
+      const color = better ? "#0a6e44" : worse ? "#a3203a" : "#5a6573";
+      bullets.push({
+        color,
+        text: `Bad-day loss (VaR): $${curMetrics.totalVar.toFixed(0)} → $${hypMetrics.totalVar.toFixed(0)} ${arrow} (${verdict})`,
+      });
+    }
+    // Tail loss (CVaR)
+    if (curMetrics.totalCvar != null && hypMetrics.totalCvar != null) {
+      const delta = hypMetrics.totalCvar - curMetrics.totalCvar;
+      const better = delta < -1;
+      const worse = delta > 1;
+      const arrow = better ? "↓" : worse ? "↑" : "≈";
+      const verdict = better ? "better — smaller worst-case" : worse ? "worse — bigger worst-case" : "about the same";
+      const color = better ? "#0a6e44" : worse ? "#a3203a" : "#5a6573";
+      bullets.push({
+        color,
+        text: `Worst-case loss (CVaR tail): $${curMetrics.totalCvar.toFixed(0)} → $${hypMetrics.totalCvar.toFixed(0)} ${arrow} (${verdict})`,
+      });
+    }
+    // Largest position
+    if (curMetrics.largestSym && hypMetrics.largestSym) {
+      const concBetter = hypMetrics.largestPct < curMetrics.largestPct - 1;
+      const concWorse = hypMetrics.largestPct > curMetrics.largestPct + 1;
+      const verdict = concBetter ? "better — more balanced" : concWorse ? "worse — more concentrated" : "about the same";
+      const color = concBetter ? "#0a6e44" : concWorse ? "#a3203a" : "#5a6573";
+      bullets.push({
+        color,
+        text: `Largest position: ${curMetrics.largestPct.toFixed(0)}% (${curMetrics.largestSym}) → ${hypMetrics.largestPct.toFixed(0)}% (${hypMetrics.largestSym}) (${verdict})`,
+      });
+    }
+    // Correlation / diversification
+    if (curMetrics.avgCorr != null && hypMetrics.avgCorr != null) {
+      const better = hypMetrics.avgCorr < curMetrics.avgCorr - 0.02;
+      const worse = hypMetrics.avgCorr > curMetrics.avgCorr + 0.02;
+      const verdict = better ? "better — more diversified" : worse ? "worse — moves more like SPY" : "about the same";
+      const color = better ? "#0a6e44" : worse ? "#a3203a" : "#5a6573";
+      bullets.push({
+        color,
+        text: `Tracking SPY (correlation): ${curMetrics.avgCorr.toFixed(2)} → ${hypMetrics.avgCorr.toFixed(2)} (${verdict})`,
+      });
+    }
+    // Total invested
+    const investDelta = hypMetrics.total - curMetrics.total;
+    if (Math.abs(investDelta) > 10) {
+      bullets.push({
+        color: "#5a6573",
+        text: `Total invested: $${curMetrics.total.toFixed(0)} → $${hypMetrics.total.toFixed(0)} (${investDelta > 0 ? "+" : "−"}$${Math.abs(investDelta).toFixed(0)})${cashRemaining != null ? `, cash left: $${hypCashRemaining?.toFixed(0) ?? "—"}` : ""}`,
+      });
+    }
+    return bullets;
   };
+  const impactBullets = buildImpactBullets();
+
+  // ===== Optimization Hints (simple rules) =====
+  const buildOptimizationHints = () => {
+    const hints = [];
+    // Hint 1: High concentration
+    if (curMetrics.largestPct > 35) {
+      hints.push({
+        icon: "📊",
+        text: `Your largest position (${curMetrics.largestSym}) is ${curMetrics.largestPct.toFixed(0)}% of the portfolio. Trimming it to 30% and redeploying into a diversifier would reduce concentration risk.`,
+      });
+    }
+    // Hint 2: High correlation
+    if (curMetrics.avgCorr != null && curMetrics.avgCorr > 0.7) {
+      hints.push({
+        icon: "🔗",
+        text: `Your holdings move together (avg SPY correlation ${curMetrics.avgCorr.toFixed(2)}). Adding a low-correlation asset (e.g., a defensive sector or bond ETF) would meaningfully improve diversification.`,
+      });
+    }
+    // Hint 3: Few positions
+    if (curMetrics.count <= 4) {
+      hints.push({
+        icon: "🎯",
+        text: `Only ${curMetrics.count} positions — high single-stock risk. Adding 1-2 positions in a different sector smooths returns without complicating your thesis.`,
+      });
+    }
+    // Hint 4: High cash idle
+    if (cashRemaining != null && totalAccountValue && cashRemaining / totalAccountValue > 0.3) {
+      hints.push({
+        icon: "💰",
+        text: `You have $${cashRemaining.toFixed(0)} cash (${((cashRemaining / totalAccountValue) * 100).toFixed(0)}% of account). Try adding 5% positions in the suggestions above to simulate deployment.`,
+      });
+    }
+    return hints.slice(0, 3); // max 3 hints
+  };
+  const optimizationHints = buildOptimizationHints();
+
+  // Adjusted color logic
+  const lightColor = (deltaSign) => deltaSign > 0 ? "#0a6e44" : deltaSign < 0 ? "#a3203a" : "#5a6573";
 
   const innerContent = (
     <>
-      {/* Holdings editor */}
+      {/* ===== Current State Recap ===== */}
+      <div style={{ padding: "10px 14px", background: "#fafaf7", borderRadius: 3, marginBottom: 12, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
+        <strong style={{ color: "#1a1f2c" }}>Current portfolio:</strong> ${curMetrics.total.toFixed(0)} invested across {curMetrics.count} positions · largest: <span className="mono">{curMetrics.largestSym}</span> at {curMetrics.largestPct.toFixed(0)}% · bad-day risk <span className="mono" style={{ color: "#c4314b" }}>−${curMetrics.totalVar.toFixed(0)}</span>
+      </div>
+
+      {/* ===== Adjust Current Holdings ===== */}
       <div style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "#5a6573" }}>Hypothetical Holdings</span>
-          <button onClick={reset} style={{ fontSize: 10, padding: "3px 8px", cursor: "pointer", border: "1px solid #e6e3db", background: "#fff", color: "#5a6573", borderRadius: 2 }}>Reset to current</button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c" }}>Adjust Current Holdings</span>
+          {hasChanges && <button onClick={reset} style={{ fontSize: 10, padding: "3px 10px", cursor: "pointer", border: "1px solid #c4314b", background: "#fff", color: "#c4314b", borderRadius: 2 }}>Reset all changes</button>}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {hypothetical.map((p, i) => {
+          {positions.map((p) => {
+            const effectiveShares = adjustments[p.symbol] != null ? adjustments[p.symbol] : p.shares;
             const curValue = (p.shares || 0) * (p.currentPrice || 0);
-            const hypValue = (p.hypShares || 0) * (p.currentPrice || 0);
-            const deltaShares = (p.hypShares || 0) - (p.shares || 0);
+            const hypValue = effectiveShares * (p.currentPrice || 0);
             const deltaValue = hypValue - curValue;
-            const valueColor = deltaValue > 0 ? "#0a6e44" : deltaValue < 0 ? "#a3203a" : "#5a6573";
+            const changed = Math.abs(deltaValue) > 1;
             return (
-              <div key={p.symbol + i} style={{ padding: "6px 10px", background: p.isNew ? "#fff4d0" : "#fff", border: "1px solid #e6e3db", borderRadius: 2, display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", minWidth: 50 }}>
-                  {p.symbol}{p.isNew && <span style={{ fontSize: 9, color: "#a06010", marginLeft: 4 }}>(new)</span>}
-                </span>
-                <span style={{ fontSize: 10, color: "#8a93a3", minWidth: 70 }}>
-                  ${p.currentPrice?.toFixed(2) ?? "—"}
-                </span>
-                <span style={{ fontSize: 10, color: "#5a6573", minWidth: 80 }}>
-                  current: <span className="mono">{p.shares?.toFixed(2) ?? "0"}</span> sh
-                </span>
-                <span style={{ fontSize: 10, color: "#5a6573" }}>hyp:</span>
-                <input
-                  type="number"
-                  value={p.hypShares}
-                  onChange={(e) => updateShares(i, e.target.value)}
-                  step="0.01"
-                  min="0"
-                  style={{ width: 70, fontSize: 11, padding: "3px 6px", border: "1px solid #e6e3db", borderRadius: 2, fontFamily: "'IBM Plex Mono', monospace" }}
-                />
-                <span style={{ fontSize: 10, color: valueColor, fontWeight: 600, minWidth: 80, marginLeft: "auto" }}>
+              <div key={p.symbol} style={{ padding: "8px 12px", background: changed ? "#fff8e1" : "#fff", border: `1px solid ${changed ? "#d4a017" : "#e6e3db"}`, borderRadius: 2, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c", minWidth: 55 }}>{p.symbol}</span>
+                <span style={{ fontSize: 11, color: "#1a1f2c", minWidth: 90, fontFamily: "'IBM Plex Mono', monospace" }}>
                   ${hypValue.toFixed(0)}
-                  {deltaValue !== 0 && (
-                    <span style={{ fontSize: 9, marginLeft: 4 }}>({deltaValue > 0 ? "+" : ""}${deltaValue.toFixed(0)})</span>
-                  )}
                 </span>
-                {p.isNew && (
-                  <button onClick={() => removeHypNew(i)} style={{ fontSize: 10, padding: "1px 6px", cursor: "pointer", border: "1px solid #a3203a", background: "#fff", color: "#a3203a", borderRadius: 2 }}>×</button>
+                {changed && (
+                  <span style={{ fontSize: 10, color: lightColor(deltaValue), fontWeight: 600 }}>
+                    {deltaValue > 0 ? "+" : "−"}${Math.abs(deltaValue).toFixed(0)}
+                  </span>
                 )}
+                <span style={{ flex: 1 }} />
+                <button onClick={() => adjustByDollars(p.symbol, p.currentPrice, -250)} disabled={hypValue < 250} style={{ fontSize: 10, padding: "3px 8px", cursor: hypValue < 250 ? "not-allowed" : "pointer", border: "1px solid #c4314b", background: "#fff", color: hypValue < 250 ? "#ccc" : "#c4314b", borderRadius: 2, fontWeight: 600 }}>− $250</button>
+                <button onClick={() => adjustByDollars(p.symbol, p.currentPrice, 250)} style={{ fontSize: 10, padding: "3px 8px", cursor: "pointer", border: "1px solid #0a8554", background: "#fff", color: "#0a8554", borderRadius: 2, fontWeight: 600 }}>+ $250</button>
+                {changed && (
+                  <button onClick={() => setAdjustments((a) => { const next = { ...a }; delete next[p.symbol]; return next; })} style={{ fontSize: 9, padding: "2px 6px", cursor: "pointer", border: "none", background: "transparent", color: "#5a6573", textDecoration: "underline" }}>undo</button>
+                )}
+                <span style={{ fontSize: 9, color: "#8a93a3", minWidth: 70 }}>
+                  {effectiveShares.toFixed(2)} sh @ ${p.currentPrice?.toFixed(2)}
+                </span>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Add new position */}
-      <div style={{ marginBottom: 12, padding: "8px 10px", background: "#f9f7f1", border: "1px dashed #e6e3db", borderRadius: 2 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "#5a6573", marginBottom: 4 }}>Add Hypothetical Position</div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <input type="text" placeholder="Symbol (e.g. MU)" value={addingSym} onChange={(e) => setAddingSym(e.target.value)} style={{ width: 120, fontSize: 11, padding: "4px 8px", border: "1px solid #e6e3db", borderRadius: 2, textTransform: "uppercase" }} />
-          <input type="number" placeholder="Shares" value={addingShares} onChange={(e) => setAddingShares(e.target.value)} step="0.01" min="0" style={{ width: 80, fontSize: 11, padding: "4px 8px", border: "1px solid #e6e3db", borderRadius: 2, fontFamily: "'IBM Plex Mono', monospace" }} />
-          <button onClick={addNew} disabled={addLoading} style={{ fontSize: 11, padding: "4px 12px", cursor: addLoading ? "default" : "pointer", border: "1px solid #7ba2cc", background: addLoading ? "#e6e3db" : "#7ba2cc", color: "#fff", borderRadius: 2, fontWeight: 600 }}>
-            {addLoading ? "..." : "Add"}
+      {/* ===== Try Adding (curated suggestions) ===== */}
+      <div style={{ marginBottom: 12, padding: "10px 12px", background: "#f9f7f1", border: "1px dashed #e6e3db", borderRadius: 2 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Try Adding (5% position by default)</div>
+        {sameThemeCandidates.length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>Same theme (extends AI/semis thesis):</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {sameThemeCandidates.map((sym) => (
+                <button key={sym} onClick={() => addSuggestion(sym)} disabled={addLoading[sym]} style={{ fontSize: 11, padding: "4px 10px", cursor: addLoading[sym] ? "default" : "pointer", border: "1px solid #7ba2cc", background: "#fff", color: "#1a4c80", borderRadius: 2, fontWeight: 600 }}>
+                  {addLoading[sym] ? "..." : `+ 5% ${sym}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {diversifierCandidates.length > 0 && (
+          <div>
+            <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>Diversifiers (different growth drivers):</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {diversifierCandidates.map((sym) => (
+                <button key={sym} onClick={() => addSuggestion(sym)} disabled={addLoading[sym]} style={{ fontSize: 11, padding: "4px 10px", cursor: addLoading[sym] ? "default" : "pointer", border: "1px solid #7ba2cc", background: "#fff", color: "#1a4c80", borderRadius: 2, fontWeight: 600 }}>
+                  {addLoading[sym] ? "..." : `+ 5% ${sym}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Show added positions inline with +/- controls */}
+        {additions.length > 0 && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px dashed #d6d2c7" }}>
+            <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>Hypothetical additions:</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {additions.map((a) => {
+                const value = (a.shares || 0) * (a.currentPrice || 0);
+                return (
+                  <div key={a.symbol} style={{ padding: "6px 10px", background: "#fff8e1", border: "1px solid #d4a017", borderRadius: 2, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#a06010", minWidth: 55 }}>{a.symbol}</span>
+                    <span style={{ fontSize: 11, color: "#1a1f2c", minWidth: 90, fontFamily: "'IBM Plex Mono', monospace" }}>${value.toFixed(0)}</span>
+                    <span style={{ flex: 1 }} />
+                    <button onClick={() => adjustAdditionByDollars(a.symbol, a.currentPrice, -250)} disabled={value < 250} style={{ fontSize: 10, padding: "3px 8px", cursor: value < 250 ? "not-allowed" : "pointer", border: "1px solid #c4314b", background: "#fff", color: value < 250 ? "#ccc" : "#c4314b", borderRadius: 2 }}>− $250</button>
+                    <button onClick={() => adjustAdditionByDollars(a.symbol, a.currentPrice, 250)} style={{ fontSize: 10, padding: "3px 8px", cursor: "pointer", border: "1px solid #0a8554", background: "#fff", color: "#0a8554", borderRadius: 2 }}>+ $250</button>
+                    <button onClick={() => removeAddition(a.symbol)} style={{ fontSize: 10, padding: "3px 8px", cursor: "pointer", border: "1px solid #c4314b", background: "#fff", color: "#c4314b", borderRadius: 2 }}>Remove</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ===== Plain English Impact ===== */}
+      {impactBullets && impactBullets.length > 0 && (
+        <div style={{ marginBottom: 12, padding: "12px 14px", background: "#fff", border: "2px solid #1a4c80", borderRadius: 3 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#1a4c80", marginBottom: 8 }}>If you make these changes:</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.7 }}>
+            {impactBullets.map((b, i) => (
+              <li key={i} style={{ color: b.color }}>{b.text}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ===== Optimization Hints ===== */}
+      {optimizationHints.length > 0 && (
+        <div style={{ marginBottom: 12, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 2 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", marginBottom: 6 }}>Optimization hints based on your portfolio gaps:</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {optimizationHints.map((h, i) => (
+              <div key={i} style={{ fontSize: 11, color: "#5a6573", lineHeight: 1.5, paddingLeft: 22, textIndent: -22 }}>
+                <span style={{ marginRight: 6 }}>{h.icon}</span>
+                {h.text}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===== Show all metrics toggle ===== */}
+      {hasChanges && (
+        <div style={{ marginBottom: 12 }}>
+          <button onClick={() => setShowAllMetrics((s) => !s)} style={{ fontSize: 10, padding: "4px 10px", cursor: "pointer", border: "1px solid #e6e3db", background: "#fff", color: "#5a6573", borderRadius: 2 }}>
+            {showAllMetrics ? "Hide" : "Show"} full metrics table
           </button>
-          {addError && <span style={{ fontSize: 10, color: "#a3203a" }}>{addError}</span>}
+          {showAllMetrics && hypMetrics && (
+            <div style={{ marginTop: 8, padding: "10px 12px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1.2fr 1.2fr 1fr", gap: 4, fontSize: 10 }}>
+                <div style={{ color: "#8a93a3", fontWeight: 600 }}>Metric</div>
+                <div style={{ color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Current</div>
+                <div style={{ color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Hypothetical</div>
+                <div style={{ color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Δ</div>
+                {[
+                  ["Total invested", `$${curMetrics.total.toFixed(0)}`, `$${hypMetrics.total.toFixed(0)}`, hypMetrics.total - curMetrics.total, 0],
+                  ["VaR (1d)", `−${curMetrics.varPct.toFixed(2)}%`, `−${hypMetrics.varPct.toFixed(2)}%`, hypMetrics.varPct - curMetrics.varPct, -1],
+                  ["CVaR (tail)", `−${curMetrics.cvarPct.toFixed(2)}%`, `−${hypMetrics.cvarPct.toFixed(2)}%`, hypMetrics.cvarPct - curMetrics.cvarPct, -1],
+                  ["Largest position", `${curMetrics.largestPct.toFixed(0)}%`, `${hypMetrics.largestPct.toFixed(0)}%`, hypMetrics.largestPct - curMetrics.largestPct, -1],
+                  ["Top-3 concentration", `${curMetrics.top3Pct.toFixed(0)}%`, `${hypMetrics.top3Pct.toFixed(0)}%`, hypMetrics.top3Pct - curMetrics.top3Pct, -1],
+                  ...(curMetrics.avgCorr != null && hypMetrics.avgCorr != null ? [["Avg SPY corr", curMetrics.avgCorr.toFixed(2), hypMetrics.avgCorr.toFixed(2), hypMetrics.avgCorr - curMetrics.avgCorr, -1]] : []),
+                  ["Beta", curMetrics.beta.toFixed(2), hypMetrics.beta.toFixed(2), hypMetrics.beta - curMetrics.beta, 0],
+                  ["Position count", curMetrics.count, hypMetrics.count, hypMetrics.count - curMetrics.count, 0],
+                ].map(([label, cur, hyp, delta, betterDir], i) => {
+                  const dColor = betterDir === 0 ? "#5a6573" : (betterDir === -1 ? (delta < 0 ? "#0a6e44" : delta > 0 ? "#a3203a" : "#5a6573") : (delta > 0 ? "#0a6e44" : delta < 0 ? "#a3203a" : "#5a6573"));
+                  return (
+                    <React.Fragment key={i}>
+                      <div style={{ fontSize: 10, color: "#1a1f2c", paddingTop: 3, borderTop: "1px solid #efece5" }}>{label}</div>
+                      <div style={{ fontSize: 10, color: "#5a6573", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 3, borderTop: "1px solid #efece5" }}>{cur}</div>
+                      <div style={{ fontSize: 10, color: dColor, fontWeight: 600, textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 3, borderTop: "1px solid #efece5" }}>{hyp}</div>
+                      <div style={{ fontSize: 10, color: dColor, textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 3, borderTop: "1px solid #efece5" }}>{typeof delta === "number" ? `${delta > 0 ? "+" : ""}${delta.toFixed(2)}` : "—"}</div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Side-by-side comparison */}
-      <div style={{ marginTop: 14, padding: "10px 12px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Risk Metrics · Side-by-Side</div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "2fr 1.2fr 1.2fr 1fr", gap: 4, alignItems: "center" }}>
-          <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600 }}>Metric</div>
-          <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Current</div>
-          <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Hypothetical</div>
-          {!isMobile && <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Δ</div>}
-          {rows.map((r, i) => {
-            const dColor = deltaColor(r.curRaw, r.hypRaw, r.betterDir);
-            const delta = (r.curRaw != null && r.hypRaw != null) ? r.hypRaw - r.curRaw : null;
-            const deltaStr = delta != null ? `${delta > 0 ? "+" : ""}${r.fmt(delta).replace("$-", "-$").replace("--", "-")}` : "—";
-            return (
-              <React.Fragment key={i}>
-                <div style={{ fontSize: 11, color: "#1a1f2c", paddingTop: 4, borderTop: "1px solid #efece5" }}>{r.label}</div>
-                <div style={{ fontSize: 11, color: "#5a6573", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 4, borderTop: "1px solid #efece5" }}>{r.cur}</div>
-                <div style={{ fontSize: 11, color: dColor, fontWeight: 600, textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 4, borderTop: "1px solid #efece5" }}>{r.hyp}</div>
-                {!isMobile && (
-                  <div style={{ fontSize: 10, color: dColor, textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 4, borderTop: "1px solid #efece5" }}>{deltaStr}</div>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 10, padding: "6px 10px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, borderTop: "1px solid #efece5" }}>
-        Same VaR/CVaR/correlation math as the rest of the dashboard. Green Δ = lower risk; red Δ = higher risk. "Largest position" and "Top-3 concentration" use lower-is-better. Beta and total invested have no inherent better direction. This is a what-if calculator — your actual saved portfolio is unchanged.
+      <div style={{ marginTop: 6, padding: "6px 10px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, borderTop: "1px solid #efece5" }}>
+        Same VaR/CVaR/correlation math as the rest of the dashboard. Your real portfolio is unchanged. Click "Reset all changes" to clear adjustments. Suggestions are curated from your watchlist; tickers not in your watchlist can't be simulated yet.
       </div>
     </>
   );
@@ -4729,7 +4984,7 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
   if (embedded) return innerContent;
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
-      <div className="panel-head"><span className="panel-title">Portfolio Simulator · What-If Position Adjuster</span></div>
+      <div className="panel-head"><span className="panel-title">Portfolio Simulation</span></div>
       {innerContent}
     </div>
   );
