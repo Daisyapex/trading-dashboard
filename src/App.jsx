@@ -5162,22 +5162,22 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         <span style={{ fontSize: 10, color: "#5a6573" }}>Howard Marks-style: wider violin = more uncertain outcome</span>
       </div>
 
-      {/* ===== Portfolio Summary Card — ordered: Invested · Expected · S&P vs You · 68% range · 95% range ===== */}
+      {/* ===== Portfolio Summary Card — Invested · Expected · S&P vs You ===== */}
       <div style={{ marginBottom: 12, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 3 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Portfolio summary at a glance:</div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 10 }}>
           {/* 1) Invested */}
           <div title="Total $ invested across all positions">
             <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Invested</div>
-            <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: "#1a1f2c" }}>${totalInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "#1a1f2c" }}>${totalInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           </div>
           {/* 2) Expected return */}
           <div title="Expected annual return: weighted avg of position CAPM expected returns">
             <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Expected return / yr</div>
-            <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: portfolioExpectedDollar >= 0 ? "#0a8554" : "#c4314b" }}>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: portfolioExpectedDollar >= 0 ? "#0a8554" : "#c4314b" }}>
               {fmt$signed(portfolioExpectedDollar)}
             </div>
-            <div style={{ fontSize: 10, color: "#5a6573" }}>{portfolioExpectedReturnPct >= 0 ? "+" : ""}{portfolioExpectedReturnPct.toFixed(1)}%</div>
+            <div style={{ fontSize: 11, color: "#5a6573" }}>{portfolioExpectedReturnPct >= 0 ? "+" : ""}{portfolioExpectedReturnPct.toFixed(1)}%</div>
           </div>
           {/* 3) S&P vs You */}
           <div title="Yours vs S&P 500 expected return (annual)">
@@ -5188,30 +5188,8 @@ function ReturnRiskDistribution({ positions, isMobile }) {
             <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: portfolioVsSpDollar >= 0 ? "#0a8554" : "#c4314b" }}>
               You {fmt$signed(portfolioExpectedDollar)} ({portfolioExpectedReturnPct >= 0 ? "+" : ""}{portfolioExpectedReturnPct.toFixed(1)}%)
             </div>
-            <div style={{ fontSize: 10, color: portfolioVsSpDollar >= 0 ? "#0a8554" : "#c4314b", fontWeight: 600 }}>
+            <div style={{ fontSize: 11, color: portfolioVsSpDollar >= 0 ? "#0a8554" : "#c4314b", fontWeight: 600 }}>
               Diff: {fmt$signed(portfolioVsSpDollar)} ({portfolioVsSpPct >= 0 ? "+" : ""}{portfolioVsSpPct.toFixed(1)}pp)
-            </div>
-          </div>
-          {/* 4) 68% range — expected return min/max with $ and % */}
-          <div title="68% confidence range (±1σ) for annual return">
-            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>68% range (±1σ)</div>
-            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#c4314b" }}>
-              {fmt$signed(portfolioRange68Low)} ({(portfolioExpectedReturnPct - portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct - portfolioStdPct).toFixed(1)}%)
-            </div>
-            <div style={{ fontSize: 10, color: "#8a93a3" }}>to</div>
-            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#0a8554" }}>
-              {fmt$signed(portfolioRange68High)} ({(portfolioExpectedReturnPct + portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct + portfolioStdPct).toFixed(1)}%)
-            </div>
-          </div>
-          {/* 5) 95% range — expected return min/max with $ and % */}
-          <div title="95% confidence range (±2σ) — extreme bad/good year">
-            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>95% range (±2σ)</div>
-            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#c4314b" }}>
-              {fmt$signed(portfolioRange95Low)} ({(portfolioExpectedReturnPct - 2 * portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct - 2 * portfolioStdPct).toFixed(1)}%)
-            </div>
-            <div style={{ fontSize: 10, color: "#8a93a3" }}>to</div>
-            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#0a8554" }}>
-              {fmt$signed(portfolioRange95High)} ({(portfolioExpectedReturnPct + 2 * portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct + 2 * portfolioStdPct).toFixed(1)}%)
             </div>
           </div>
         </div>
@@ -5313,7 +5291,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         </div>
 
         <div style={{ marginTop: 8, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-          <strong>Two views:</strong> The top 5 cards show statistical confidence ranges from your var95 data. The bottom 3 show <em>fundamentals-grounded</em> scenarios: "normal bear" uses P/E multiple compression to sector typical, "crisis bear" uses sector bear-case P/E or historical max drawdown, "best year" uses sector bull-year averages. Use the realistic scenarios for decision-making, statistical ranges for understanding the distribution of normal outcomes.
+          Expected return uses CAPM (risk-free 4% + β × market premium 6%). Realistic scenarios use P/E compression to sector benchmarks + historical max drawdown — more grounded than pure statistical bounds for liquid mega-caps.
         </div>
       </div>
 
