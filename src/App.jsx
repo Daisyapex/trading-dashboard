@@ -5072,6 +5072,39 @@ function ReturnRiskDistribution({ positions, isMobile }) {
   const portfolioBestDollar = data.reduce((s, d) => s + d.maxUpsideDollar, 0);
   const portfolioBestPct = (portfolioBestDollar / totalInvested) * 100;
 
+  // ===== Sector breakdown — sectors move TOGETHER, so this matters for risk =====
+  // Same-sector positions have ~0.75-0.80 correlation; a sector selloff hits all of them
+  // Aggregate $ and % per sector using the realistic PE-based scenarios
+  const sectorAgg = {};
+  data.forEach((d) => {
+    if (!sectorAgg[d.sectorKey]) {
+      sectorAgg[d.sectorKey] = {
+        key: d.sectorKey,
+        label: d.sector,
+        invested: 0,
+        realisticWorstDollar: 0,
+        severeBearDollar: 0,
+        bestDollar: 0,
+        tickers: [],
+      };
+    }
+    const s = sectorAgg[d.sectorKey];
+    s.invested += d.value;
+    s.realisticWorstDollar += d.realisticWorstDollar;
+    s.severeBearDollar += d.severeBearDollar;
+    s.bestDollar += d.maxUpsideDollar;
+    s.tickers.push(d.symbol);
+  });
+  const sectorBreakdown = Object.values(sectorAgg)
+    .map((s) => ({
+      ...s,
+      pct: (s.invested / totalInvested) * 100,
+      realisticWorstPct: (s.realisticWorstDollar / s.invested) * 100,
+      severeBearPct: (s.severeBearDollar / s.invested) * 100,
+      bestPct: (s.bestDollar / s.invested) * 100,
+    }))
+    .sort((a, b) => b.invested - a.invested);
+
   // Sector color palette
   const sectorColors = {
     semi: "#d4a017",
@@ -5211,6 +5244,71 @@ function ReturnRiskDistribution({ positions, isMobile }) {
               </div>
               <div style={{ fontSize: 10, color: "#0a8554" }}>+{portfolioBestPct.toFixed(1)}%</div>
             </div>
+          </div>
+        </div>
+
+        {/* ===== Sector breakdown — same-sector positions move together ===== */}
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed #d6d2c7" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#1a1f2c", marginBottom: 6, letterSpacing: "0.04em" }}>
+            Sector breakdown · positions in same sector move together (~0.75-0.80 correlation)
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: isMobile ? 380 : 560 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                  <th style={{ padding: "5px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
+                  <th style={{ padding: "5px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Tickers</th>
+                  <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Invested $</th>
+                  <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>% Port</th>
+                  <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Sector selloff = P/E compresses to sector typical 10-yr P/E">Sector selloff</th>
+                  <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Crisis bear = P/E to sector bear or historical max drawdown">Crisis</th>
+                  <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Sector typical bull-year return">Best</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sectorBreakdown.map((s) => {
+                  const sectorColor = sectorColors[s.key] || "#5a6573";
+                  return (
+                    <tr key={s.key} style={{ borderBottom: "1px dotted #efece5" }}>
+                      <td style={{ padding: "5px 6px", fontSize: 11, color: "#1a1f2c" }}>
+                        <span style={{ display: "inline-block", width: 8, height: 8, background: sectorColor, borderRadius: 1, marginRight: 5, verticalAlign: "middle" }} />
+                        {s.label}
+                      </td>
+                      <td className="mono" style={{ padding: "5px 6px", fontSize: 10, color: "#5a6573" }}>{s.tickers.join(", ")}</td>
+                      <td className="mono" style={{ padding: "5px 6px", textAlign: "right", fontWeight: 600, color: "#1a1f2c" }}>${s.invested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                      <td className="mono" style={{ padding: "5px 6px", textAlign: "right", fontWeight: 600 }}>{s.pct.toFixed(0)}%</td>
+                      <td className="mono" style={{ padding: "5px 6px", textAlign: "right", fontSize: 10, color: "#c4314b", fontWeight: 600 }}>
+                        {fmt$signed(s.realisticWorstDollar)} <span style={{ fontSize: 9 }}>({s.realisticWorstPct.toFixed(0)}%)</span>
+                      </td>
+                      <td className="mono" style={{ padding: "5px 6px", textAlign: "right", fontSize: 10, color: "#a3203a", fontWeight: 500 }}>
+                        {fmt$signed(s.severeBearDollar)} <span style={{ fontSize: 9 }}>({s.severeBearPct.toFixed(0)}%)</span>
+                      </td>
+                      <td className="mono" style={{ padding: "5px 6px", textAlign: "right", fontSize: 10, color: "#0a8554", fontWeight: 600 }}>
+                        +{fmt$signed(s.bestDollar).replace("+", "").replace("-", "-")} <span style={{ fontSize: 9 }}>(+{s.bestPct.toFixed(0)}%)</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr style={{ borderTop: "2px solid #1a1f2c", fontWeight: 700 }}>
+                  <td style={{ padding: "6px 6px", fontSize: 11 }}>Total</td>
+                  <td style={{ padding: "6px 6px" }}></td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>${totalInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>100%</td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", fontSize: 10, color: "#c4314b" }}>
+                    {fmt$signed(portfolioRealisticWorstDollar)} <span style={{ fontSize: 9 }}>({portfolioRealisticWorstPct.toFixed(0)}%)</span>
+                  </td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", fontSize: 10, color: "#a3203a" }}>
+                    {fmt$signed(portfolioSevereBearDollar)} <span style={{ fontSize: 9 }}>({portfolioSevereBearPct.toFixed(0)}%)</span>
+                  </td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", fontSize: 10, color: "#0a8554" }}>
+                    +${portfolioBestDollar.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span style={{ fontSize: 9 }}>(+{portfolioBestPct.toFixed(0)}%)</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+            <strong>Key insight:</strong> When one position in a sector sells off, the others typically follow — same-sector pair correlation is ~0.75-0.80, far higher than the ~0.30-0.45 you'd get from cross-sector positions (e.g., tech ↔ healthcare). The "Sector selloff" column shows what happens when each sector's P/E compresses to its 10-yr typical (a normal bear, not crisis). For decision-making: if your biggest "Sector selloff" $ is concentrated in one sector, that's your largest single risk — adding cross-sector diversifiers reduces it more than adding more positions in the same sector.
           </div>
         </div>
 
