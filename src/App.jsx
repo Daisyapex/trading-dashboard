@@ -2821,6 +2821,21 @@ function RiskHelper({ isMobile, macro }) {
         </CollapsibleSection>
       )}
 
+      {/* Portfolio Simulator — what-if position adjuster */}
+      {enriched.length > 0 && (
+        <CollapsibleSection title="Portfolio Simulator · What-If Position Adjuster" subtitle="Adjust shares & see how risk metrics shift — your real portfolio is unchanged" defaultOpen={false}>
+          <PortfolioSimulatorPanel
+            positions={enriched}
+            totalAccountValue={totalAccountValue}
+            cashRemaining={cashRemaining}
+            macro={macro}
+            isMobile={isMobile}
+            embedded
+            fetchRiskFor={fetchRiskFor}
+          />
+        </CollapsibleSection>
+      )}
+
       {/* Valuation Risk — collapsed, deep dive on PE compression */}
       {enriched.length > 0 && enriched.some((p) => p.pe != null) && (
         <CollapsibleSection title="Valuation Risk · If P/E Compresses" subtitle="3 sector-aware scenarios" defaultOpen={false}>
@@ -4500,6 +4515,221 @@ function KillSwitchPanel({ positions, totalValue, macro, isMobile, embedded }) {
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
       <div className="panel-head"><span className="panel-title">Kill Switch · Pre-Committed Risk Gates</span></div>
+      {innerContent}
+    </div>
+  );
+}
+
+// ============================================================
+// PORTFOLIO SIMULATOR ("What-If")
+// Lets you adjust hypothetical position sizes, add new positions, and see
+// side-by-side comparison of portfolio risk metrics. Uses the same VaR/CVaR/
+// correlation math as the rest of the dashboard. No fictional alpha numbers.
+// ============================================================
+function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, macro, isMobile, embedded, fetchRiskFor }) {
+  // hypothetical[i] = { ...position, hypShares, isNew }
+  const [hypothetical, setHypothetical] = useState(() =>
+    positions.map((p) => ({ ...p, hypShares: p.shares, isNew: false }))
+  );
+  const [addingSym, setAddingSym] = useState("");
+  const [addingShares, setAddingShares] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
+  const [addError, setAddError] = useState("");
+
+  // If parent positions change, reset
+  useEffect(() => {
+    setHypothetical(positions.map((p) => ({ ...p, hypShares: p.shares, isNew: false })));
+  }, [positions]);
+
+  const reset = () => {
+    setHypothetical(positions.map((p) => ({ ...p, hypShares: p.shares, isNew: false })));
+    setAddError(""); setAddingSym(""); setAddingShares("");
+  };
+
+  const updateShares = (idx, value) => {
+    const val = value === "" ? 0 : parseFloat(value);
+    if (isNaN(val) || val < 0) return;
+    setHypothetical((h) => h.map((p, i) => i === idx ? { ...p, hypShares: val } : p));
+  };
+  const removeHypNew = (idx) => {
+    setHypothetical((h) => h.filter((_, i) => i !== idx));
+  };
+
+  const addNew = async () => {
+    const sym = addingSym.trim().toUpperCase();
+    const sh = parseFloat(addingShares);
+    if (!sym || isNaN(sh) || sh <= 0) { setAddError("Enter a ticker and a positive share count"); return; }
+    if (hypothetical.some((p) => p.symbol === sym)) {
+      setAddError(`${sym} is already in your portfolio above — adjust its shares there instead`);
+      return;
+    }
+    setAddLoading(true); setAddError("");
+    const risk = await fetchRiskFor(sym);
+    setAddLoading(false);
+    if (!risk) { setAddError(`No risk data found for ${sym}. Try a ticker from your watchlist.`); return; }
+    setHypothetical((h) => [...h, {
+      symbol: sym, shares: 0, hypShares: sh, ...risk, isNew: true, holding: true,
+    }]);
+    setAddingSym(""); setAddingShares("");
+  };
+
+  // ===== Metrics =====
+  const computeMetrics = (posList, sharesField) => {
+    const total = posList.reduce((s, p) => s + ((p[sharesField] || 0) * (p.currentPrice || 0)), 0);
+    if (!total) return null;
+    let totalVar = 0, totalCvar = 0, betaSum = 0, corrSum = 0, corrCount = 0;
+    const byValue = [];
+    for (const p of posList) {
+      const value = (p[sharesField] || 0) * (p.currentPrice || 0);
+      if (!value) continue;
+      byValue.push({ symbol: p.symbol, value });
+      if (p.var95 != null) totalVar += value * (p.var95 / 100);
+      if (p.cvar95 != null) totalCvar += value * (p.cvar95 / 100);
+      if (p.beta != null) betaSum += value * p.beta;
+      else betaSum += value; // assume beta=1 if missing
+      if (p.correlations?.SPY != null) { corrSum += p.correlations.SPY; corrCount++; }
+    }
+    byValue.sort((a, b) => b.value - a.value);
+    const largestPct = byValue[0] ? (byValue[0].value / total) * 100 : 0;
+    const top3 = byValue.slice(0, 3).reduce((s, p) => s + p.value, 0);
+    return {
+      total, totalVar, varPct: (totalVar / total) * 100,
+      totalCvar, cvarPct: (totalCvar / total) * 100,
+      largestPct, largestSym: byValue[0]?.symbol,
+      top3Pct: (top3 / total) * 100,
+      avgCorr: corrCount > 0 ? corrSum / corrCount : null,
+      beta: betaSum / total,
+      count: byValue.length,
+    };
+  };
+
+  const curMetrics = useMemo(() => computeMetrics(hypothetical, "shares"), [hypothetical]);
+  const hypMetrics = useMemo(() => computeMetrics(hypothetical, "hypShares"), [hypothetical]);
+
+  // Hypothetical cash assuming user keeps total account value fixed
+  const hypCash = (totalAccountValue && hypMetrics) ? Math.max(0, totalAccountValue - hypMetrics.total) : null;
+
+  // ===== Comparison rows =====
+  // betterDir: -1 = lower is better, 0 = neutral, +1 = higher is better
+  const rows = [
+    { label: "Total invested", cur: curMetrics ? `$${curMetrics.total.toFixed(0)}` : "—", hyp: hypMetrics ? `$${hypMetrics.total.toFixed(0)}` : "—", curRaw: curMetrics?.total, hypRaw: hypMetrics?.total, betterDir: 0, fmt: (v) => `$${v.toFixed(0)}` },
+    cashRemaining != null ? { label: "Cash remaining", cur: `$${cashRemaining.toFixed(0)}`, hyp: hypCash != null ? `$${hypCash.toFixed(0)}` : "—", curRaw: cashRemaining, hypRaw: hypCash, betterDir: 0, fmt: (v) => `$${v.toFixed(0)}` } : null,
+    { label: "Portfolio VaR (1d, 95%)", cur: curMetrics ? `-${curMetrics.varPct.toFixed(2)}%` : "—", hyp: hypMetrics ? `-${hypMetrics.varPct.toFixed(2)}%` : "—", curRaw: curMetrics?.varPct, hypRaw: hypMetrics?.varPct, betterDir: -1, fmt: (v) => `-${v.toFixed(2)}%` },
+    { label: "Portfolio CVaR (tail)", cur: curMetrics ? `-${curMetrics.cvarPct.toFixed(2)}%` : "—", hyp: hypMetrics ? `-${hypMetrics.cvarPct.toFixed(2)}%` : "—", curRaw: curMetrics?.cvarPct, hypRaw: hypMetrics?.cvarPct, betterDir: -1, fmt: (v) => `-${v.toFixed(2)}%` },
+    { label: "Largest position", cur: curMetrics?.largestSym ? `${curMetrics.largestPct.toFixed(0)}% (${curMetrics.largestSym})` : "—", hyp: hypMetrics?.largestSym ? `${hypMetrics.largestPct.toFixed(0)}% (${hypMetrics.largestSym})` : "—", curRaw: curMetrics?.largestPct, hypRaw: hypMetrics?.largestPct, betterDir: -1, fmt: (v) => `${v.toFixed(0)}%` },
+    { label: "Top-3 concentration", cur: curMetrics ? `${curMetrics.top3Pct.toFixed(0)}%` : "—", hyp: hypMetrics ? `${hypMetrics.top3Pct.toFixed(0)}%` : "—", curRaw: curMetrics?.top3Pct, hypRaw: hypMetrics?.top3Pct, betterDir: -1, fmt: (v) => `${v.toFixed(0)}%` },
+    (curMetrics?.avgCorr != null && hypMetrics?.avgCorr != null) ? { label: "Avg SPY correlation", cur: curMetrics.avgCorr.toFixed(2), hyp: hypMetrics.avgCorr.toFixed(2), curRaw: curMetrics.avgCorr, hypRaw: hypMetrics.avgCorr, betterDir: -1, fmt: (v) => v.toFixed(2) } : null,
+    (curMetrics && hypMetrics) ? { label: "Portfolio beta", cur: curMetrics.beta.toFixed(2), hyp: hypMetrics.beta.toFixed(2), curRaw: curMetrics.beta, hypRaw: hypMetrics.beta, betterDir: 0, fmt: (v) => v.toFixed(2) } : null,
+    { label: "Number of positions", cur: curMetrics?.count ?? "—", hyp: hypMetrics?.count ?? "—", curRaw: curMetrics?.count, hypRaw: hypMetrics?.count, betterDir: +1, fmt: (v) => String(v) },
+  ].filter(Boolean);
+
+  const deltaColor = (cur, hyp, betterDir) => {
+    if (cur == null || hyp == null) return "#8a93a3";
+    if (Math.abs(hyp - cur) < 0.001 * Math.abs(cur || 1)) return "#8a93a3";
+    if (betterDir === 0) return "#5a6573";
+    const isBetter = (betterDir === -1 && hyp < cur) || (betterDir === +1 && hyp > cur);
+    return isBetter ? "#0a6e44" : "#a3203a";
+  };
+
+  const innerContent = (
+    <>
+      {/* Holdings editor */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#5a6573" }}>Hypothetical Holdings</span>
+          <button onClick={reset} style={{ fontSize: 10, padding: "3px 8px", cursor: "pointer", border: "1px solid #e6e3db", background: "#fff", color: "#5a6573", borderRadius: 2 }}>Reset to current</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {hypothetical.map((p, i) => {
+            const curValue = (p.shares || 0) * (p.currentPrice || 0);
+            const hypValue = (p.hypShares || 0) * (p.currentPrice || 0);
+            const deltaShares = (p.hypShares || 0) - (p.shares || 0);
+            const deltaValue = hypValue - curValue;
+            const valueColor = deltaValue > 0 ? "#0a6e44" : deltaValue < 0 ? "#a3203a" : "#5a6573";
+            return (
+              <div key={p.symbol + i} style={{ padding: "6px 10px", background: p.isNew ? "#fff4d0" : "#fff", border: "1px solid #e6e3db", borderRadius: 2, display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", minWidth: 50 }}>
+                  {p.symbol}{p.isNew && <span style={{ fontSize: 9, color: "#a06010", marginLeft: 4 }}>(new)</span>}
+                </span>
+                <span style={{ fontSize: 10, color: "#8a93a3", minWidth: 70 }}>
+                  ${p.currentPrice?.toFixed(2) ?? "—"}
+                </span>
+                <span style={{ fontSize: 10, color: "#5a6573", minWidth: 80 }}>
+                  current: <span className="mono">{p.shares?.toFixed(2) ?? "0"}</span> sh
+                </span>
+                <span style={{ fontSize: 10, color: "#5a6573" }}>hyp:</span>
+                <input
+                  type="number"
+                  value={p.hypShares}
+                  onChange={(e) => updateShares(i, e.target.value)}
+                  step="0.01"
+                  min="0"
+                  style={{ width: 70, fontSize: 11, padding: "3px 6px", border: "1px solid #e6e3db", borderRadius: 2, fontFamily: "'IBM Plex Mono', monospace" }}
+                />
+                <span style={{ fontSize: 10, color: valueColor, fontWeight: 600, minWidth: 80, marginLeft: "auto" }}>
+                  ${hypValue.toFixed(0)}
+                  {deltaValue !== 0 && (
+                    <span style={{ fontSize: 9, marginLeft: 4 }}>({deltaValue > 0 ? "+" : ""}${deltaValue.toFixed(0)})</span>
+                  )}
+                </span>
+                {p.isNew && (
+                  <button onClick={() => removeHypNew(i)} style={{ fontSize: 10, padding: "1px 6px", cursor: "pointer", border: "1px solid #a3203a", background: "#fff", color: "#a3203a", borderRadius: 2 }}>×</button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Add new position */}
+      <div style={{ marginBottom: 12, padding: "8px 10px", background: "#f9f7f1", border: "1px dashed #e6e3db", borderRadius: 2 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "#5a6573", marginBottom: 4 }}>Add Hypothetical Position</div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <input type="text" placeholder="Symbol (e.g. MU)" value={addingSym} onChange={(e) => setAddingSym(e.target.value)} style={{ width: 120, fontSize: 11, padding: "4px 8px", border: "1px solid #e6e3db", borderRadius: 2, textTransform: "uppercase" }} />
+          <input type="number" placeholder="Shares" value={addingShares} onChange={(e) => setAddingShares(e.target.value)} step="0.01" min="0" style={{ width: 80, fontSize: 11, padding: "4px 8px", border: "1px solid #e6e3db", borderRadius: 2, fontFamily: "'IBM Plex Mono', monospace" }} />
+          <button onClick={addNew} disabled={addLoading} style={{ fontSize: 11, padding: "4px 12px", cursor: addLoading ? "default" : "pointer", border: "1px solid #7ba2cc", background: addLoading ? "#e6e3db" : "#7ba2cc", color: "#fff", borderRadius: 2, fontWeight: 600 }}>
+            {addLoading ? "..." : "Add"}
+          </button>
+          {addError && <span style={{ fontSize: 10, color: "#a3203a" }}>{addError}</span>}
+        </div>
+      </div>
+
+      {/* Side-by-side comparison */}
+      <div style={{ marginTop: 14, padding: "10px 12px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Risk Metrics · Side-by-Side</div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "2fr 1.2fr 1.2fr 1fr", gap: 4, alignItems: "center" }}>
+          <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600 }}>Metric</div>
+          <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Current</div>
+          <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Hypothetical</div>
+          {!isMobile && <div style={{ fontSize: 10, color: "#8a93a3", fontWeight: 600, textAlign: "right" }}>Δ</div>}
+          {rows.map((r, i) => {
+            const dColor = deltaColor(r.curRaw, r.hypRaw, r.betterDir);
+            const delta = (r.curRaw != null && r.hypRaw != null) ? r.hypRaw - r.curRaw : null;
+            const deltaStr = delta != null ? `${delta > 0 ? "+" : ""}${r.fmt(delta).replace("$-", "-$").replace("--", "-")}` : "—";
+            return (
+              <React.Fragment key={i}>
+                <div style={{ fontSize: 11, color: "#1a1f2c", paddingTop: 4, borderTop: "1px solid #efece5" }}>{r.label}</div>
+                <div style={{ fontSize: 11, color: "#5a6573", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 4, borderTop: "1px solid #efece5" }}>{r.cur}</div>
+                <div style={{ fontSize: 11, color: dColor, fontWeight: 600, textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 4, borderTop: "1px solid #efece5" }}>{r.hyp}</div>
+                {!isMobile && (
+                  <div style={{ fontSize: 10, color: dColor, textAlign: "right", fontFamily: "'IBM Plex Mono', monospace", paddingTop: 4, borderTop: "1px solid #efece5" }}>{deltaStr}</div>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, padding: "6px 10px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, borderTop: "1px solid #efece5" }}>
+        Same VaR/CVaR/correlation math as the rest of the dashboard. Green Δ = lower risk; red Δ = higher risk. "Largest position" and "Top-3 concentration" use lower-is-better. Beta and total invested have no inherent better direction. This is a what-if calculator — your actual saved portfolio is unchanged.
+      </div>
+    </>
+  );
+
+  if (embedded) return innerContent;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head"><span className="panel-title">Portfolio Simulator · What-If Position Adjuster</span></div>
       {innerContent}
     </div>
   );
