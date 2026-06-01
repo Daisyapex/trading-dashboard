@@ -2846,7 +2846,12 @@ function RiskHelper({ isMobile, macro }) {
             <RegimeBanner macro={macro} isMobile={isMobile} />
           </div>
           {/* Compact key stats row */}
-          <div style={{ padding: "0 16px 14px", display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 10 }}>
+          <div style={{ padding: "0 16px 14px", display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(6, 1fr)", gap: 10 }}>
+            <div title="Total dollar amount invested across all positions">
+              <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Invested</div>
+              <div className="mono" style={{ fontSize: isMobile ? 15 : 17, fontWeight: 600, color: "#1a1f2c" }}>${formatMcap(totalValue)}</div>
+              {acctNum > 0 && <div style={{ fontSize: 9, color: "#8a93a3" }}>{((totalValue / acctNum) * 100).toFixed(0)}% in</div>}
+            </div>
             <div title="On a typical bad day (95th percentile worst day historically).">
               <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.08em", textTransform: "uppercase" }}>Bad day (VaR)</div>
               <div className="mono" style={{ fontSize: isMobile ? 15 : 17, fontWeight: 600, color: "#c4314b" }}>-${formatMcap(totalVar95)}</div>
@@ -3331,10 +3336,11 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
 
         {/* Sector breakdown */}
         <div className="panel-title" style={{ fontSize: 10, marginBottom: 8, marginTop: 14 }}>Sector Breakdown</div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "85px 1fr 40px 60px 60px 65px 65px" : "150px 1fr 50px 70px 70px 80px 80px", gap: 6, fontSize: 9, fontWeight: 600, color: "#8a93a3", padding: "0 0 4px", borderBottom: "1px solid #e6e3db", marginBottom: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "80px 1fr 35px 60px 55px 55px 60px 60px" : "140px 1fr 45px 70px 65px 65px 75px 75px", gap: 6, fontSize: 9, fontWeight: 600, color: "#8a93a3", padding: "0 0 4px", borderBottom: "1px solid #e6e3db", marginBottom: 4 }}>
           <div>Sector</div>
           <div>% of portfolio</div>
           <div style={{ textAlign: "right" }}>%</div>
+          <div style={{ textAlign: "right" }} title="Dollar amount invested in this sector">Invested $</div>
           <div style={{ textAlign: "right" }} title="Your weighted-avg daily VaR for holdings in this sector (per-position avg)">Your VaR</div>
           <div style={{ textAlign: "right" }} title="Typical daily VaR for the sector benchmark ETF (e.g., SMH for semis, OEF for mega-cap tech)">Sector Norm</div>
           <div style={{ textAlign: "right" }} title="This sector's contribution to portfolio VaR (= weight × your sector VaR). Sums to portfolio VaR.">Contribution</div>
@@ -3351,12 +3357,13 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
               : yourVsNorm < 0.85 ? "#0a8554"
               : "#1a1f2c";
             return (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "85px 1fr 40px 60px 60px 65px 65px" : "150px 1fr 50px 70px 70px 80px 80px", gap: 6, alignItems: "center" }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "80px 1fr 35px 60px 55px 55px 60px 60px" : "140px 1fr 45px 70px 65px 65px 75px 75px", gap: 6, alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#5a6573", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
                 <div style={{ height: 16, background: "#efece5", borderRadius: 2, position: "relative" }}>
                   <div style={{ width: `${s.pct}%`, height: "100%", background: color, borderRadius: 2 }} />
                 </div>
                 <span className="mono" style={{ textAlign: "right", fontSize: 11, fontWeight: 600 }}>{s.pct.toFixed(0)}%</span>
+                <span className="mono" title="Invested in this sector" style={{ textAlign: "right", fontSize: 10, color: "#1a1f2c", fontWeight: 600 }}>${s.value.toFixed(0)}</span>
                 <span className="mono" title="Your weighted-avg daily VaR in this sector" style={{ textAlign: "right", fontSize: 10, color: yourVarColor, fontWeight: 600 }}>
                   {s.dailyVar != null ? `${s.dailyVar.toFixed(2)}%` : "—"}
                 </span>
@@ -3373,10 +3380,11 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
             );
           })}
           {/* Total row */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "85px 1fr 40px 60px 60px 65px 65px" : "150px 1fr 50px 70px 70px 80px 80px", gap: 6, alignItems: "center", borderTop: "2px solid #1a1f2c", paddingTop: 6, marginTop: 2, fontWeight: 700 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "80px 1fr 35px 60px 55px 55px 60px 60px" : "140px 1fr 45px 70px 65px 65px 75px 75px", gap: 6, alignItems: "center", borderTop: "2px solid #1a1f2c", paddingTop: 6, marginTop: 2, fontWeight: 700 }}>
             <span style={{ fontSize: 11, color: "#1a1f2c" }}>Total</span>
             <span></span>
             <span className="mono" style={{ textAlign: "right", fontSize: 11 }}>{sectorRows.reduce((s, r) => s + r.pct, 0).toFixed(0)}%</span>
+            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a1f2c" }}>${sectorRows.reduce((s, r) => s + r.value, 0).toFixed(0)}</span>
             <span></span>
             <span></span>
             <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a4c80" }}>≈ {sectorRows.reduce((s, r) => s + (r.varContribution || 0), 0).toFixed(2)}%</span>
@@ -4346,6 +4354,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
       return {
         symbol: p.symbol,
         sector: p.sector || "—",
+        invested: p.value,  // $ invested in this position
         weight: weight * 100,
         dailyVar,
         dollarVar: p.value * (dailyVar / 100),  // $ contribution to portfolio bad-day VaR — sums to total
@@ -4366,6 +4375,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
   const maxContribution = Math.max(...rows.map((r) => r.contribution));
   const totalPeCompressLoss = rows.reduce((s, r) => s + (r.peCompressLoss || 0), 0);
   const totalDollarVar = rows.reduce((s, r) => s + r.dollarVar, 0);
+  const totalInvested = rows.reduce((s, r) => s + r.invested, 0);
 
   const innerContent = (
     <>
@@ -4376,12 +4386,13 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
 
       {/* ===== Consolidated single table — one row per ticker ===== */}
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 820 }}>
+        <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 880 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
               <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
               <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Weight</th>
+              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Dollar amount invested in this position">Invested $</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Daily 95% VaR — bad-day move magnitude">Daily VaR</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Bad-day loss in dollars for this position (= position value × daily VaR). Sums to portfolio's Bad Day total.">Bad Day $</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Sector benchmark VaR — what's typical for this industry">Sector Norm</th>
@@ -4399,6 +4410,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
                   <td className="mono" style={{ padding: "6px 8px", fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</td>
                   <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sector}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{r.weight.toFixed(0)}%</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#1a1f2c", fontWeight: 600 }}>${r.invested.toFixed(0)}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>{r.dailyVar.toFixed(2)}%</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>-${r.dollarVar.toFixed(0)}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#5a6573" }}>
@@ -4431,6 +4443,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
               <td className="mono" style={{ padding: "8px 8px" }}>Total</td>
               <td style={{ padding: "8px 8px" }}></td>
               <td className="mono" style={{ padding: "8px 8px", textAlign: "right" }}>100%</td>
+              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#1a1f2c" }}>${totalInvested.toFixed(0)}</td>
               <td style={{ padding: "8px 8px" }}></td>
               <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#c4314b" }}>-${totalDollarVar.toFixed(0)}</td>
               <td style={{ padding: "8px 8px" }}></td>
@@ -4779,8 +4792,12 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
   const Nmax = 20;
   const curveData = [];
   // Use EFFECTIVE N for dot placement so highly-correlated portfolios sit further left
-  const currentNEff = Math.max(1, Math.round(current.effectiveN));
-  const hypNEff = hypothetical ? Math.max(1, Math.round(hypothetical.effectiveN)) : null;
+  // Plot dot at the RAW position count so the user sees their actual N (e.g., 4 positions = dot at x=4).
+  // The dot's y-position (correlation-aware portfolio VaR) already tells the diversification story:
+  // if it sits ABOVE the lower curves, your positions are highly correlated (true for AI/Semi clusters).
+  // Effective N is shown in the caption as a secondary metric (1.4 effective bets out of 4 raw positions).
+  const currentNEff = Math.min(current.N, Nmax);
+  const hypNEff = hypothetical ? Math.min(hypothetical.N, Nmax) : null;
   for (let n = 1; n <= Nmax; n++) {
     const point = { N: n };
     corrLevels.forEach((rho) => {
@@ -4801,7 +4818,7 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
       <div style={{ width: "100%", height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={curveData} margin={{ top: 8, right: 16, left: 0, bottom: 18 }}>
-            <XAxis dataKey="N" tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" label={{ value: "Effective number of positions →", position: "insideBottom", offset: -8, style: { fontSize: 9, fill: "#5a6573" } }} />
+            <XAxis dataKey="N" tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" label={{ value: "Number of positions →", position: "insideBottom", offset: -8, style: { fontSize: 9, fill: "#5a6573" } }} />
             <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={42} tickFormatter={(v) => `${v.toFixed(1)}%`} />
             <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelFormatter={(n) => `N = ${n}`} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} formatter={(v, name) => [`${Number(v).toFixed(2)}%`, name]} />
             {corrLevels.map((rho, i) => (
@@ -4839,7 +4856,240 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
         )}
       </div>
       <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-        <strong>How it works:</strong> Pair correlation is sector-aware — semi-semi pairs use 0.80, software-software 0.75, tech-vs-healthcare 0.30-0.45, etc. Your portfolio's correlation-aware VaR will be <em>closer</em> to the dashboard's headline 3.3% than the old SPY-proxy version was. Adding LLY (health) or JPM (financials) drops both effective N and avg correlation, so the dot drops visibly. Adding another semi barely moves the dot — because semis are nearly redundant from a diversification standpoint.
+        <strong>How to read:</strong> Your dot sits at your raw position count (e.g., N=4). Its <em>height</em> tells the diversification story: if it sits HIGH near the red (60% correlation) curve, your positions move together. If it sits LOW near the green (0% correlation) curve, you're well diversified. Pair correlation is sector-aware — semi-semi pairs use 0.80, software-software 0.75, tech-vs-healthcare 0.30-0.45. Your AI/Semi-heavy portfolio sits high because 4 highly correlated positions ≈ {current.effectiveN.toFixed(1)} effective bets. Adding LLY (health) or JPM (financials) pulls the dot DOWN; adding another semi keeps it near the top.
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// HOWARD MARKS-STYLE RETURN vs RISK DISTRIBUTION
+// Shows each holding as a vertical "violin" of likely annual returns.
+// Y-axis = annualized return %, X-axis = ticker (sorted by sector then weight).
+// Each violin's WIDTH at a given y = probability density.
+// CENTER LINE = expected return (estimated from beta × market premium).
+// ±1σ box (solid color) = 68% of outcomes; ±2σ box (light) = 95% of outcomes.
+// Small caps + semis show WIDER distributions, mega-caps show NARROWER ones.
+// This is the practical Howard Marks insight: higher risk = wider range of outcomes.
+// ============================================================
+function ReturnRiskDistribution({ positions, isMobile }) {
+  if (!positions || positions.length === 0) return null;
+
+  // Compute per-ticker stats
+  const MARKET_PREMIUM = 10;   // S&P 500 long-run annual return assumption (%)
+  const RISK_FREE = 4;         // 10Y T-bill yield approximation (%)
+
+  const data = positions
+    .filter((p) => p.value > 0 && p.var95 != null && p.var95 > 0)
+    .map((p) => {
+      const dailyStd = p.var95 / 1.645;                  // daily std dev from 95% VaR
+      const annualStd = dailyStd * Math.sqrt(252);       // annualize
+      // Expected annual return ≈ beta × market premium (CAPM)
+      const beta = p.beta ?? 1.0;
+      const expectedReturn = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
+      // Historical max drawdown (negative number)
+      const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
+      return {
+        symbol: p.symbol,
+        sector: p.sector || "—",
+        sectorKey: classifySector(p.sector),
+        value: p.value,
+        weight: p.value,
+        beta,
+        annualStd,
+        expectedReturn,
+        histWorst,
+        var95: p.var95,
+      };
+    });
+
+  if (data.length === 0) return null;
+
+  // Sort: by sector first (group same sectors together), then by weight desc
+  data.sort((a, b) => {
+    if (a.sectorKey !== b.sectorKey) return a.sectorKey.localeCompare(b.sectorKey);
+    return b.weight - a.weight;
+  });
+
+  // Sector color palette
+  const sectorColors = {
+    semi: "#d4a017",
+    software: "#7ba2cc",
+    megatech: "#1a4c80",
+    ai_hw: "#a06010",
+    utility: "#5a6573",
+    cyber: "#86b09c",
+    health: "#0a8554",
+    financ: "#5f7a4f",
+    energy: "#c4314b",
+    consumer: "#a3203a",
+    crypto: "#d4a017",
+    quantum: "#7e57c2",
+    space: "#3949ab",
+    other: "#5a6573",
+  };
+
+  // Chart dimensions
+  const width = isMobile ? 380 : 720;
+  const height = isMobile ? 320 : 360;
+  const padding = { top: 20, right: 60, bottom: 60, left: 50 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const xStep = chartW / data.length;
+  const violinW = Math.min(xStep * 0.65, isMobile ? 26 : 42);
+
+  // Y-axis range: from min(expected - 2σ, histWorst) to max(expected + 2σ)
+  const yMin = Math.min(0, ...data.map((d) => Math.min(d.expectedReturn - 2 * d.annualStd, d.histWorst ?? 0))) - 5;
+  const yMax = Math.max(...data.map((d) => d.expectedReturn + 2 * d.annualStd)) + 5;
+  const yRange = yMax - yMin;
+  const yToPx = (y) => padding.top + chartH * (1 - (y - yMin) / yRange);
+  const xCenter = (i) => padding.left + xStep * (i + 0.5);
+
+  // Y-axis tick values (nice round numbers)
+  const tickStep = yRange < 50 ? 10 : yRange < 100 ? 20 : yRange < 200 ? 50 : 100;
+  const yTicks = [];
+  const startTick = Math.ceil(yMin / tickStep) * tickStep;
+  for (let y = startTick; y <= yMax; y += tickStep) yTicks.push(y);
+
+  // Reference lines
+  const refLines = [
+    { y: 0, color: "#1a1f2c", label: "Cash (0%)", dash: false },
+    { y: RISK_FREE, color: "#5a6573", label: `T-bill (~${RISK_FREE}%)`, dash: true },
+    { y: MARKET_PREMIUM, color: "#0a8554", label: `S&P long-run (~${MARKET_PREMIUM}%)`, dash: true },
+  ];
+
+  // Unique sectors for legend
+  const usedSectors = [...new Set(data.map((d) => d.sectorKey))];
+
+  return (
+    <div style={{ marginTop: 14, padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c" }}>Return vs Risk Distribution · Per Holding</span>
+        <span style={{ fontSize: 10, color: "#5a6573" }}>Howard Marks-style: wider violin = more uncertain outcome</span>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", minWidth: isMobile ? 380 : 600, background: "#fafaf7", borderRadius: 2 }}>
+          {/* Y-axis grid & labels */}
+          {yTicks.map((y) => (
+            <g key={y}>
+              <line x1={padding.left} y1={yToPx(y)} x2={width - padding.right} y2={yToPx(y)} stroke="#e6e3db" strokeWidth={0.5} />
+              <text x={padding.left - 6} y={yToPx(y) + 3} textAnchor="end" fontSize="9" fill="#8a93a3">{y >= 0 ? "+" : ""}{y}%</text>
+            </g>
+          ))}
+
+          {/* Reference lines (Cash, T-bill, S&P) */}
+          {refLines.map((rl, ri) => (
+            <g key={ri}>
+              <line x1={padding.left} y1={yToPx(rl.y)} x2={width - padding.right} y2={yToPx(rl.y)}
+                stroke={rl.color} strokeWidth={rl.y === 0 ? 1.2 : 1} strokeDasharray={rl.dash ? "3,3" : "0"} opacity={0.6} />
+              <text x={width - padding.right + 4} y={yToPx(rl.y) + 3} fontSize="8" fill={rl.color} fontWeight={rl.y === 0 ? 600 : 400}>{rl.label}</text>
+            </g>
+          ))}
+
+          {/* Per-ticker violin/distribution */}
+          {data.map((d, i) => {
+            const cx = xCenter(i);
+            const meanY = yToPx(d.expectedReturn);
+            const oneSigmaTopY = yToPx(d.expectedReturn + d.annualStd);
+            const oneSigmaBotY = yToPx(d.expectedReturn - d.annualStd);
+            const twoSigmaTopY = yToPx(d.expectedReturn + 2 * d.annualStd);
+            const twoSigmaBotY = yToPx(d.expectedReturn - 2 * d.annualStd);
+            const histWorstY = d.histWorst != null ? yToPx(d.histWorst) : null;
+            const color = sectorColors[d.sectorKey] || "#5a6573";
+
+            // Build a bell-shaped violin via SVG path (simple bezier approximation)
+            // Width tapers from violinW at center to 0 at ±2σ
+            const halfW = violinW / 2;
+            // Quarter widths at ±0.5σ, ±1σ, ±1.5σ, ±2σ
+            const w0 = halfW;
+            const w05 = halfW * 0.88;
+            const w1 = halfW * 0.65;
+            const w15 = halfW * 0.35;
+            const w2 = halfW * 0.05;
+            const y0 = meanY;
+            const y05 = yToPx(d.expectedReturn + 0.5 * d.annualStd);
+            const y1 = oneSigmaTopY;
+            const y15 = yToPx(d.expectedReturn + 1.5 * d.annualStd);
+            const y2 = twoSigmaTopY;
+            const ny05 = yToPx(d.expectedReturn - 0.5 * d.annualStd);
+            const ny1 = oneSigmaBotY;
+            const ny15 = yToPx(d.expectedReturn - 1.5 * d.annualStd);
+            const ny2 = twoSigmaBotY;
+            // Path goes around the bell: top → right side down → bottom → left side up
+            const violinPath = `
+              M ${cx} ${y2}
+              L ${cx + w15} ${y15} L ${cx + w1} ${y1} L ${cx + w05} ${y05} L ${cx + w0} ${y0}
+              L ${cx + w05} ${ny05} L ${cx + w1} ${ny1} L ${cx + w15} ${ny15} L ${cx} ${ny2}
+              L ${cx - w15} ${ny15} L ${cx - w1} ${ny1} L ${cx - w05} ${ny05} L ${cx - w0} ${y0}
+              L ${cx - w05} ${y05} L ${cx - w1} ${y1} L ${cx - w15} ${y15} Z
+            `.trim();
+
+            return (
+              <g key={d.symbol}>
+                {/* ±2σ extent rectangle (lighter, sets boundary) */}
+                <rect x={cx - halfW} y={y2} width={violinW} height={ny2 - y2}
+                  fill={color} opacity={0.10} rx={2} />
+                {/* Violin shape (bell-style) — main visual */}
+                <path d={violinPath} fill={color} opacity={0.45} stroke={color} strokeWidth={0.8} />
+                {/* ±1σ band (denser, marks 68% of outcomes) */}
+                <line x1={cx - halfW * 0.7} y1={oneSigmaTopY} x2={cx + halfW * 0.7} y2={oneSigmaTopY}
+                  stroke={color} strokeWidth={1.5} opacity={0.7} />
+                <line x1={cx - halfW * 0.7} y1={oneSigmaBotY} x2={cx + halfW * 0.7} y2={oneSigmaBotY}
+                  stroke={color} strokeWidth={1.5} opacity={0.7} />
+                {/* Mean line (expected return) */}
+                <line x1={cx - halfW - 2} y1={meanY} x2={cx + halfW + 2} y2={meanY}
+                  stroke="#1a1f2c" strokeWidth={2} />
+                {/* Historical worst (red tick) */}
+                {histWorstY != null && (
+                  <g>
+                    <line x1={cx - halfW - 4} y1={histWorstY} x2={cx + halfW + 4} y2={histWorstY}
+                      stroke="#c4314b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
+                    <text x={cx + halfW + 6} y={histWorstY + 3} fontSize="7" fill="#c4314b">hist worst</text>
+                  </g>
+                )}
+                {/* Expected return value (above the mean line) */}
+                <text x={cx} y={meanY - 3} textAnchor="middle" fontSize="9" fill="#1a1f2c" fontWeight="600">
+                  {d.expectedReturn >= 0 ? "+" : ""}{d.expectedReturn.toFixed(0)}%
+                </text>
+                {/* Ticker label (rotated for space) */}
+                <text x={cx} y={height - padding.bottom + 14} textAnchor="middle" fontSize="10" fill="#1a1f2c" fontWeight="700">{d.symbol}</text>
+                <text x={cx} y={height - padding.bottom + 26} textAnchor="middle" fontSize="7" fill="#8a93a3">
+                  β {d.beta.toFixed(2)} · σ {d.annualStd.toFixed(0)}%
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Y-axis label */}
+          <text x={padding.left - 30} y={padding.top + chartH / 2} textAnchor="middle" fontSize="9" fill="#5a6573"
+            transform={`rotate(-90 ${padding.left - 30} ${padding.top + chartH / 2})`}>
+            Annual return % (expected ± σ)
+          </text>
+        </svg>
+      </div>
+
+      {/* Legend: sectors used in chart */}
+      <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 12, fontSize: 10 }}>
+        {usedSectors.map((sk) => (
+          <span key={sk} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#5a6573" }}>
+            <span style={{ width: 12, height: 8, background: sectorColors[sk] || "#5a6573", borderRadius: 1 }} />
+            {sk}
+          </span>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
+        <strong>How to read each violin:</strong>
+        <ul style={{ margin: "4px 0 0 18px", padding: 0, lineHeight: 1.5 }}>
+          <li><strong>Center line</strong> = expected annual return (= risk-free + β × market premium, CAPM). Higher = better.</li>
+          <li><strong>±1σ marks</strong> = 68% of outcomes fall inside this band.</li>
+          <li><strong>Violin width</strong> = how spread out outcomes are. <strong>Fat violin = high risk</strong> (small-caps, semis); thin violin = low risk (mega-caps, defensive).</li>
+          <li><strong>Red dashed line</strong> = historical worst drawdown — your actual past floor.</li>
+        </ul>
+      </div>
+      <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+        <strong>The Howard Marks insight:</strong> high-risk positions don't <em>only</em> have higher expected returns — they have <strong>wider distributions of outcomes</strong>, including much worse downsides. A wide violin centered at +15% can still deliver −30% in a bad year. Compare violin <em>widths</em> across your holdings: are your highest-return positions also your widest (most uncertain)? That's where Holy Grail diversification matters — combining wide violins that don't move together makes the portfolio's combined violin narrower.
       </div>
     </div>
   );
@@ -5579,6 +5829,9 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
           />
         );
       })()}
+
+      {/* ===== Howard Marks-style Return vs Risk Distribution per holding ===== */}
+      <ReturnRiskDistribution positions={positions} isMobile={isMobile} />
 
       {/* ===== Show all metrics toggle ===== */}
       {hasChanges && (
