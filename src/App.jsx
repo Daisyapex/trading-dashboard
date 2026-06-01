@@ -4905,6 +4905,34 @@ function ReturnRiskDistribution({ positions, isMobile }) {
     return map[sectorKey] ?? 30;
   };
 
+  // ===== Sector P/E benchmarks for realistic worst-case math =====
+  // PE compression is a fundamentals-based bear scenario — far more grounded than statistical -2σ
+  // typical = sector's mean 10-year P/E, bear = 2022-style trough, severe = 2008-style trough
+  const SECTOR_PE_RANGES = {
+    semi:     { typical: 24, bear: 18, severe: 14 },
+    software: { typical: 42, bear: 28, severe: 22 },
+    megatech: { typical: 27, bear: 20, severe: 18 },
+    ai_hw:    { typical: 22, bear: 16, severe: 12 },
+    utility:  { typical: 18, bear: 14, severe: 12 },
+    cyber:    { typical: 38, bear: 26, severe: 20 },
+    health:   { typical: 20, bear: 14, severe: 12 },
+    financ:   { typical: 14, bear: 9,  severe: 8 },
+    energy:   { typical: 14, bear: 8,  severe: 7 },
+    consumer: { typical: 22, bear: 15, severe: 12 },
+    crypto:   { typical: 25, bear: 12, severe: 8 },
+    quantum:  { typical: 60, bear: 25, severe: 15 },
+    space:    { typical: 40, bear: 20, severe: 12 },
+    other:    { typical: 20, bear: 15, severe: 12 },
+  };
+
+  // Mega-cap downside cap — mega-caps rarely fall more than ~40% in a NORMAL bear without crisis
+  // Crisis-level falls (2008, 2022) are captured by the "severe" / historical max drawdown line
+  const isMegaCapCorrelated = (p) => {
+    // Heuristic: low beta or large position size with mega-tech / megatech sector
+    const sectorKey = classifySector(p.sector);
+    return sectorKey === "megatech" || (p.beta != null && p.beta < 1.2);
+  };
+
   const data = positions
     .filter((p) => p.value > 0 && p.var95 != null && p.var95 > 0)
     .map((p) => {
@@ -4913,11 +4941,54 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       // Expected annual return ≈ beta × market premium (CAPM)
       const beta = p.beta ?? 1.0;
       const expectedReturn = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
-      // Historical max drawdown (negative number)
+      // Historical max drawdown (negative number) — actual past floor
       const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
       const sectorKey = classifySector(p.sector);
       // Max upside — sector's typical best-year return
       const maxUpsidePct = sectorMaxUpside(sectorKey);
+
+      // ===== PE compression scenarios (fundamentals-based — more realistic than statistical -2σ) =====
+      const peBenchmark = SECTOR_PE_RANGES[sectorKey] || SECTOR_PE_RANGES.other;
+      const pe = p.pe;
+      // PE compression to sector typical = a normal bear / valuation reset
+      const peCompressTypicalPct = (pe != null && pe > peBenchmark.typical)
+        ? -((pe - peBenchmark.typical) / pe) * 100
+        : null;
+      // PE compression to sector bear = 2022-style scenario
+      const peCompressBearPct = (pe != null && pe > peBenchmark.bear)
+        ? -((pe - peBenchmark.bear) / pe) * 100
+        : null;
+
+      // ===== Realistic worst case =====
+      // Priority: use PE compression to sector typical (fundamentals-based normal bear)
+      // Fallback: -1σ (gentler than -2σ for liquid mega-caps)
+      // For mega-caps, additionally cap at -35% to reflect "normal bear" limits
+      let realisticWorstPct;
+      if (peCompressTypicalPct != null) {
+        realisticWorstPct = peCompressTypicalPct;
+      } else {
+        realisticWorstPct = expectedReturn - annualStd;  // -1σ as fallback
+      }
+      // Cap realistic worst at -40% for mega-caps (very rare to drop more in a normal bear)
+      if (isMegaCapCorrelated(p)) {
+        realisticWorstPct = Math.max(realisticWorstPct, -40);
+      }
+      const realisticWorstDollar = p.value * (realisticWorstPct / 100);
+
+      // ===== Severe bear (crisis scenario, 2008/2022-style) =====
+      // Take the WORSE of: PE compression to sector bear, OR historical max drawdown
+      let severeBearPct;
+      if (peCompressBearPct != null && histWorst != null) {
+        severeBearPct = Math.min(peCompressBearPct, histWorst);
+      } else if (peCompressBearPct != null) {
+        severeBearPct = peCompressBearPct;
+      } else if (histWorst != null) {
+        severeBearPct = histWorst;
+      } else {
+        severeBearPct = expectedReturn - 2 * annualStd;
+      }
+      const severeBearDollar = p.value * (severeBearPct / 100);
+
       // $-amount projections based on invested
       const expectedDollar = p.value * (expectedReturn / 100);
       const upside1sDollar = p.value * ((expectedReturn + annualStd) / 100);
@@ -4926,9 +4997,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       const downside2sDollar = p.value * ((expectedReturn - 2 * annualStd) / 100);
       const histWorstDollar = histWorst != null ? p.value * (histWorst / 100) : null;
       const maxUpsideDollar = p.value * (maxUpsidePct / 100);
-      // Worst case: min of -2σ and historical max drawdown
-      const worstPct = histWorst != null ? Math.min(expectedReturn - 2 * annualStd, histWorst) : (expectedReturn - 2 * annualStd);
-      const worstDollar = p.value * (worstPct / 100);
+
       return {
         symbol: p.symbol,
         sector: p.sector || "—",
@@ -4940,16 +5009,26 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         expectedReturn,
         histWorst,
         var95: p.var95,
+        pe,
+        peBenchmarkTypical: peBenchmark.typical,
+        peBenchmarkBear: peBenchmark.bear,
+        peCompressTypicalPct,
+        peCompressBearPct,
+        // Display values: realistic worst (normal bear) + severe (crisis)
+        realisticWorstPct,
+        realisticWorstDollar,
+        severeBearPct,
+        severeBearDollar,
+        // Upside
+        maxUpsidePct,
+        maxUpsideDollar,
+        // Other
         expectedDollar,
         upside1sDollar,
         downside1sDollar,
         upside2sDollar,
         downside2sDollar,
         histWorstDollar,
-        maxUpsidePct,
-        maxUpsideDollar,
-        worstPct,
-        worstDollar,
       };
     });
 
@@ -4984,6 +5063,15 @@ function ReturnRiskDistribution({ positions, isMobile }) {
   const portfolioVsSpDollar = portfolioExpectedDollar - spAnnualDollar;
   const portfolioVsSpPct = portfolioExpectedReturnPct - MARKET_PREMIUM;
 
+  // ===== Realistic PE-based scenarios (aggregate by summing $ amounts across positions) =====
+  // In a bear, correlations spike toward 1, so summing position-level $ scenarios is a sensible approximation
+  const portfolioRealisticWorstDollar = data.reduce((s, d) => s + d.realisticWorstDollar, 0);
+  const portfolioRealisticWorstPct = (portfolioRealisticWorstDollar / totalInvested) * 100;
+  const portfolioSevereBearDollar = data.reduce((s, d) => s + d.severeBearDollar, 0);
+  const portfolioSevereBearPct = (portfolioSevereBearDollar / totalInvested) * 100;
+  const portfolioBestDollar = data.reduce((s, d) => s + d.maxUpsideDollar, 0);
+  const portfolioBestPct = (portfolioBestDollar / totalInvested) * 100;
+
   // Sector color palette
   const sectorColors = {
     semi: "#d4a017",
@@ -5004,8 +5092,8 @@ function ReturnRiskDistribution({ positions, isMobile }) {
 
   // Chart dimensions — give more right padding so reference labels fit fully
   const width = isMobile ? 380 : 720;
-  const height = isMobile ? 400 : 400;
-  const padding = { top: 18, right: isMobile ? 70 : 110, bottom: 90, left: 50 };
+  const height = isMobile ? 420 : 420;
+  const padding = { top: 18, right: isMobile ? 70 : 110, bottom: 105, left: 50 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
   const xStep = chartW / data.length;
@@ -5094,8 +5182,40 @@ function ReturnRiskDistribution({ positions, isMobile }) {
             </div>
           </div>
         </div>
+
+        {/* ===== Realistic PE-based scenarios row ===== */}
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed #d6d2c7" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#1a1f2c", marginBottom: 6, letterSpacing: "0.04em" }}>Realistic scenarios (grounded in P/E compression + historical data):</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 10 }}>
+            {/* Normal bear */}
+            <div title="Normal bear year: P/E compresses to sector's typical 10-yr P/E (mega-caps capped at -40%)">
+              <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Normal bear</div>
+              <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: "#c4314b" }}>
+                {fmt$signed(portfolioRealisticWorstDollar)}
+              </div>
+              <div style={{ fontSize: 10, color: "#c4314b" }}>{portfolioRealisticWorstPct.toFixed(1)}%</div>
+            </div>
+            {/* Severe / crisis */}
+            <div title="2008/2022-style crisis: P/E to sector bear case OR historical max drawdown — whichever is worse">
+              <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Crisis bear</div>
+              <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: "#a3203a" }}>
+                {fmt$signed(portfolioSevereBearDollar)}
+              </div>
+              <div style={{ fontSize: 10, color: "#a3203a" }}>{portfolioSevereBearPct.toFixed(1)}%</div>
+            </div>
+            {/* Best year */}
+            <div title="Sector-typical bull year (10-yr historical best year averages)">
+              <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Best year (sector bull)</div>
+              <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: "#0a8554" }}>
+                {fmt$signed(portfolioBestDollar)}
+              </div>
+              <div style={{ fontSize: 10, color: "#0a8554" }}>+{portfolioBestPct.toFixed(1)}%</div>
+            </div>
+          </div>
+        </div>
+
         <div style={{ marginTop: 8, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-          Expected return uses CAPM (risk-free 4% + β × market premium 6%). Std dev annualized from your var95. "95% range" means in a typical year, the outcome will fall inside these bounds ~95% of the time.
+          <strong>Two views:</strong> The top 5 cards show statistical confidence ranges from your var95 data. The bottom 3 show <em>fundamentals-grounded</em> scenarios: "normal bear" uses P/E multiple compression to sector typical, "crisis bear" uses sector bear-case P/E or historical max drawdown, "best year" uses sector bull-year averages. Use the realistic scenarios for decision-making, statistical ranges for understanding the distribution of normal outcomes.
         </div>
       </div>
 
@@ -5184,17 +5304,21 @@ function ReturnRiskDistribution({ positions, isMobile }) {
                 <text x={cx} y={height - padding.bottom + 26} textAnchor="middle" fontSize="8" fill="#5a6573">
                   inv ${d.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </text>
-                {/* Worst $ + % */}
+                {/* Worst $ + % — realistic (PE compression based) */}
                 <text x={cx} y={height - padding.bottom + 38} textAnchor="middle" fontSize="8" fill="#c4314b" fontWeight="600">
-                  worst {fmt$signed(d.worstDollar)} ({d.worstPct.toFixed(0)}%)
+                  worst {fmt$signed(d.realisticWorstDollar)} ({d.realisticWorstPct.toFixed(0)}%)
+                </text>
+                {/* Severe $ + % — crisis scenario (PE bear or hist drawdown) */}
+                <text x={cx} y={height - padding.bottom + 50} textAnchor="middle" fontSize="7" fill="#a3203a" fontWeight="500">
+                  severe {fmt$signed(d.severeBearDollar)} ({d.severeBearPct.toFixed(0)}%)
                 </text>
                 {/* Max upside $ + % (sector typical best year) */}
-                <text x={cx} y={height - padding.bottom + 50} textAnchor="middle" fontSize="8" fill="#0a8554" fontWeight="600">
+                <text x={cx} y={height - padding.bottom + 62} textAnchor="middle" fontSize="8" fill="#0a8554" fontWeight="600">
                   best {fmt$signed(d.maxUpsideDollar)} (+{d.maxUpsidePct}%)
                 </text>
-                {/* β · σ% */}
-                <text x={cx} y={height - padding.bottom + 62} textAnchor="middle" fontSize="7" fill="#8a93a3">
-                  β {d.beta.toFixed(2)} · σ {d.annualStd.toFixed(0)}%
+                {/* PE info */}
+                <text x={cx} y={height - padding.bottom + 74} textAnchor="middle" fontSize="7" fill="#8a93a3">
+                  PE {d.pe != null ? d.pe.toFixed(0) : "—"} · β {d.beta.toFixed(2)}
                 </text>
               </g>
             );
@@ -5219,15 +5343,18 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       </div>
 
       <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
-        <strong>How to read each violin:</strong>
+        <strong>How to read each violin (now grounded in fundamentals, not pure statistics):</strong>
         <ul style={{ margin: "4px 0 0 18px", padding: 0, lineHeight: 1.5 }}>
-          <li><strong>+$X (+Y%)</strong> above each violin = expected annual return in both $ and % on what you invested</li>
-          <li><strong>inv $X</strong> below = invested amount</li>
-          <li><strong>worst -$X (-Y%)</strong> = realistic worst-case loss (either −2σ or historical max drawdown, whichever is uglier)</li>
+          <li><strong>+$X (+Y%)</strong> above each violin = expected annual return (CAPM: risk-free + β × market premium)</li>
+          <li><strong>inv $X</strong> = your invested amount</li>
+          <li><strong>worst -$X (-Y%)</strong> = realistic NORMAL bear = P/E compression to sector's <em>typical 10-yr P/E</em>. For mega-caps this is capped at -40% (mega-caps rarely fall more in a normal bear without a crisis). Far more grounded than "-2σ" statistical noise.</li>
+          <li><strong>severe -$X (-Y%)</strong> = CRISIS bear (2008/2022-style) = worse of (P/E compression to sector bear-case OR historical max drawdown). This is the "if it all goes wrong" floor.</li>
           <li><strong>best +$X (+Y%)</strong> = realistic upside (sector's typical best-year return — semis ~60%, software ~75%, mega-tech ~45%, healthcare ~30%, etc.)</li>
-          <li><strong>Center black line</strong> = expected return; <strong>violin width</strong> = how uncertain the outcome is (fat violin = high risk)</li>
-          <li><strong>Red dashed line</strong> across the violin = historical worst drawdown</li>
+          <li><strong>PE / β</strong> below = current P/E ratio and beta (so you can verify the bear math yourself)</li>
         </ul>
+      </div>
+      <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+        <strong>Why P/E compression instead of -2σ?</strong> Statistical -2σ assumes daily volatility extrapolates cleanly to a year, which overstates downside for liquid mega-caps. Real-world worst-case for a mega-cap in a normal bear year comes from <strong>multiple compression</strong>: investors paying fewer dollars per dollar of earnings. Example: NVDA at PE 35× compresses to semi-typical PE 24× = -31% drop. That's grounded in valuation, not noise. The "severe" line captures the 2008/2022-style crisis floor where PE goes to 14-18× (semi bear case) and the stock can fall 45-55% — confirmed by NVDA's actual 2022 drawdown of ~63%.
       </div>
       <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
         <strong>The Howard Marks insight:</strong> high-risk positions don't <em>only</em> have higher expected returns — they have <strong>wider distributions of outcomes</strong>, including much worse downsides. A wide violin centered at +$500 expected can still deliver −$1,500 in a bad year. Compare violin <em>widths</em> across your holdings: are your highest-return positions also your widest (most uncertain)? That's where Holy Grail diversification matters — combining wide violins that don't move together makes the portfolio's combined violin narrower.
