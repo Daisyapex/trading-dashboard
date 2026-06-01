@@ -2632,12 +2632,33 @@ function RiskHelper({ isMobile, macro }) {
         }
       }
 
+      // ===== 5-year max drawdown (Basel "stressed VaR" philosophy) =====
+      // The 1-year maxDD (from simons) misses stress regimes like 2022. A tail measure
+      // built on a calm 12 months is dangerously benign. Pull the deepest drawdown from
+      // the full 5-year weekly series so the crisis floor reflects an actual stress period.
+      let maxDD5Y = null;
+      const c5 = data.candles5Y || [];
+      if (c5.length > 20) {
+        let peak = c5[0].close;
+        let mdd = 0;
+        for (const c of c5) {
+          const close = c.close ?? c.high ?? 0;
+          if (close > peak) peak = close;
+          if (peak > 0) {
+            const dd = (close - peak) / peak;
+            if (dd < mdd) mdd = dd;
+          }
+        }
+        maxDD5Y = +(mdd * 100).toFixed(2);
+      }
+
       return {
         currentPrice: current,
         var95: data.simons?.var95daily ?? null,
         var955day: data.simons?.var955day ?? null,
         cvar95: data.simons?.cvar95daily ?? null,
         maxDD: data.simons?.maxDrawdown ?? null,
+        maxDD5Y,                                                      // 5-year deepest drawdown (stress-period tail)
         atr14: data.simons?.atr14 ?? null,
         pe: data.fundamentals?.pe ?? null,
         fwdPe: data.fundamentals?.fwdPe ?? null,
@@ -4758,7 +4779,13 @@ function computeRealisticScenarios(p, sectorKey) {
   const targetMean = p.targetMean;
   const currentPrice = p.currentPrice;
   const ivATMLong = p.ivATMLong;                     // Long-dated IV %, annualized
-  const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
+  // Crisis floor uses the DEEPER of 1-year and 5-year max drawdown (Basel stressed-VaR logic).
+  // A calm trailing year would otherwise produce a dangerously benign crisis estimate.
+  const dd1Y = p.maxDD != null ? -Math.abs(p.maxDD) : null;
+  const dd5Y = p.maxDD5Y != null ? -Math.abs(p.maxDD5Y) : null;
+  let histWorst = null;
+  if (dd1Y != null && dd5Y != null) histWorst = Math.min(dd1Y, dd5Y);
+  else histWorst = dd1Y != null ? dd1Y : dd5Y;
 
   // ===== PE compression scenarios (trailing + forward blend) =====
   const trailingCompressTypical = (pe != null && pe > ranges.typical)
@@ -5054,19 +5081,23 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       // Base CAPM expected return: risk-free + β × market premium
       const expectedReturnCAPM = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
 
-      // ===== MOMENTUM TILT (Jegadeesh-Titman factor) =====
-      // 12-month return is the single strongest equity factor in academic literature
-      // (Jegadeesh-Titman 1993, Fama-French momentum extension 2012).
-      // Effect: top-decile momentum stocks outperform bottom-decile by ~8-12% annually for 3-12 months forward.
-      // Use Jegadeesh-Titman 12-1 (skip last month to avoid short-term reversal) when available, else simple 12m.
+      // ===== MOMENTUM TILT (Jegadeesh-Titman factor, crash-aware) =====
+      // 12-month return is the strongest equity factor (Jegadeesh-Titman 1993), BUT:
+      //   · Daniel-Moskowitz (2016) "Momentum Crashes": extreme winners reverse violently
+      //   · De Bondt-Thaler (1985): 3-5yr horizon shows REVERSAL, not continuation
+      // So the tilt RAMPS UP through moderate momentum, PEAKS around +50-70%, then DECAYS
+      // for extreme runners where reversal risk dominates. A +120% name gets LESS than a +50% name.
       const mom = p.momentum12m1m != null ? p.momentum12m1m : p.momentum12m;
       let momentumTilt = 0;
+      let momentumReversalFlag = false;
       if (mom != null) {
-        if (mom > 0.50) momentumTilt = 3;
-        else if (mom > 0.25) momentumTilt = 1.5;
-        else if (mom > 0.10) momentumTilt = 0.5;
-        else if (mom < -0.25) momentumTilt = -3;
-        else if (mom < -0.10) momentumTilt = -1.5;
+        if (mom > 1.00)      { momentumTilt = 0;    momentumReversalFlag = true; }  // extreme runner: reversal risk cancels the tilt
+        else if (mom > 0.80) { momentumTilt = 1.0;  momentumReversalFlag = true; }  // very hot: decaying
+        else if (mom > 0.50) { momentumTilt = 2.0; }                                 // peak tilt zone
+        else if (mom > 0.25) { momentumTilt = 1.5; }
+        else if (mom > 0.10) { momentumTilt = 0.5; }
+        else if (mom < -0.25){ momentumTilt = -3.0; }                                // strong negative momentum
+        else if (mom < -0.10){ momentumTilt = -1.5; }
       }
       const expectedReturn = expectedReturnCAPM + momentumTilt;
       const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
@@ -5114,6 +5145,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         momentum12m: p.momentum12m,
         momentum12m1m: p.momentum12m1m,
         momentumTilt,
+        momentumReversalFlag,
         expectedReturnCAPM,
         // Stat ranges (for violin width)
         expectedDollar,
@@ -5156,14 +5188,47 @@ function ReturnRiskDistribution({ positions, isMobile }) {
   const portfolioVsSpDollar = portfolioExpectedDollar - spAnnualDollar;
   const portfolioVsSpPct = portfolioExpectedReturnPct - MARKET_PREMIUM;
 
-  // ===== Realistic PE-based scenarios (aggregate by summing $ amounts across positions) =====
-  // In a bear, correlations spike toward 1, so summing position-level $ scenarios is a sensible approximation
-  const portfolioRealisticWorstDollar = data.reduce((s, d) => s + d.realisticWorstDollar, 0);
+  // ===== Realistic PE-based scenarios — correlation-aware aggregation =====
+  // NORMAL BEAR: positions don't all bottom together in a routine selloff, so a diversified
+  //   book takes less aggregate damage than a concentrated one. We aggregate using the
+  //   Markowitz magnitude formula: √(ΣᵢΣⱼ Lᵢ Lⱼ ρᵢⱼ), where Lᵢ is each position's normal-bear $
+  //   and ρᵢⱼ is the sector-aware pair correlation. This collapses to the naive sum when ρ=1
+  //   (concentrated) and shrinks when positions are uncorrelated (diversified).
+  // CRISIS: correlations converge toward 1 in real crises (Longin-Solnik 2001), so we keep
+  //   the conservative naive sum (ρ=1) — diversification fails when you need it most.
+  const correlAwareMagnitude = (lossGetter) => {
+    let sumSq = 0;
+    for (let i = 0; i < data.length; i++) {
+      for (let j = 0; j < data.length; j++) {
+        const li = lossGetter(data[i]);
+        const lj = lossGetter(data[j]);
+        let rho;
+        if (i === j) {
+          rho = 1;
+        } else {
+          const spyI = (positions.find((p) => p.symbol === data[i].symbol)?.correlations?.SPY) ?? null;
+          const spyJ = (positions.find((p) => p.symbol === data[j].symbol)?.correlations?.SPY) ?? null;
+          rho = pairCorrelation(data[i].sectorKey, data[j].sectorKey, spyI, spyJ);
+        }
+        sumSq += li * lj * rho;
+      }
+    }
+    return -Math.sqrt(Math.max(0, sumSq)); // negative = a loss
+  };
+
+  // Normal Bear: correlation-aware (diversification reduces it)
+  const portfolioRealisticWorstDollar = correlAwareMagnitude((d) => Math.abs(d.realisticWorstDollar));
   const portfolioRealisticWorstPct = (portfolioRealisticWorstDollar / totalInvested) * 100;
+  // Naive sum for comparison (what it would be if everything moved together)
+  const portfolioNormalBearNaiveSum = data.reduce((s, d) => s + d.realisticWorstDollar, 0);
+  // Crisis: keep conservative ρ=1 naive sum (correlations converge to 1 in crises)
   const portfolioSevereBearDollar = data.reduce((s, d) => s + d.severeBearDollar, 0);
   const portfolioSevereBearPct = (portfolioSevereBearDollar / totalInvested) * 100;
+  // Best year: naive sum (upside doesn't have the same correlation-convergence property)
   const portfolioBestDollar = data.reduce((s, d) => s + d.maxUpsideDollar, 0);
   const portfolioBestPct = (portfolioBestDollar / totalInvested) * 100;
+  // Diversification benefit on the normal bear (how much correlation aggregation saved)
+  const diversificationSavingDollar = portfolioNormalBearNaiveSum - portfolioRealisticWorstDollar;
 
   // ===== Sector breakdown — sectors move TOGETHER, so this matters for risk =====
   // Same-sector positions have ~0.75-0.80 correlation; a sector selloff hits all of them
@@ -5291,13 +5356,22 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px dashed #d6d2c7" }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "#1a1f2c", marginBottom: 6, letterSpacing: "0.04em" }}>Realistic scenarios (grounded in P/E compression + historical data):</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 10 }}>
-            {/* Normal bear */}
-            <div title="Normal bear year: P/E compresses to sector's typical 10-yr P/E (mega-caps capped at -40%)">
-              <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Normal bear</div>
+            {/* Normal bear — correlation-aware */}
+            <div title="Normal bear: P/E compresses to sector typical, aggregated with sector-aware correlations (diversification reduces it). Crisis keeps ρ=1 because correlations converge in real crises.">
+              <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Normal bear <span style={{ fontSize: 8 }}>(corr-aware)</span></div>
               <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: "#c4314b" }}>
                 {fmt$signed(portfolioRealisticWorstDollar)}
               </div>
               <div style={{ fontSize: 10, color: "#c4314b" }}>{portfolioRealisticWorstPct.toFixed(1)}%</div>
+              {Math.abs(diversificationSavingDollar) > 50 ? (
+                <div style={{ fontSize: 8, color: "#0a8554", marginTop: 2 }}>
+                  diversification saves {fmt$signed(diversificationSavingDollar)} vs {fmt$signed(portfolioNormalBearNaiveSum)} sum
+                </div>
+              ) : (
+                <div style={{ fontSize: 8, color: "#8a93a3", marginTop: 2 }}>
+                  ≈ naive sum (positions too correlated to diversify)
+                </div>
+              )}
             </div>
             {/* Severe / crisis */}
             <div title="2008/2022-style crisis: P/E to sector bear case OR historical max drawdown — whichever is worse">
@@ -5590,9 +5664,11 @@ function ReturnRiskDistribution({ positions, isMobile }) {
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{d.fwdPe != null ? d.fwdPe.toFixed(1) : "—"}</td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: pegColor, fontWeight: 600 }}>{d.peg != null ? d.peg.toFixed(2) : "—"}</td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: epsGrowthColor, fontWeight: 600 }}>{d.epsGrowthNextYr != null ? `${d.epsGrowthNextYr.toFixed(0)}%` : "—"}</td>
-                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: momColor, fontWeight: 600 }} title={d.momentumTilt ? `Tilts expected return by ${d.momentumTilt >= 0 ? "+" : ""}${d.momentumTilt}pp` : "No tilt"}>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: momColor, fontWeight: 600 }} title={d.momentumReversalFlag ? "Extreme runner — reversal risk rising (Daniel-Moskowitz momentum crashes). Tilt capped/decayed." : (d.momentumTilt ? `Tilts expected return by ${d.momentumTilt >= 0 ? "+" : ""}${d.momentumTilt}pp` : "No tilt")}>
                       {momPct != null ? `${momPct >= 0 ? "+" : ""}${(momPct * 100).toFixed(0)}%` : "—"}
-                      {d.momentumTilt ? <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>{d.momentumTilt >= 0 ? "+" : ""}{d.momentumTilt}pp tilt</div> : null}
+                      {d.momentumReversalFlag
+                        ? <div style={{ fontSize: 9, color: "#d4a017", fontWeight: 400 }}>⚠ reversal risk</div>
+                        : (d.momentumTilt ? <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>{d.momentumTilt >= 0 ? "+" : ""}{d.momentumTilt}pp tilt</div> : null)}
                     </td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: ivColor }}>{d.ivAnnualPct != null ? `${d.ivAnnualPct.toFixed(0)}%` : "—"}</td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{d.analystTargetPrice != null ? `$${d.analystTargetPrice.toFixed(0)}` : "—"}</td>
