@@ -3279,10 +3279,13 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
       dailyVar: sectorVarMap[sector] != null ? sectorVarMap[sector] / value : null,
       // Contribution to portfolio VaR (= sectorVarMap[sector] / totalValue) — sums to portfolio VaR ~3.3%
       varContribution: sectorVarMap[sector] != null ? sectorVarMap[sector] / totalValue : null,
+      // Bad-day $ loss from this sector (= sectorVarMap[sector] / 100) — sums to portfolio total Bad Day $
+      dollarVar: sectorVarMap[sector] != null ? sectorVarMap[sector] / 100 : null,
       typicalVar: sectorTypicalVar(sector),
     }))
     .sort((a, b) => b.value - a.value);
   const dominantSector = sectorRows[0];
+  const totalSectorDollarVar = sectorRows.reduce((s, r) => s + (r.dollarVar || 0), 0);
 
   // Effective diversification using average pairwise correlation with SPY
   // (simpler proxy: stocks with high SPY correlation are essentially the same bet)
@@ -3328,13 +3331,14 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
 
         {/* Sector breakdown */}
         <div className="panel-title" style={{ fontSize: 10, marginBottom: 8, marginTop: 14 }}>Sector Breakdown</div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "90px 1fr 40px 70px 70px 70px" : "170px 1fr 50px 80px 80px 90px", gap: 6, fontSize: 9, fontWeight: 600, color: "#8a93a3", padding: "0 0 4px", borderBottom: "1px solid #e6e3db", marginBottom: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "85px 1fr 40px 60px 60px 65px 65px" : "150px 1fr 50px 70px 70px 80px 80px", gap: 6, fontSize: 9, fontWeight: 600, color: "#8a93a3", padding: "0 0 4px", borderBottom: "1px solid #e6e3db", marginBottom: 4 }}>
           <div>Sector</div>
           <div>% of portfolio</div>
           <div style={{ textAlign: "right" }}>%</div>
           <div style={{ textAlign: "right" }} title="Your weighted-avg daily VaR for holdings in this sector (per-position avg)">Your VaR</div>
           <div style={{ textAlign: "right" }} title="Typical daily VaR for the sector benchmark ETF (e.g., SMH for semis, OEF for mega-cap tech)">Sector Norm</div>
           <div style={{ textAlign: "right" }} title="This sector's contribution to portfolio VaR (= weight × your sector VaR). Sums to portfolio VaR.">Contribution</div>
+          <div style={{ textAlign: "right" }} title="Bad-day $ loss from this sector. Sums to portfolio Bad Day $ total.">Bad Day $</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           {sectorRows.map((s, i) => {
@@ -3347,7 +3351,7 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
               : yourVsNorm < 0.85 ? "#0a8554"
               : "#1a1f2c";
             return (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "90px 1fr 40px 70px 70px 70px" : "170px 1fr 50px 80px 80px 90px", gap: 6, alignItems: "center" }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "85px 1fr 40px 60px 60px 65px 65px" : "150px 1fr 50px 70px 70px 80px 80px", gap: 6, alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#5a6573", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
                 <div style={{ height: 16, background: "#efece5", borderRadius: 2, position: "relative" }}>
                   <div style={{ width: `${s.pct}%`, height: "100%", background: color, borderRadius: 2 }} />
@@ -3362,21 +3366,25 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
                 <span className="mono" title="Sector's contribution to portfolio VaR (sums to ~portfolio VaR)" style={{ textAlign: "right", fontSize: 10, color: "#1a4c80", fontWeight: 700 }}>
                   {s.varContribution != null ? `${s.varContribution.toFixed(2)}%` : "—"}
                 </span>
+                <span className="mono" title="Bad-day $ loss from this sector" style={{ textAlign: "right", fontSize: 10, color: "#c4314b", fontWeight: 700 }}>
+                  {s.dollarVar != null ? `-$${s.dollarVar.toFixed(0)}` : "—"}
+                </span>
               </div>
             );
           })}
           {/* Total row */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "90px 1fr 40px 70px 70px 70px" : "170px 1fr 50px 80px 80px 90px", gap: 6, alignItems: "center", borderTop: "2px solid #1a1f2c", paddingTop: 6, marginTop: 2, fontWeight: 700 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "85px 1fr 40px 60px 60px 65px 65px" : "150px 1fr 50px 70px 70px 80px 80px", gap: 6, alignItems: "center", borderTop: "2px solid #1a1f2c", paddingTop: 6, marginTop: 2, fontWeight: 700 }}>
             <span style={{ fontSize: 11, color: "#1a1f2c" }}>Total</span>
             <span></span>
             <span className="mono" style={{ textAlign: "right", fontSize: 11 }}>{sectorRows.reduce((s, r) => s + r.pct, 0).toFixed(0)}%</span>
             <span></span>
             <span></span>
             <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a4c80" }}>≈ {sectorRows.reduce((s, r) => s + (r.varContribution || 0), 0).toFixed(2)}%</span>
+            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#c4314b" }}>-${totalSectorDollarVar.toFixed(0)}</span>
           </div>
         </div>
         <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.4 }}>
-          <strong>Your VaR</strong> = weighted avg daily VaR for holdings in this sector. <strong>Sector Norm</strong> = typical sector ETF VaR. <strong>Contribution</strong> = how much this sector contributes to your portfolio's total VaR (sum equals your portfolio VaR shown in the Risk Spectrum above).
+          <strong>Your VaR</strong> = weighted avg daily VaR for holdings in this sector. <strong>Sector Norm</strong> = typical sector ETF VaR. <strong>Contribution</strong> = how much this sector contributes to your portfolio's total VaR (sum equals your portfolio VaR). <strong>Bad Day $</strong> = same as Contribution but in dollars (sums to your portfolio's headline Bad Day VaR total).
         </div>
 
         {concentrationFlags.length > 0 && (
@@ -4340,6 +4348,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
         sector: p.sector || "—",
         weight: weight * 100,
         dailyVar,
+        dollarVar: p.value * (dailyVar / 100),  // $ contribution to portfolio bad-day VaR — sums to total
         benchSym,
         benchVarPct,
         spyMultiple,
@@ -4356,6 +4365,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
   const totalContribution = rows.reduce((s, r) => s + r.contribution, 0);
   const maxContribution = Math.max(...rows.map((r) => r.contribution));
   const totalPeCompressLoss = rows.reduce((s, r) => s + (r.peCompressLoss || 0), 0);
+  const totalDollarVar = rows.reduce((s, r) => s + r.dollarVar, 0);
 
   const innerContent = (
     <>
@@ -4366,13 +4376,14 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
 
       {/* ===== Consolidated single table — one row per ticker ===== */}
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 760 }}>
+        <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 820 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
               <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
               <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Weight</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Daily 95% VaR — bad-day move magnitude">Daily VaR</th>
+              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Bad-day loss in dollars for this position (= position value × daily VaR). Sums to portfolio's Bad Day total.">Bad Day $</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Sector benchmark VaR — what's typical for this industry">Sector Norm</th>
               <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Multiple of S&P 500 VaR (1.0x = market vol)">vs S&P</th>
               <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Volatility contribution bar — your daily VaR contribution from this position">Contrib.</th>
@@ -4389,6 +4400,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
                   <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sector}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{r.weight.toFixed(0)}%</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>{r.dailyVar.toFixed(2)}%</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>-${r.dollarVar.toFixed(0)}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#5a6573" }}>
                     {r.benchVarPct != null ? `${r.benchVarPct.toFixed(2)}%` : "—"}
                     <span style={{ fontSize: 9, color: "#8a93a3", marginLeft: 3 }}>({r.benchSym})</span>
@@ -4420,6 +4432,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
               <td style={{ padding: "8px 8px" }}></td>
               <td className="mono" style={{ padding: "8px 8px", textAlign: "right" }}>100%</td>
               <td style={{ padding: "8px 8px" }}></td>
+              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#c4314b" }}>-${totalDollarVar.toFixed(0)}</td>
               <td style={{ padding: "8px 8px" }}></td>
               <td style={{ padding: "8px 8px" }}></td>
               <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#1a4c80" }}>≈ {totalContribution.toFixed(2)}%</td>
@@ -4433,8 +4446,8 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
       </div>
 
       <div style={{ marginTop: 8, padding: "6px 8px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, background: "#fafaf7", borderRadius: 2 }}>
-        <strong>Reading the table:</strong> The Contrib. bar shows where your portfolio VaR comes from — biggest bars are biggest risk contributors. PE Bear $ shows the estimated loss if each stock's P/E compresses to the sector's bear-case (10-yr low) level — this is your <em>valuation</em> risk, separate from daily volatility risk.
-        Sector Norm uses real ETF data (SMH for semis, OEF for mega-cap tech, XLV for healthcare, etc.). Simplified weighted view (assumes corr=1, conservative).
+        <strong>Reading the table:</strong> <strong>Bad Day $</strong> shows the dollar contribution to your portfolio's bad-day loss — these sum to the total at the bottom (matches the "Bad day (VaR)" headline). The Contrib. bar shows the same thing as a % of portfolio. PE Bear $ shows the estimated loss if each stock's P/E compresses to the sector's bear-case (10-yr low) level — that's <em>valuation</em> risk, separate from daily volatility.
+        Sector Norm uses real ETF data (SMH for semis, OEF for mega-cap tech, XLV for healthcare, etc.).
       </div>
     </>
   );
@@ -4609,6 +4622,90 @@ function QuickAllocationWhatIfs({ positions, totalValue, totalVar95, macro, isMo
 }
 
 // ============================================================
+// SECTOR-AWARE PAIR CORRELATION
+// Used by Holy Grail chart and Portfolio Simulator's correlation-aware VaR.
+// Practical model: same-sector pairs move together (high corr); cross-sector
+// pairs have moderate corr; tech-to-defensive pairs have lower corr.
+// Falls back to SPY-proxy when sector unknown.
+// ============================================================
+function classifySector(rawSector) {
+  if (!rawSector) return "other";
+  const s = rawSector.toLowerCase();
+  if (s.includes("semi") || s.includes("memory")) return "semi";
+  if (s.includes("ai software") || s.includes("software") || s.includes("saas")) return "software";
+  if (s.includes("hyperscaler") || s.includes("mega cap tech") || s.includes("internet content")) return "megatech";
+  if (s.includes("ai infrastructure") || s.includes("ai hardware")) return "ai_hw";
+  if (s.includes("ai power") || s.includes("utility")) return "utility";
+  if (s.includes("cyber")) return "cyber";
+  if (s.includes("active retail") || s.includes("consumer") || s.includes("retail") || s.includes("entertain") || s.includes("staples")) return "consumer";
+  if (s.includes("health")) return "health";
+  if (s.includes("financ") || s.includes("bank") || s.includes("payment") || s.includes("buffett") || s.includes("ackman")) return "financ";
+  if (s.includes("energ") || s.includes("oil")) return "energy";
+  if (s.includes("crypto")) return "crypto";
+  if (s.includes("quantum")) return "quantum";
+  if (s.includes("space")) return "space";
+  return "other";
+}
+
+// Sector-aware pair correlation: realistic estimates based on historical sector behavior
+// Returns a value in [0, 0.95]
+function pairCorrelation(sectorA, sectorB, spyCorrA, spyCorrB) {
+  const spyProxy = Math.max(0.20, Math.min(0.85, (spyCorrA ?? 0.7) * (spyCorrB ?? 0.7)));
+
+  // Same sector → high correlation (typical observed values from historical pair returns)
+  if (sectorA === sectorB) {
+    const sameSectorMap = {
+      semi: 0.80,        // NVDA-AMD-TSM move very together
+      software: 0.75,    // SaaS basket moves together
+      megatech: 0.72,    // GOOGL-META-AMZN
+      ai_hw: 0.75,       // SMCI-ANET-VRT
+      cyber: 0.78,
+      utility: 0.70,
+      crypto: 0.85,      // crypto-correlated assets are extreme
+      quantum: 0.78,
+      space: 0.70,
+      health: 0.55,      // healthcare more idiosyncratic (drug pipelines vary)
+      financ: 0.65,      // banks move together but split by type
+      energy: 0.72,      // oil & gas highly correlated
+      consumer: 0.50,    // consumer is fragmented
+      other: 0.60,
+    };
+    return Math.max(spyProxy, sameSectorMap[sectorA] ?? 0.65);
+  }
+
+  // Cross-sector: group by macro theme
+  const techGroup = new Set(["semi", "software", "megatech", "ai_hw", "cyber"]);
+  const aiAdjacent = new Set(["utility", "quantum", "space"]);
+  const defensive = new Set(["health", "consumer"]);
+  const cyclical = new Set(["financ", "energy"]);
+
+  const inTech = (s) => techGroup.has(s);
+  const inAiAdj = (s) => aiAdjacent.has(s);
+  const inDef = (s) => defensive.has(s);
+  const inCyc = (s) => cyclical.has(s);
+
+  // Tech ↔ Tech (different subsectors, e.g., semi ↔ software)
+  if (inTech(sectorA) && inTech(sectorB)) return Math.max(spyProxy, 0.65);
+  // Tech ↔ AI-adjacent (semi ↔ utility/quantum)
+  if ((inTech(sectorA) && inAiAdj(sectorB)) || (inTech(sectorB) && inAiAdj(sectorA))) return Math.max(spyProxy, 0.55);
+  // Tech ↔ Defensive (e.g., semi ↔ healthcare): the DIVERSIFICATION sweet spot
+  if ((inTech(sectorA) && inDef(sectorB)) || (inTech(sectorB) && inDef(sectorA))) return Math.min(0.45, Math.max(0.25, spyProxy));
+  // Tech ↔ Cyclical (semi ↔ financials/energy)
+  if ((inTech(sectorA) && inCyc(sectorB)) || (inTech(sectorB) && inCyc(sectorA))) return Math.min(0.55, Math.max(0.30, spyProxy));
+  // Tech ↔ Crypto: high
+  if ((inTech(sectorA) && sectorB === "crypto") || (inTech(sectorB) && sectorA === "crypto")) return 0.65;
+  // Defensive ↔ Cyclical
+  if ((inDef(sectorA) && inCyc(sectorB)) || (inDef(sectorB) && inCyc(sectorA))) return Math.max(0.30, spyProxy);
+  // Defensive ↔ Defensive (health ↔ consumer)
+  if (inDef(sectorA) && inDef(sectorB)) return Math.max(0.40, spyProxy);
+  // Cyclical ↔ Cyclical (banks ↔ energy)
+  if (inCyc(sectorA) && inCyc(sectorB)) return Math.max(0.45, spyProxy);
+
+  // Fallback to SPY proxy with floor
+  return Math.max(0.35, spyProxy);
+}
+
+// ============================================================
 // HOLY GRAIL CHART
 // Visualizes Dalio's principle: portfolio VaR decreases as you add
 // uncorrelated assets. Uses the DIVERSIFICATION FORMULA for both dots:
@@ -4626,39 +4723,62 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
     if (!totalVal) return null;
     // Weighted avg individual VaR
     const avgVar = valid.reduce((s, p) => s + (p.value / totalVal) * p.var95, 0);
-    // Avg pair correlation using SPY corr as proxy: pair_corr ≈ corr_i × corr_j
-    // Default to 0.7 for positions missing SPY correlation
+    // Sector-aware pair correlation matrix (industry-realistic — same-sector pairs get 0.75-0.80,
+    // cross-sector tech-vs-defensive gets 0.30-0.45, etc.)
     let pairSum = 0, pairCount = 0;
     for (let i = 0; i < valid.length; i++) {
+      const secI = classifySector(valid[i].sector);
+      const spyI = valid[i].correlations?.SPY ?? 0.7;
       for (let j = i + 1; j < valid.length; j++) {
-        const ci = valid[i].correlations?.SPY ?? 0.7;
-        const cj = valid[j].correlations?.SPY ?? 0.7;
-        pairSum += ci * cj;
+        const secJ = classifySector(valid[j].sector);
+        const spyJ = valid[j].correlations?.SPY ?? 0.7;
+        const rho = pairCorrelation(secI, secJ, spyI, spyJ);
+        pairSum += rho;
         pairCount++;
       }
     }
     const avgCorr = pairCount ? pairSum / pairCount : (valid.length === 1 ? 1 : 0.5);
     const N = valid.length;
-    // Effective N — accounts for correlation: highly correlated positions count as fewer effective bets
-    // Formula: N_eff = N / (1 + (N-1) × avg_pair_correlation)
-    // Example: 4 tech stocks at avg corr 0.6 → N_eff = 4 / (1 + 3×0.6) = 1.43 (≈1.4 effective bets)
+    // Effective N — accounts for correlation
     const effectiveN = N <= 1 ? N : N / (1 + (N - 1) * Math.max(0, avgCorr));
-    // Diversification formula
-    const portfolioVar = avgVar * Math.sqrt((1 / N) + ((N - 1) / N) * Math.max(0, avgCorr));
-    return { N, effectiveN, portfolioVar, avgVar, avgCorr };
+
+    // FULL correlation-aware portfolio variance:
+    //   σ_p² = Σᵢ wᵢ² σᵢ² + 2 Σᵢ<j wᵢ wⱼ σᵢ σⱼ ρᵢⱼ
+    let variance = 0;
+    for (let i = 0; i < valid.length; i++) {
+      const wi = valid[i].value / totalVal;
+      const sigi = valid[i].var95;
+      variance += wi * wi * sigi * sigi;
+      const secI = classifySector(valid[i].sector);
+      const spyI = valid[i].correlations?.SPY ?? 0.7;
+      for (let j = i + 1; j < valid.length; j++) {
+        const wj = valid[j].value / totalVal;
+        const sigj = valid[j].var95;
+        const secJ = classifySector(valid[j].sector);
+        const spyJ = valid[j].correlations?.SPY ?? 0.7;
+        const rho = pairCorrelation(secI, secJ, spyI, spyJ);
+        variance += 2 * wi * wj * sigi * sigj * rho;
+      }
+    }
+    const portfolioVar = Math.sqrt(variance);
+
+    // Simple weighted VaR — for reference & matching dashboard headline
+    const simpleVar = valid.reduce((s, p) => s + (p.value / totalVal) * p.var95, 0);
+
+    return { N, effectiveN, portfolioVar, simpleVar, avgVar, avgCorr };
   };
 
   const current = compute(positions);
   const hypothetical = hypotheticalPositions ? compute(hypotheticalPositions) : null;
   if (!current) return null;
 
-  // Use current's avgVar for reference curves
+  // Reference curves use current's avgVar as base, fixed correlation levels
   const baseVar = current.avgVar;
   const corrLevels = [0, 0.2, 0.4, 0.6];
   const colors = ["#0a6e44", "#86b09c", "#d4a017", "#a3203a"];
   const Nmax = 20;
   const curveData = [];
-  // Use EFFECTIVE N for dot placement so highly-correlated portfolios sit further left (more honest)
+  // Use EFFECTIVE N for dot placement so highly-correlated portfolios sit further left
   const currentNEff = Math.max(1, Math.round(current.effectiveN));
   const hypNEff = hypothetical ? Math.max(1, Math.round(hypothetical.effectiveN)) : null;
   for (let n = 1; n <= Nmax; n++) {
@@ -4676,7 +4796,7 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
     <div style={{ marginTop: 14, padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c" }}>The Holy Grail · Diversification Benefit</span>
-        <span style={{ fontSize: 10, color: "#5a6573" }}>Dalio: more uncorrelated assets = less portfolio risk</span>
+        <span style={{ fontSize: 10, color: "#5a6573" }}>Sector-aware correlation · adding low-corr positions drops the dot</span>
       </div>
       <div style={{ width: "100%", height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
@@ -4705,22 +4825,21 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
       <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
         <span style={{ display: "inline-block", width: 10, height: 10, background: "#1a4c80", borderRadius: "50%", marginRight: 4, verticalAlign: "middle" }} />
         Current: <strong className="mono">{current.N} positions ({current.effectiveN.toFixed(1)} effective) · avg pair corr {(current.avgCorr * 100).toFixed(0)}% · VaR {current.portfolioVar.toFixed(2)}%</strong>
+        <span style={{ fontSize: 10, color: "#8a93a3", marginLeft: 6 }}>(dashboard headline: {current.simpleVar.toFixed(2)}%)</span>
         {hypothetical && (
           <>
             <br />
             <span style={{ display: "inline-block", width: 10, height: 10, background: "#d4a017", borderRadius: "50%", marginRight: 4, verticalAlign: "middle" }} />
             Hypothetical: <strong className="mono">{hypothetical.N} positions ({hypothetical.effectiveN.toFixed(1)} effective) · avg corr {(hypothetical.avgCorr * 100).toFixed(0)}% · VaR {hypothetical.portfolioVar.toFixed(2)}%</strong>
+            <span style={{ fontSize: 10, color: "#8a93a3", marginLeft: 6 }}>(dashboard headline: {hypothetical.simpleVar.toFixed(2)}%)</span>
             <span style={{ marginLeft: 6, color: hypothetical.portfolioVar < current.portfolioVar ? "#0a6e44" : hypothetical.portfolioVar > current.portfolioVar ? "#a3203a" : "#5a6573", fontWeight: 600 }}>
-              ({hypothetical.portfolioVar < current.portfolioVar ? "↓ better" : hypothetical.portfolioVar > current.portfolioVar ? "↑ worse" : "≈ same"})
+              ({hypothetical.portfolioVar < current.portfolioVar ? `↓ ${(current.portfolioVar - hypothetical.portfolioVar).toFixed(2)}pp better` : hypothetical.portfolioVar > current.portfolioVar ? `↑ ${(hypothetical.portfolioVar - current.portfolioVar).toFixed(2)}pp worse` : "≈ same"})
             </span>
           </>
         )}
       </div>
       <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-        <strong>Effective positions</strong> = N / (1 + (N−1) × avg pair correlation). Your raw position count is reduced by correlation: 4 highly-correlated AI/semi stocks count as ~1.4 effective bets, not 4.
-        That's why your dot sits further LEFT than your raw position count would suggest — and why adding another semis stock barely moves it.
-        Adding LLY (healthcare) or JPM (financials) jumps effective N more because they reduce avg pair correlation.
-        Reference curves use Dalio's diversification formula at fixed correlation levels.
+        <strong>How it works:</strong> Pair correlation is sector-aware — semi-semi pairs use 0.80, software-software 0.75, tech-vs-healthcare 0.30-0.45, etc. Your portfolio's correlation-aware VaR will be <em>closer</em> to the dashboard's headline 3.3% than the old SPY-proxy version was. Adding LLY (health) or JPM (financials) drops both effective N and avg correlation, so the dot drops visibly. Adding another semi barely moves the dot — because semis are nearly redundant from a diversification standpoint.
       </div>
     </div>
   );
@@ -5067,12 +5186,12 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
   })();
 
   // ===== Metrics =====
-  // computeMetrics uses CORRELATION-AWARE portfolio variance:
+  // computeMetrics uses SECTOR-AWARE CORRELATION-AWARE portfolio variance:
   //   σ_p² = Σᵢ wᵢ² σᵢ² + 2 Σᵢ<j wᵢ wⱼ σᵢ σⱼ ρᵢⱼ
-  // where pair correlation ρᵢⱼ is approximated as corr_i_SPY × corr_j_SPY
-  // (clamped to [0.10, 0.95]). This way adding low-correlation positions
-  // (GLD, TLT, healthcare) actually decreases portfolio VaR — matching
-  // Dalio's Holy Grail diversification principle.
+  // where ρᵢⱼ comes from pairCorrelation() — sector-aware (semi-semi 0.80, tech-health 0.30-0.45, etc.)
+  // This way adding low-correlation positions (LLY healthcare, JPM financials)
+  // actually decreases portfolio VaR meaningfully — matching Dalio's Holy Grail principle
+  // and real-world sector behavior.
   // (Dashboard's headline VaR uses simpler weighted-sum which is more conservative.)
   const computeMetrics = (positionsList, sharesGetter) => {
     let total = 0, totalCvar = 0, betaSum = 0, corrSum = 0, corrCount = 0;
@@ -5089,18 +5208,22 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
       else betaSum += value;
       if (p.correlations?.SPY != null) { corrSum += p.correlations.SPY; corrCount++; }
       if (p.var95 != null) {
-        validForVar.push({ symbol: p.symbol, value, var95: p.var95, spyCorr: p.correlations?.SPY ?? 0.5 });
+        validForVar.push({
+          symbol: p.symbol,
+          value,
+          var95: p.var95,
+          spyCorr: p.correlations?.SPY ?? 0.5,
+          sector: classifySector(p.sector),
+        });
       }
     }
     if (!total) return null;
 
-    // Correlation-aware portfolio VaR
+    // Correlation-aware portfolio VaR using sector-aware pair correlations
     let portfolioVarPct = 0;
     let simpleVarPct = 0;
     if (validForVar.length > 0) {
-      // Simple weighted (matches Risk Decomposition / dashboard headline)
       simpleVarPct = validForVar.reduce((s, p) => s + (p.value / total) * p.var95, 0);
-      // Correlation-aware (shows diversification benefit)
       let variance = 0;
       for (let i = 0; i < validForVar.length; i++) {
         const wi = validForVar[i].value / total;
@@ -5109,8 +5232,13 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
         for (let j = i + 1; j < validForVar.length; j++) {
           const wj = validForVar[j].value / total;
           const sigj = validForVar[j].var95;
-          const pairCorr = Math.max(0.10, Math.min(0.95, validForVar[i].spyCorr * validForVar[j].spyCorr));
-          variance += 2 * wi * wj * sigi * sigj * pairCorr;
+          const rho = pairCorrelation(
+            validForVar[i].sector,
+            validForVar[j].sector,
+            validForVar[i].spyCorr,
+            validForVar[j].spyCorr
+          );
+          variance += 2 * wi * wj * sigi * sigj * rho;
         }
       }
       portfolioVarPct = Math.sqrt(variance);
@@ -5122,7 +5250,7 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
       total,
       totalVar: (portfolioVarPct / 100) * total,
       varPct: portfolioVarPct,
-      simpleVarPct,  // for comparison / display
+      simpleVarPct,
       totalCvar, cvarPct: (totalCvar / total) * 100,
       largestPct, largestSym: byValue[0]?.symbol,
       top3Pct: (top3 / total) * 100,
@@ -5151,31 +5279,43 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
   const buildImpactBullets = () => {
     if (!hasChanges || !hypMetrics) return null;
     const bullets = [];
-    // Bad-day loss (VaR) — judge by % change
-    if (curMetrics.varPct != null && hypMetrics.varPct != null) {
-      const pctDelta = hypMetrics.varPct - curMetrics.varPct;
-      const better = pctDelta < -0.1;
-      const worse = pctDelta > 0.1;
+    // ===== Dashboard headline VaR (simple weighted — matches Section 2's ~3.3%) =====
+    if (curMetrics.simpleVarPct != null && hypMetrics.simpleVarPct != null) {
+      const pctDelta = hypMetrics.simpleVarPct - curMetrics.simpleVarPct;
+      const better = pctDelta < -0.05;
+      const worse = pctDelta > 0.05;
       const arrow = better ? "↓" : worse ? "↑" : "≈";
-      const ppText = pctDelta >= 0 ? `+${pctDelta.toFixed(2)}pp` : `${pctDelta.toFixed(2)}pp`;
-      const verdict = better ? `better — VaR % dropped ${Math.abs(pctDelta).toFixed(2)}pp` : worse ? `worse — VaR % rose ${pctDelta.toFixed(2)}pp` : "about the same VaR %";
+      const verdict = better ? `dropped ${Math.abs(pctDelta).toFixed(2)}pp` : worse ? `rose ${pctDelta.toFixed(2)}pp` : "unchanged";
       const color = better ? "#0a6e44" : worse ? "#a3203a" : "#5a6573";
       bullets.push({
         color,
-        text: `Bad-day loss (VaR): ${curMetrics.varPct.toFixed(2)}% → ${hypMetrics.varPct.toFixed(2)}% of portfolio ${arrow} (${verdict})  ·  raw $: ${curMetrics.totalVar.toFixed(0)} → ${hypMetrics.totalVar.toFixed(0)}`,
+        text: `Dashboard VaR (simple weighted): ${curMetrics.simpleVarPct.toFixed(2)}% → ${hypMetrics.simpleVarPct.toFixed(2)}% of portfolio ${arrow} (${verdict})`,
       });
     }
-    // Tail loss (CVaR) — judge by % change
+    // ===== Correlation-aware VaR (sector-aware, captures diversification benefit) =====
+    if (curMetrics.varPct != null && hypMetrics.varPct != null) {
+      const pctDelta = hypMetrics.varPct - curMetrics.varPct;
+      const better = pctDelta < -0.05;
+      const worse = pctDelta > 0.05;
+      const arrow = better ? "↓" : worse ? "↑" : "≈";
+      const verdict = better ? `dropped ${Math.abs(pctDelta).toFixed(2)}pp — diversification credit` : worse ? `rose ${pctDelta.toFixed(2)}pp — adds correlated risk` : "about the same";
+      const color = better ? "#0a6e44" : worse ? "#a3203a" : "#5a6573";
+      bullets.push({
+        color,
+        text: `Diversified VaR (sector-aware): ${curMetrics.varPct.toFixed(2)}% → ${hypMetrics.varPct.toFixed(2)}% ${arrow} (${verdict})`,
+      });
+    }
+    // ===== CVaR tail =====
     if (curMetrics.cvarPct != null && hypMetrics.cvarPct != null) {
       const pctDelta = hypMetrics.cvarPct - curMetrics.cvarPct;
       const better = pctDelta < -0.1;
       const worse = pctDelta > 0.1;
       const arrow = better ? "↓" : worse ? "↑" : "≈";
-      const verdict = better ? `better — CVaR % dropped ${Math.abs(pctDelta).toFixed(2)}pp` : worse ? `worse — CVaR % rose ${pctDelta.toFixed(2)}pp` : "about the same";
+      const verdict = better ? `CVaR dropped ${Math.abs(pctDelta).toFixed(2)}pp` : worse ? `CVaR rose ${pctDelta.toFixed(2)}pp` : "about the same";
       const color = better ? "#0a6e44" : worse ? "#a3203a" : "#5a6573";
       bullets.push({
         color,
-        text: `Worst-case loss (CVaR tail): ${curMetrics.cvarPct.toFixed(2)}% → ${hypMetrics.cvarPct.toFixed(2)}% of portfolio ${arrow} (${verdict})  ·  raw $: ${curMetrics.totalCvar.toFixed(0)} → ${hypMetrics.totalCvar.toFixed(0)}`,
+        text: `Worst-case loss (CVaR tail): ${curMetrics.cvarPct.toFixed(2)}% → ${hypMetrics.cvarPct.toFixed(2)}% of portfolio ${arrow} (${verdict})`,
       });
     }
     // Largest position
@@ -5208,12 +5348,15 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
         text: `Total invested: $${curMetrics.total.toFixed(0)} → $${hypMetrics.total.toFixed(0)} (${investDelta > 0 ? "+" : "−"}$${Math.abs(investDelta).toFixed(0)})${cashRemaining != null ? `, cash left: $${hypCashRemaining?.toFixed(0) ?? "—"}` : ""}`,
       });
     }
-    // ===== Risk tolerance verdict =====
-    // Counts how many key metrics improved vs worsened on a % basis
+    // ===== Risk tolerance verdict — judge by both simple & correlation-aware deltas =====
     let better = 0, worse = 0;
+    if (curMetrics.simpleVarPct != null && hypMetrics.simpleVarPct != null) {
+      if (hypMetrics.simpleVarPct < curMetrics.simpleVarPct - 0.05) better++;
+      else if (hypMetrics.simpleVarPct > curMetrics.simpleVarPct + 0.05) worse++;
+    }
     if (curMetrics.varPct != null && hypMetrics.varPct != null) {
-      if (hypMetrics.varPct < curMetrics.varPct - 0.1) better++;
-      else if (hypMetrics.varPct > curMetrics.varPct + 0.1) worse++;
+      if (hypMetrics.varPct < curMetrics.varPct - 0.05) better++;
+      else if (hypMetrics.varPct > curMetrics.varPct + 0.05) worse++;
     }
     if (curMetrics.cvarPct != null && hypMetrics.cvarPct != null) {
       if (hypMetrics.cvarPct < curMetrics.cvarPct - 0.1) better++;
