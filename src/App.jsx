@@ -334,7 +334,7 @@ const atrTrailingStop = (data, period = 10, multiplier = 2) => {
 // ============================================================
 // CANDLESTICK CHART
 // ============================================================
-function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth }) {
+function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth, earningsMarkers, priceLines }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -373,6 +373,50 @@ function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth }) {
     addLine("sma50", "#86b09c");
     addLine("sma200", "#7ba2cc");
 
+    // ===== Earnings markers (E dots, color-coded for beat/miss) =====
+    if (Array.isArray(earningsMarkers) && earningsMarkers.length && data.length) {
+      // Snap each marker to the closest candle date so lightweight-charts displays it
+      const candleDates = data.map((d) => ({ date: d.date, ts: new Date(d.date).getTime() }));
+      const snapToCandle = (target) => {
+        const targetTs = new Date(target).getTime();
+        let best = candleDates[0];
+        let bestDiff = Math.abs(best.ts - targetTs);
+        for (const c of candleDates) {
+          const diff = Math.abs(c.ts - targetTs);
+          if (diff < bestDiff) { best = c; bestDiff = diff; }
+        }
+        return best.date;
+      };
+      const markers = earningsMarkers
+        .map((m) => ({
+          time: snapToCandle(m.date),
+          position: "belowBar",
+          color: m.beat == null ? "#8a93a3" : (m.beat ? "#0a8554" : "#c4314b"),
+          shape: "circle",
+          text: "E",
+          size: 1,
+        }))
+        // de-dup if multiple markers snap to the same candle, and sort ascending (required by lightweight-charts)
+        .filter((m, i, arr) => arr.findIndex((x) => x.time === m.time) === i)
+        .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+      if (markers.length) candleSeries.setMarkers(markers);
+    }
+
+    // ===== Reference price lines (52W high/low, etc.) =====
+    if (Array.isArray(priceLines) && priceLines.length) {
+      priceLines.forEach((pl) => {
+        if (pl?.price == null || !isFinite(pl.price)) return;
+        candleSeries.createPriceLine({
+          price: pl.price,
+          color: pl.color || "#8a93a3",
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: pl.title || "",
+        });
+      });
+    }
+
     chart.timeScale().fitContent();
 
     setTimeout(() => {
@@ -389,7 +433,7 @@ function CandlestickChart({ data, height = 400, isMobile, onPriceScaleWidth }) {
     };
     window.addEventListener("resize", handleResize);
     return () => { window.removeEventListener("resize", handleResize); chart.remove(); };
-  }, [data, height]);
+  }, [data, height, JSON.stringify(earningsMarkers), JSON.stringify(priceLines)]);
 
   return <div ref={containerRef} style={{ width: "100%", height }} />;
 }
@@ -895,7 +939,49 @@ export default function App() {
                 </div>
               )}
               {activeCandles?.length > 0 ? (
-                <CandlestickChart key={`${ticker}-${timeframe}`} data={enriched || activeCandles} height={isMobile ? 280 : 420} isMobile={isMobile} onPriceScaleWidth={setPriceScaleWidth} />
+                (() => {
+                  // Compute earnings markers from epsHistory (fiscal quarter end + ~30 days ≈ announcement date)
+                  const epsHist = data?.lynch?.epsHistory || [];
+                  const earningsMarkers = epsHist
+                    .filter((e) => e?.quarter && e.actual != null)
+                    .map((e) => {
+                      const qTs = new Date(e.quarter).getTime();
+                      // Add ~30 days to approximate earnings announcement date
+                      const announceTs = qTs + 30 * 24 * 60 * 60 * 1000;
+                      const dateStr = new Date(announceTs).toISOString().slice(0, 10);
+                      return {
+                        date: dateStr,
+                        beat: (e.surprise ?? 0) >= 0,
+                        surprise: e.surprise,
+                      };
+                    });
+
+                  // Compute 52W high/low from the 1Y data (regardless of selected timeframe)
+                  const oneY = data?.candles || [];
+                  let priceLines = [];
+                  if (oneY.length) {
+                    const last52w = oneY.slice(-260);
+                    const highs = last52w.map((c) => c.high ?? c.h ?? c.close ?? c.c).filter((v) => v != null && isFinite(v));
+                    const lows = last52w.map((c) => c.low ?? c.l ?? c.close ?? c.c).filter((v) => v != null && isFinite(v));
+                    if (highs.length && lows.length) {
+                      priceLines = [
+                        { price: Math.max(...highs), color: "#86b09c", title: "52W H" },
+                        { price: Math.min(...lows), color: "#c4314b", title: "52W L" },
+                      ];
+                    }
+                  }
+                  return (
+                    <CandlestickChart
+                      key={`${ticker}-${timeframe}`}
+                      data={enriched || activeCandles}
+                      height={isMobile ? 280 : 420}
+                      isMobile={isMobile}
+                      onPriceScaleWidth={setPriceScaleWidth}
+                      earningsMarkers={earningsMarkers}
+                      priceLines={priceLines}
+                    />
+                  );
+                })()
               ) : (
                 <div style={{ padding: 32, color: "#8a93a3", textAlign: "center", fontSize: 13 }}>
                   {tfError ? `Could not load ${timeframe} data: ${tfError}` : "No data for this timeframe"}
