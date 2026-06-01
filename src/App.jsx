@@ -2622,6 +2622,25 @@ function RiskHelper({ isMobile, macro }) {
         sector: data.sector ?? "Unknown",
         correlations: data.correlations ?? {},
         beta: data.fundamentals?.beta ?? null,
+        // ===== TIER 1 ENRICHMENTS — what professional models actually use =====
+        peg: data.fundamentals?.peg ?? null,                         // PEG ratio (P/E ÷ growth)
+        revGrowth: data.fundamentals?.revGrowth ?? null,             // YoY revenue growth %
+        epsForward: data.fundamentals?.epsForward ?? null,           // Forward EPS estimate
+        // Analyst data
+        targetMean: data.analyst?.targetMean ?? null,                // Mean price target
+        targetHigh: data.analyst?.targetHigh ?? null,                // High price target
+        targetLow: data.analyst?.targetLow ?? null,                  // Low price target
+        numAnalysts: data.analyst?.numAnalysts ?? null,
+        analystRating: data.consensus?.rating ?? null,               // "Strong Buy", "Buy", "Hold", etc.
+        analystScore: data.consensus?.score ?? null,                 // Numeric score (1-5, lower=better)
+        // Growth data (Lynch)
+        epsGrowthNextYr: data.lynch?.epsGrowthNextYr ?? null,        // Analyst consensus EPS growth (next yr) %
+        epsGrowth5Yr: data.lynch?.epsGrowth5Yr ?? null,              // 5-yr EPS growth rate %
+        // Implied volatility from options (forward-looking)
+        ivATM: data.options?.ivATM ?? null,                          // Annualized IV %, at-the-money short-dated
+        ivATMLong: data.options?.ivATMLong ?? null,                  // Annualized IV %, long-dated (more reliable)
+        ivSkew: data.options?.skew ?? null,                          // Put-call IV skew (positive = fear)
+        expectedMovePct: data.options?.expectedMove?.pct ?? null,    // Market's expected 1σ move %
         // Drawdown context for the Kill Switch panel
         dd30, dd90, dd52w,
         high30, high90, high52w,
@@ -4694,35 +4713,87 @@ function sectorMaxUpside(sectorKey) {
 //   · normalBear: P/E compresses to sector typical (sector selloff / valuation reset)
 //   · crisis:     worse of (P/E to sector bear) and (historical max drawdown)
 //   · best:       sector typical bull year return
-// Returns both percentage and $-amount for each scenario.
+//
+// TIER 1 INPUTS USED (what professional models actually use):
+//   · Trailing & Forward P/E (70/30 blend for normal, 50/50 for crisis)
+//   · PEG ratio (P/E ÷ growth) — cheap/expensive adjustment
+//   · EPS growth next year (analyst consensus) — growth cushion / boost
+//   · Analyst target price — alternative upside reference
+//   · Implied Volatility (from options) — forward-looking risk cross-check
+//   · Sector P/E benchmarks + sector bull-year averages
+//   · Beta (CAPM expected return)
+//   · Historical max drawdown (crisis floor)
 function computeRealisticScenarios(p, sectorKey) {
   const ranges = SECTOR_PE_RANGES[sectorKey] || SECTOR_PE_RANGES.other;
   const pe = p.pe;
+  const fwdPe = p.fwdPe;
+  const peg = p.peg;
+  const epsGrowthNextYr = p.epsGrowthNextYr;        // %, e.g., 25 = 25% growth
+  const targetMean = p.targetMean;
+  const currentPrice = p.currentPrice;
+  const ivATMLong = p.ivATMLong;                     // Long-dated IV %, annualized
   const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
 
-  // PE compression %
-  const peCompressTypicalPct = (pe != null && pe > ranges.typical)
-    ? -((pe - ranges.typical) / pe) * 100
-    : null;
-  const peCompressBearPct = (pe != null && pe > ranges.bear)
-    ? -((pe - ranges.bear) / pe) * 100
-    : null;
+  // ===== PE compression scenarios (trailing + forward blend) =====
+  const trailingCompressTypical = (pe != null && pe > ranges.typical)
+    ? -((pe - ranges.typical) / pe) * 100 : null;
+  const trailingCompressBear = (pe != null && pe > ranges.bear)
+    ? -((pe - ranges.bear) / pe) * 100 : null;
+  const fwdCompressTypical = (fwdPe != null && fwdPe > ranges.typical)
+    ? -((fwdPe - ranges.typical) / fwdPe) * 100 : null;
+  const fwdCompressBear = (fwdPe != null && fwdPe > ranges.bear)
+    ? -((fwdPe - ranges.bear) / fwdPe) * 100 : null;
 
-  // ===== Normal bear (sector selloff): P/E to sector typical =====
-  // Fallback if no PE data: assume mild sector correction (-15%)
-  let normalBearPct;
-  if (peCompressTypicalPct != null) {
-    normalBearPct = peCompressTypicalPct;
+  // Normal: 70% forward + 30% trailing (markets price forward, growth gets credit)
+  let peCompressTypicalPct;
+  if (fwdCompressTypical != null && trailingCompressTypical != null) {
+    peCompressTypicalPct = 0.7 * fwdCompressTypical + 0.3 * trailingCompressTypical;
+  } else if (trailingCompressTypical != null) {
+    peCompressTypicalPct = trailingCompressTypical;
+  } else if (fwdCompressTypical != null) {
+    peCompressTypicalPct = fwdCompressTypical;
   } else {
-    normalBearPct = -15;
+    peCompressTypicalPct = null;
   }
-  // Cap mega-caps at -40% — they rarely fall more in normal bears without crisis
+
+  // Crisis: 50/50 (in real crisis, growth assumptions break)
+  let peCompressBearPct;
+  if (fwdCompressBear != null && trailingCompressBear != null) {
+    peCompressBearPct = 0.5 * fwdCompressBear + 0.5 * trailingCompressBear;
+  } else if (trailingCompressBear != null) {
+    peCompressBearPct = trailingCompressBear;
+  } else if (fwdCompressBear != null) {
+    peCompressBearPct = fwdCompressBear;
+  } else {
+    peCompressBearPct = null;
+  }
+
+  // ===== NORMAL BEAR with adjustments =====
+  let normalBearPct = peCompressTypicalPct != null ? peCompressTypicalPct : -15;
+
+  // (a) EPS growth cushion: high growth offsets compression risk
+  //     If EPS grows 30%, even a -25% PE compression is offset to ~-7% (PE down, E up)
+  //     Use a milder cushion: 1pp per 5pp of growth above 20%
+  if (epsGrowthNextYr != null && epsGrowthNextYr > 20) {
+    const growthCushion = Math.min((epsGrowthNextYr - 20) / 5, 8); // cap at 8pp
+    normalBearPct = Math.min(0, normalBearPct + growthCushion);
+  }
+
+  // (b) PEG adjustment: cheap vs growth = less compression risk
+  if (peg != null && peg > 0) {
+    if (peg < 1)        normalBearPct = Math.min(0, normalBearPct + 3);   // cheap: -3pp better
+    else if (peg < 1.5) normalBearPct = Math.min(0, normalBearPct + 1);   // fair: small boost
+    else if (peg > 2.5) normalBearPct -= 2;                                // expensive: -2pp worse
+    else if (peg > 4)   normalBearPct -= 4;                                // very expensive
+  }
+
+  // Cap mega-caps at -40%
   const isMegaCapCorrelated = sectorKey === "megatech" || (p.beta != null && p.beta < 1.2);
   if (isMegaCapCorrelated) {
     normalBearPct = Math.max(normalBearPct, -40);
   }
 
-  // ===== Crisis bear: worse of P/E bear OR historical max drawdown =====
+  // ===== CRISIS BEAR =====
   let crisisPct;
   if (peCompressBearPct != null && histWorst != null) {
     crisisPct = Math.min(peCompressBearPct, histWorst);
@@ -4734,8 +4805,30 @@ function computeRealisticScenarios(p, sectorKey) {
     crisisPct = -50;
   }
 
-  // ===== Best year: sector typical bull return =====
-  const bestPct = sectorMaxUpside(sectorKey);
+  // ===== BEST YEAR with adjustments =====
+  let bestPct = sectorMaxUpside(sectorKey);
+
+  // (a) Growth premium boost (forward PE materially below trailing)
+  if (pe != null && fwdPe != null && fwdPe < pe * 0.85) bestPct *= 1.10;
+  // (b) High EPS growth (>30% next year) → extra boost
+  if (epsGrowthNextYr != null && epsGrowthNextYr > 30) bestPct *= 1.15;
+  // (c) PEG < 1 = cheap relative to growth → another boost
+  if (peg != null && peg > 0 && peg < 1) bestPct *= 1.10;
+  // (d) PEG > 3 = expensive → reduce upside expectation
+  if (peg != null && peg > 3) bestPct *= 0.85;
+
+  // ===== Analyst target = separate reference upside =====
+  let analystUpsidePct = null;
+  let analystTargetDollar = null;
+  if (targetMean != null && currentPrice != null && currentPrice > 0) {
+    analystUpsidePct = ((targetMean - currentPrice) / currentPrice) * 100;
+    analystTargetDollar = p.value * (analystUpsidePct / 100);
+  }
+
+  // ===== Forward-looking IV cross-check =====
+  // IV represents market's expected 1-year stddev. Compare to historical annualized vol.
+  // If IV is much higher than historical vol, market is pricing in more risk.
+  let ivAnnualPct = ivATMLong != null ? ivATMLong : (p.ivATM ?? null);
 
   return {
     normalBearPct,
@@ -4744,8 +4837,16 @@ function computeRealisticScenarios(p, sectorKey) {
     crisisDollar: p.value * (crisisPct / 100),
     bestPct,
     bestDollar: p.value * (bestPct / 100),
+    // Reference data (Tier 1 enrichments)
+    analystUpsidePct,
+    analystTargetDollar,
+    analystTargetPrice: targetMean,
+    epsGrowthNextYr,
+    peg,
+    ivAnnualPct,
     peBenchmarkTypical: ranges.typical,
     peBenchmarkBear: ranges.bear,
+    usedForwardPE: fwdPe != null,
   };
 }
 
@@ -4948,6 +5049,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         histWorst,
         var95: p.var95,
         pe: p.pe,
+        fwdPe: p.fwdPe,
         peBenchmarkTypical: scen.peBenchmarkTypical,
         peBenchmarkBear: scen.peBenchmarkBear,
         // Scenarios — same source as VaR Decomp + Sector Breakdown
@@ -4957,6 +5059,15 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         severeBearDollar: scen.crisisDollar,
         maxUpsidePct: scen.bestPct,
         maxUpsideDollar: scen.bestDollar,
+        // TIER 1 reference data
+        analystUpsidePct: scen.analystUpsidePct,
+        analystTargetDollar: scen.analystTargetDollar,
+        analystTargetPrice: scen.analystTargetPrice,
+        epsGrowthNextYr: scen.epsGrowthNextYr,
+        peg: scen.peg,
+        ivAnnualPct: scen.ivAnnualPct,
+        analystRating: p.analystRating,
+        numAnalysts: p.numAnalysts,
         // Stat ranges (for violin width)
         expectedDollar,
         upside1sDollar: p.value * ((expectedReturn + annualStd) / 100),
@@ -5369,6 +5480,81 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       </div>
       <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
         <strong>The Howard Marks insight:</strong> high-risk positions don't <em>only</em> have higher expected returns — they have <strong>wider distributions of outcomes</strong>, including much worse downsides. A wide violin centered at +$500 expected can still deliver −$1,500 in a bad year. Compare violin <em>widths</em> across your holdings: are your highest-return positions also your widest (most uncertain)? That's where Holy Grail diversification matters — combining wide violins that don't move together makes the portfolio's combined violin narrower.
+      </div>
+
+      {/* ===== Tier 1 reference data — analyst targets, growth, PEG, IV ===== */}
+      <div style={{ marginTop: 14, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 3 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", marginBottom: 6 }}>
+          What the pros use · Reference data per ticker
+        </div>
+        <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 8, lineHeight: 1.5 }}>
+          The scenarios above already factor PEG and EPS growth (cheap-vs-growth → less compression; high growth → bigger best year). Below shows the raw signals plus analyst consensus & options-implied volatility as <em>independent cross-checks</em> on the model's numbers.
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse", minWidth: 720 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+                <th style={{ padding: "5px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Trailing P/E">PE</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Forward P/E (next 12 months)">Fwd PE</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="PEG = PE ÷ earnings growth. Under 1 = cheap vs growth (Lynch), over 2 = expensive">PEG</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Analyst consensus EPS growth next year">EPS Gr</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Options-implied volatility, annualized — market's forward-looking risk estimate">IV (ann)</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Analyst target mean price">Target $</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Implied upside in % and $ on your position">Analyst Upside</th>
+                <th style={{ padding: "5px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Wall Street consensus rating">Rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((d) => {
+                const pegColor = d.peg == null ? "#8a93a3"
+                  : d.peg < 1 ? "#0a8554"
+                  : d.peg < 1.5 ? "#5a6573"
+                  : d.peg < 2.5 ? "#d4a017"
+                  : "#c4314b";
+                const epsGrowthColor = d.epsGrowthNextYr == null ? "#8a93a3"
+                  : d.epsGrowthNextYr > 25 ? "#0a8554"
+                  : d.epsGrowthNextYr > 10 ? "#5a6573"
+                  : d.epsGrowthNextYr > 0 ? "#d4a017"
+                  : "#c4314b";
+                const ivColor = d.ivAnnualPct == null ? "#8a93a3"
+                  : d.ivAnnualPct > 50 ? "#c4314b"
+                  : d.ivAnnualPct > 35 ? "#d4a017"
+                  : "#5a6573";
+                const upsideColor = d.analystUpsidePct == null ? "#8a93a3"
+                  : d.analystUpsidePct > 15 ? "#0a8554"
+                  : d.analystUpsidePct > 0 ? "#5a6573"
+                  : "#c4314b";
+                const ratingColor = !d.analystRating ? "#8a93a3"
+                  : /strong buy|buy/i.test(d.analystRating) ? "#0a8554"
+                  : /sell/i.test(d.analystRating) ? "#c4314b"
+                  : "#5a6573";
+                return (
+                  <tr key={d.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
+                    <td className="mono" style={{ padding: "5px 6px", fontWeight: 700, color: "#1a1f2c" }}>{d.symbol}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{d.pe != null ? d.pe.toFixed(1) : "—"}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{d.fwdPe != null ? d.fwdPe.toFixed(1) : "—"}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: pegColor, fontWeight: 600 }}>{d.peg != null ? d.peg.toFixed(2) : "—"}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: epsGrowthColor, fontWeight: 600 }}>{d.epsGrowthNextYr != null ? `${d.epsGrowthNextYr.toFixed(0)}%` : "—"}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: ivColor }}>{d.ivAnnualPct != null ? `${d.ivAnnualPct.toFixed(0)}%` : "—"}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{d.analystTargetPrice != null ? `$${d.analystTargetPrice.toFixed(0)}` : "—"}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: upsideColor, fontWeight: 600 }}>
+                      {d.analystUpsidePct != null ? `${d.analystUpsidePct >= 0 ? "+" : ""}${d.analystUpsidePct.toFixed(0)}%` : "—"}
+                      {d.analystTargetDollar != null ? <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>{fmt$signed(d.analystTargetDollar)}</div> : null}
+                    </td>
+                    <td style={{ padding: "5px 6px", color: ratingColor, fontSize: 10, fontWeight: 600 }}>
+                      {d.analystRating || "—"}
+                      {d.numAnalysts ? <span style={{ fontSize: 8, color: "#8a93a3", marginLeft: 3 }}>({d.numAnalysts})</span> : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+          <strong>How the model uses these:</strong> <strong>PEG &lt; 1</strong> bumps Best Year up 10% (cheap vs growth) and reduces Normal Bear by 3pp. <strong>PEG &gt; 3</strong> cuts Best Year by 15%. <strong>EPS Growth &gt; 20%</strong> adds a growth cushion to Normal Bear (high earnings growth offsets P/E compression). <strong>EPS Growth &gt; 30%</strong> bumps Best Year up 15%. <strong>IV</strong> is the market's annualized 1σ expected move — if it's much higher than our annualized historical vol, the market is pricing in more risk than history suggests. <strong>Analyst Target</strong> is shown as an <em>independent reference upside</em> — compare it to our "Best Year (sector bull)" to see if Wall Street agrees, disagrees, or is more conservative.
+        </div>
       </div>
     </div>
   );
