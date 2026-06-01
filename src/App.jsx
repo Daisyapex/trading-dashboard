@@ -3363,7 +3363,7 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
                   <div style={{ width: `${s.pct}%`, height: "100%", background: color, borderRadius: 2 }} />
                 </div>
                 <span className="mono" style={{ textAlign: "right", fontSize: 11, fontWeight: 600 }}>{s.pct.toFixed(0)}%</span>
-                <span className="mono" title="Invested in this sector" style={{ textAlign: "right", fontSize: 10, color: "#1a1f2c", fontWeight: 600 }}>${s.value.toFixed(0)}</span>
+                <span className="mono" title="Invested in this sector" style={{ textAlign: "right", fontSize: 10, color: "#1a1f2c", fontWeight: 600 }}>${s.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 <span className="mono" title="Your weighted-avg daily VaR in this sector" style={{ textAlign: "right", fontSize: 10, color: yourVarColor, fontWeight: 600 }}>
                   {s.dailyVar != null ? `${s.dailyVar.toFixed(2)}%` : "—"}
                 </span>
@@ -3374,7 +3374,7 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
                   {s.varContribution != null ? `${s.varContribution.toFixed(2)}%` : "—"}
                 </span>
                 <span className="mono" title="Bad-day $ loss from this sector" style={{ textAlign: "right", fontSize: 10, color: "#c4314b", fontWeight: 700 }}>
-                  {s.dollarVar != null ? `-$${s.dollarVar.toFixed(0)}` : "—"}
+                  {s.dollarVar != null ? `-$${s.dollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
                 </span>
               </div>
             );
@@ -3384,11 +3384,11 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
             <span style={{ fontSize: 11, color: "#1a1f2c" }}>Total</span>
             <span></span>
             <span className="mono" style={{ textAlign: "right", fontSize: 11 }}>{sectorRows.reduce((s, r) => s + r.pct, 0).toFixed(0)}%</span>
-            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a1f2c" }}>${sectorRows.reduce((s, r) => s + r.value, 0).toFixed(0)}</span>
+            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a1f2c" }}>${sectorRows.reduce((s, r) => s + r.value, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
             <span></span>
             <span></span>
             <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a4c80" }}>≈ {sectorRows.reduce((s, r) => s + (r.varContribution || 0), 0).toFixed(2)}%</span>
-            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#c4314b" }}>-${totalSectorDollarVar.toFixed(0)}</span>
+            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#c4314b" }}>-${totalSectorDollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
           </div>
         </div>
         <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.4 }}>
@@ -4410,9 +4410,9 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
                   <td className="mono" style={{ padding: "6px 8px", fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</td>
                   <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sector}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{r.weight.toFixed(0)}%</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#1a1f2c", fontWeight: 600 }}>${r.invested.toFixed(0)}</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#1a1f2c", fontWeight: 600 }}>${r.invested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>{r.dailyVar.toFixed(2)}%</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>-${r.dollarVar.toFixed(0)}</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>-${r.dollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#5a6573" }}>
                     {r.benchVarPct != null ? `${r.benchVarPct.toFixed(2)}%` : "—"}
                     <span style={{ fontSize: 9, color: "#8a93a3", marginLeft: 3 }}>({r.benchSym})</span>
@@ -4430,7 +4430,7 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
                   </td>
                   <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontSize: 10 }}>
                     {r.peCompressLoss != null
-                      ? (r.peCompressLoss === 0 ? "—" : `-$${Math.abs(r.peCompressLoss).toFixed(0)} (${r.peCompressPct.toFixed(0)}%)`)
+                      ? (r.peCompressLoss === 0 ? "—" : `-$${Math.abs(r.peCompressLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })} (${r.peCompressPct.toFixed(0)}%)`)
                       : "no PE"}
                   </td>
                   <td style={{ padding: "6px 8px", fontSize: 10, color: r.assessment?.color || "#5a6573" }}>
@@ -4443,14 +4443,14 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
               <td className="mono" style={{ padding: "8px 8px" }}>Total</td>
               <td style={{ padding: "8px 8px" }}></td>
               <td className="mono" style={{ padding: "8px 8px", textAlign: "right" }}>100%</td>
-              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#1a1f2c" }}>${totalInvested.toFixed(0)}</td>
+              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#1a1f2c" }}>${totalInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
               <td style={{ padding: "8px 8px" }}></td>
-              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#c4314b" }}>-${totalDollarVar.toFixed(0)}</td>
+              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#c4314b" }}>-${totalDollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
               <td style={{ padding: "8px 8px" }}></td>
               <td style={{ padding: "8px 8px" }}></td>
               <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#1a4c80" }}>≈ {totalContribution.toFixed(2)}%</td>
               <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#c4314b" }}>
-                {totalPeCompressLoss !== 0 ? `-$${Math.abs(totalPeCompressLoss).toFixed(0)}` : "—"}
+                {totalPeCompressLoss !== 0 ? `-$${Math.abs(totalPeCompressLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
               </td>
               <td style={{ padding: "8px 8px" }}></td>
             </tr>
@@ -4879,6 +4879,32 @@ function ReturnRiskDistribution({ positions, isMobile }) {
   const MARKET_PREMIUM = 10;   // S&P 500 long-run annual return assumption (%)
   const RISK_FREE = 4;         // 10Y T-bill yield approximation (%)
 
+  // Helper: format dollar with thousand separator and sign
+  const fmt$ = (v) => (v < 0 ? "-" : "") + "$" + Math.abs(Math.round(v)).toLocaleString();
+  const fmt$signed = (v) => (v >= 0 ? "+" : "-") + "$" + Math.abs(Math.round(v)).toLocaleString();
+
+  // Sector-typical best-year return % (10-year historical observations)
+  // Used as the realistic "max upside" — averaged across bull-year performance of sector benchmarks
+  const sectorMaxUpside = (sectorKey) => {
+    const map = {
+      semi: 60,        // SMH up ~65% in 2023, AMD/NVDA delivered this often
+      software: 75,    // IGV / SaaS best years (CRWD, NOW, ZS)
+      megatech: 45,    // OEF / MSFT, GOOGL in bull years
+      ai_hw: 80,       // SMCI, ANET, VRT can rip 100%+ but typical bull = 80%
+      utility: 25,
+      cyber: 70,
+      health: 30,      // XLV
+      financ: 35,      // XLF
+      energy: 45,      // XLE in oil bull years
+      consumer: 30,    // XLY / XLP
+      crypto: 200,     // BTC ETFs / MSTR can do this in a cycle peak
+      quantum: 150,    // IONQ, RGTI saw 300%+ but typical = 100-150%
+      space: 100,
+      other: 30,
+    };
+    return map[sectorKey] ?? 30;
+  };
+
   const data = positions
     .filter((p) => p.value > 0 && p.var95 != null && p.var95 > 0)
     .map((p) => {
@@ -4889,6 +4915,9 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       const expectedReturn = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
       // Historical max drawdown (negative number)
       const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
+      const sectorKey = classifySector(p.sector);
+      // Max upside — sector's typical best-year return
+      const maxUpsidePct = sectorMaxUpside(sectorKey);
       // $-amount projections based on invested
       const expectedDollar = p.value * (expectedReturn / 100);
       const upside1sDollar = p.value * ((expectedReturn + annualStd) / 100);
@@ -4896,10 +4925,14 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       const upside2sDollar = p.value * ((expectedReturn + 2 * annualStd) / 100);
       const downside2sDollar = p.value * ((expectedReturn - 2 * annualStd) / 100);
       const histWorstDollar = histWorst != null ? p.value * (histWorst / 100) : null;
+      const maxUpsideDollar = p.value * (maxUpsidePct / 100);
+      // Worst case: min of -2σ and historical max drawdown
+      const worstPct = histWorst != null ? Math.min(expectedReturn - 2 * annualStd, histWorst) : (expectedReturn - 2 * annualStd);
+      const worstDollar = p.value * (worstPct / 100);
       return {
         symbol: p.symbol,
         sector: p.sector || "—",
-        sectorKey: classifySector(p.sector),
+        sectorKey,
         value: p.value,
         weight: p.value,
         beta,
@@ -4913,6 +4946,10 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         upside2sDollar,
         downside2sDollar,
         histWorstDollar,
+        maxUpsidePct,
+        maxUpsideDollar,
+        worstPct,
+        worstDollar,
       };
     });
 
@@ -4967,8 +5004,8 @@ function ReturnRiskDistribution({ positions, isMobile }) {
 
   // Chart dimensions — give more right padding so reference labels fit fully
   const width = isMobile ? 380 : 720;
-  const height = isMobile ? 380 : 380;
-  const padding = { top: 18, right: isMobile ? 70 : 110, bottom: 76, left: 50 };
+  const height = isMobile ? 400 : 400;
+  const padding = { top: 18, right: isMobile ? 70 : 110, bottom: 90, left: 50 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
   const xStep = chartW / data.length;
@@ -5004,57 +5041,61 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         <span style={{ fontSize: 10, color: "#5a6573" }}>Howard Marks-style: wider violin = more uncertain outcome</span>
       </div>
 
-      {/* ===== Portfolio Summary Card — answers "what do I expect, what could I lose, vs S&P?" ===== */}
+      {/* ===== Portfolio Summary Card — ordered: Invested · Expected · S&P vs You · 68% range · 95% range ===== */}
       <div style={{ marginBottom: 12, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 3 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Portfolio summary at a glance:</div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: 10 }}>
+          {/* 1) Invested */}
           <div title="Total $ invested across all positions">
             <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Invested</div>
-            <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: "#1a1f2c" }}>${totalInvested.toFixed(0)}</div>
+            <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: "#1a1f2c" }}>${totalInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           </div>
+          {/* 2) Expected return */}
           <div title="Expected annual return: weighted avg of position CAPM expected returns">
             <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Expected return / yr</div>
             <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: portfolioExpectedDollar >= 0 ? "#0a8554" : "#c4314b" }}>
-              {portfolioExpectedDollar >= 0 ? "+" : "-"}${Math.abs(portfolioExpectedDollar).toFixed(0)}
+              {fmt$signed(portfolioExpectedDollar)}
             </div>
             <div style={{ fontSize: 10, color: "#5a6573" }}>{portfolioExpectedReturnPct >= 0 ? "+" : ""}{portfolioExpectedReturnPct.toFixed(1)}%</div>
           </div>
-          <div title="68% confidence range (±1σ) in $ for annual return">
-            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>68% range (±1σ)</div>
-            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-              <span style={{ color: "#c4314b" }}>{portfolioRange68Low >= 0 ? "+" : "-"}${Math.abs(portfolioRange68Low).toFixed(0)}</span>
-              <span style={{ color: "#8a93a3" }}> to </span>
-              <span style={{ color: "#0a8554" }}>{portfolioRange68High >= 0 ? "+" : "-"}${Math.abs(portfolioRange68High).toFixed(0)}</span>
-            </div>
-          </div>
-          <div title="95% confidence range (±2σ) — extreme bad/good year">
-            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>95% range (±2σ)</div>
-            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-              <span style={{ color: "#c4314b" }}>{portfolioRange95Low >= 0 ? "+" : "-"}${Math.abs(portfolioRange95Low).toFixed(0)}</span>
-              <span style={{ color: "#8a93a3" }}> to </span>
-              <span style={{ color: "#0a8554" }}>{portfolioRange95High >= 0 ? "+" : "-"}${Math.abs(portfolioRange95High).toFixed(0)}</span>
-            </div>
-          </div>
-          <div title="Daily 95% VaR: typical bad-day loss">
-            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Daily VaR (bad day)</div>
-            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-              <span style={{ color: "#c4314b" }}>-${portfolioDailyVarDollar.toFixed(0)}</span>
-              <span style={{ fontSize: 10, color: "#8a93a3", marginLeft: 4 }}>({portfolioDailyVarPct.toFixed(2)}%)</span>
-            </div>
-            <div style={{ fontSize: 9, color: "#8a93a3" }}>S&P bad day: ~-${spDailyVarDollar.toFixed(0)} ({SP_VAR_DAILY}%)</div>
-          </div>
-          <div title="Yours vs S&P 500 expected return">
+          {/* 3) S&P vs You */}
+          <div title="Yours vs S&P 500 expected return (annual)">
             <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>S&P vs you (annual)</div>
-            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-              <span style={{ color: "#5a6573" }}>S&P +${spAnnualDollar.toFixed(0)}</span>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#5a6573" }}>
+              S&P {fmt$signed(spAnnualDollar)} ({MARKET_PREMIUM}%)
             </div>
             <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: portfolioVsSpDollar >= 0 ? "#0a8554" : "#c4314b" }}>
-              You {portfolioVsSpDollar >= 0 ? "+" : "-"}${Math.abs(portfolioVsSpDollar).toFixed(0)} {portfolioVsSpPct >= 0 ? "(+" : "("}{portfolioVsSpPct.toFixed(1)}pp)
+              You {fmt$signed(portfolioExpectedDollar)} ({portfolioExpectedReturnPct >= 0 ? "+" : ""}{portfolioExpectedReturnPct.toFixed(1)}%)
+            </div>
+            <div style={{ fontSize: 10, color: portfolioVsSpDollar >= 0 ? "#0a8554" : "#c4314b", fontWeight: 600 }}>
+              Diff: {fmt$signed(portfolioVsSpDollar)} ({portfolioVsSpPct >= 0 ? "+" : ""}{portfolioVsSpPct.toFixed(1)}pp)
+            </div>
+          </div>
+          {/* 4) 68% range — expected return min/max with $ and % */}
+          <div title="68% confidence range (±1σ) for annual return">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>68% range (±1σ)</div>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#c4314b" }}>
+              {fmt$signed(portfolioRange68Low)} ({(portfolioExpectedReturnPct - portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct - portfolioStdPct).toFixed(1)}%)
+            </div>
+            <div style={{ fontSize: 10, color: "#8a93a3" }}>to</div>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#0a8554" }}>
+              {fmt$signed(portfolioRange68High)} ({(portfolioExpectedReturnPct + portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct + portfolioStdPct).toFixed(1)}%)
+            </div>
+          </div>
+          {/* 5) 95% range — expected return min/max with $ and % */}
+          <div title="95% confidence range (±2σ) — extreme bad/good year">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>95% range (±2σ)</div>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#c4314b" }}>
+              {fmt$signed(portfolioRange95Low)} ({(portfolioExpectedReturnPct - 2 * portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct - 2 * portfolioStdPct).toFixed(1)}%)
+            </div>
+            <div style={{ fontSize: 10, color: "#8a93a3" }}>to</div>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "#0a8554" }}>
+              {fmt$signed(portfolioRange95High)} ({(portfolioExpectedReturnPct + 2 * portfolioStdPct) >= 0 ? "+" : ""}{(portfolioExpectedReturnPct + 2 * portfolioStdPct).toFixed(1)}%)
             </div>
           </div>
         </div>
         <div style={{ marginTop: 8, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-          Expected return uses CAPM (risk-free 4% + β × market premium 6%). Std dev annualized from your var95. "95% range" means in a typical year, the outcome will fall inside these dollar bounds ~95% of the time.
+          Expected return uses CAPM (risk-free 4% + β × market premium 6%). Std dev annualized from your var95. "95% range" means in a typical year, the outcome will fall inside these bounds ~95% of the time.
         </div>
       </div>
 
@@ -5133,22 +5174,26 @@ function ReturnRiskDistribution({ positions, isMobile }) {
                   <line x1={cx - halfW - 4} y1={histWorstY} x2={cx + halfW + 4} y2={histWorstY}
                     stroke="#c4314b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
                 )}
-                {/* Expected $ amount above the mean line */}
+                {/* Expected: $ and % above the mean line */}
                 <text x={cx} y={meanY - 3} textAnchor="middle" fontSize="9" fill="#1a1f2c" fontWeight="700">
-                  {d.expectedDollar >= 0 ? "+$" : "-$"}{Math.abs(d.expectedDollar).toFixed(0)}
+                  {fmt$signed(d.expectedDollar)} ({d.expectedReturn >= 0 ? "+" : ""}{d.expectedReturn.toFixed(0)}%)
                 </text>
                 {/* Ticker label */}
                 <text x={cx} y={height - padding.bottom + 14} textAnchor="middle" fontSize="10" fill="#1a1f2c" fontWeight="700">{d.symbol}</text>
                 {/* Invested $ */}
                 <text x={cx} y={height - padding.bottom + 26} textAnchor="middle" fontSize="8" fill="#5a6573">
-                  inv ${d.value.toFixed(0)}
+                  inv ${d.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </text>
-                {/* Worst $ (-2σ or histWorst, whichever lower) */}
+                {/* Worst $ + % */}
                 <text x={cx} y={height - padding.bottom + 38} textAnchor="middle" fontSize="8" fill="#c4314b" fontWeight="600">
-                  worst -${Math.abs(d.histWorstDollar != null ? Math.min(d.downside2sDollar, d.histWorstDollar) : d.downside2sDollar).toFixed(0)}
+                  worst {fmt$signed(d.worstDollar)} ({d.worstPct.toFixed(0)}%)
+                </text>
+                {/* Max upside $ + % (sector typical best year) */}
+                <text x={cx} y={height - padding.bottom + 50} textAnchor="middle" fontSize="8" fill="#0a8554" fontWeight="600">
+                  best {fmt$signed(d.maxUpsideDollar)} (+{d.maxUpsidePct}%)
                 </text>
                 {/* β · σ% */}
-                <text x={cx} y={height - padding.bottom + 50} textAnchor="middle" fontSize="7" fill="#8a93a3">
+                <text x={cx} y={height - padding.bottom + 62} textAnchor="middle" fontSize="7" fill="#8a93a3">
                   β {d.beta.toFixed(2)} · σ {d.annualStd.toFixed(0)}%
                 </text>
               </g>
@@ -5176,10 +5221,11 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
         <strong>How to read each violin:</strong>
         <ul style={{ margin: "4px 0 0 18px", padding: 0, lineHeight: 1.5 }}>
-          <li><strong>+$X above each violin</strong> = expected annual $ return on what you invested in that stock</li>
-          <li><strong>"inv $X"</strong> below = your invested amount; <strong>"worst -$X"</strong> = worst-case loss (either −2σ or historical max drawdown, whichever is uglier)</li>
-          <li><strong>Center black line</strong> = expected annual return (CAPM: risk-free + β × market premium)</li>
-          <li><strong>Violin width</strong> = how uncertain the outcome is. <strong>Fat violin = high risk</strong> (small-caps, semis); thin violin = low risk (mega-caps, defensive)</li>
+          <li><strong>+$X (+Y%)</strong> above each violin = expected annual return in both $ and % on what you invested</li>
+          <li><strong>inv $X</strong> below = invested amount</li>
+          <li><strong>worst -$X (-Y%)</strong> = realistic worst-case loss (either −2σ or historical max drawdown, whichever is uglier)</li>
+          <li><strong>best +$X (+Y%)</strong> = realistic upside (sector's typical best-year return — semis ~60%, software ~75%, mega-tech ~45%, healthcare ~30%, etc.)</li>
+          <li><strong>Center black line</strong> = expected return; <strong>violin width</strong> = how uncertain the outcome is (fat violin = high risk)</li>
           <li><strong>Red dashed line</strong> across the violin = historical worst drawdown</li>
         </ul>
       </div>
