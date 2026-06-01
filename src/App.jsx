@@ -74,9 +74,43 @@ function PEHistoryMultiPane({ symbol, currentPe, valuationSeries, fmt }) {
     return [Math.min(...times), Math.max(...times, now)];
   }, [peData, cutoff, now]);
 
+  // Explicit year-boundary ticks so the year label sits at Jan 1, not at the auto-placed end of the axis.
+  // For 1Y view, also include half-year ticks so the axis doesn't look empty.
+  const xTicks = useMemo(() => {
+    if (peData.length === 0) return [];
+    const [start, end] = xDomain;
+    const spanYears = (end - start) / (365.25 * 24 * 60 * 60 * 1000);
+    const ticks = [];
+    const startYear = new Date(start).getFullYear();
+    const endYear = new Date(end).getFullYear();
+
+    if (spanYears < 1.5) {
+      // Half-year ticks (Jan + Jul)
+      for (let y = startYear; y <= endYear; y++) {
+        const jan = new Date(y, 0, 1).getTime();
+        const jul = new Date(y, 6, 1).getTime();
+        if (jan >= start && jan <= end) ticks.push(jan);
+        if (jul >= start && jul <= end) ticks.push(jul);
+      }
+    } else {
+      // Yearly ticks at Jan 1
+      const step = spanYears > 8 ? 2 : 1;
+      for (let y = startYear; y <= endYear; y += step) {
+        const jan = new Date(y, 0, 1).getTime();
+        if (jan >= start && jan <= end) ticks.push(jan);
+      }
+    }
+    return ticks;
+  }, [peData, xDomain]);
+
   const formatXTick = (t) => {
     if (!t) return "";
     const d = new Date(t);
+    const spanYears = peData.length > 1 ? (xDomain[1] - xDomain[0]) / (365.25 * 24 * 60 * 60 * 1000) : 1;
+    if (spanYears < 1.5) {
+      // Short months like "Jan", "Jul" (since axis labels are tight at 1Y zoom)
+      return d.toLocaleString("en", { month: "short" }) + (d.getMonth() === 0 ? ` ${d.getFullYear()}` : "");
+    }
     return `${d.getFullYear()}`;
   };
   const formatTooltipLabel = (t) => {
@@ -131,7 +165,7 @@ function PEHistoryMultiPane({ symbol, currentPe, valuationSeries, fmt }) {
       <div style={{ width: "100%", height: 180 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={peData} margin={{ top: 6, right: 16, left: 0, bottom: 4 }}>
-            <XAxis type="number" dataKey="t" domain={xDomain} tickFormatter={formatXTick} tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" />
+            <XAxis type="number" dataKey="t" domain={xDomain} ticks={xTicks} tickFormatter={formatXTick} tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" />
             <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={36} />
             {avgPe != null && (
               <ReferenceLine y={avgPe} stroke="#8a93a3" strokeDasharray="3 3" strokeWidth={0.8} label={{ value: `avg ${avgPe.toFixed(1)}×`, fontSize: 9, fill: "#5a6573", position: "insideTopRight" }} />
