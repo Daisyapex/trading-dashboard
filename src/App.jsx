@@ -2880,11 +2880,7 @@ function RiskHelper({ isMobile, macro }) {
               {" "}— then click "Refresh prices" in Your Setup.
             </div>
           )}
-          {/* Risk Spectrum chart */}
-          <div style={{ borderTop: "1px solid #efece5" }}>
-            <RiskSpectrumPanel portfolioVarPct={portfolioVarPct} isMobile={isMobile} embedded macro={macro} />
-          </div>
-          {/* VaR Decomposition (matches Risk Spectrum dot now) */}
+          {/* VaR Decomposition — main risk view here */}
           <div style={{ padding: "12px 14px", borderTop: "1px solid #efece5" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1f2c", marginBottom: 8 }}>VaR Decomposition · Where Your Bad-Day Risk Comes From</div>
             <VolatilityDecomposition positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
@@ -2893,41 +2889,12 @@ function RiskHelper({ isMobile, macro }) {
           <div style={{ borderTop: "1px solid #efece5" }}>
             <ConcentrationRiskPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded macro={macro} />
           </div>
-          {/* Diversification suggestions */}
-          {macro?.benchmarks?.length > 0 && (
-            <div style={{ borderTop: "1px solid #efece5" }}>
-              <DalioSuggestionsPanel positions={enriched} totalValue={totalValue} cashRemaining={cashRemaining} macro={macro} isMobile={isMobile} embedded />
-            </div>
-          )}
         </CollapsibleSection>
       )}
 
-      {/* ===== SECTION 3: STRESS SCENARIOS ===== */}
+      {/* ===== SECTION 3: PORTFOLIO SIMULATION (the hub — everything actionable) ===== */}
       {enriched.length > 0 && (
-        <CollapsibleSection title="Stress Scenarios" subtitle="What if macro shocks happen, or you change allocations" defaultOpen={true}>
-          {/* Macro stress test */}
-          {enriched.some((p) => p.correlations && Object.keys(p.correlations).length > 0) && (
-            <MacroStressPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
-          )}
-          {/* Valuation risk — P/E compression scenarios (effectively "AI bubble" scenarios) */}
-          {enriched.some((p) => p.pe != null) && (
-            <div style={{ borderTop: "1px solid #efece5" }}>
-              <ValuationRiskPanel positions={enriched} isMobile={isMobile} embedded />
-            </div>
-          )}
-          {/* Quick allocation what-ifs */}
-          <div style={{ borderTop: "1px solid #efece5" }}>
-            <div style={{ padding: "12px 14px 0" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1f2c", marginBottom: 4 }}>Quick Allocation What-Ifs</div>
-            </div>
-            <QuickAllocationWhatIfs positions={enriched} totalValue={totalValue} totalVar95={totalVar95} macro={macro} isMobile={isMobile} embedded />
-          </div>
-        </CollapsibleSection>
-      )}
-
-      {/* ===== SECTION 4: PORTFOLIO SIMULATION ===== */}
-      {enriched.length > 0 && (
-        <CollapsibleSection title="Portfolio Simulation" subtitle="Try changes, see impact in plain English + Holy Grail chart" defaultOpen={true}>
+        <CollapsibleSection title="Portfolio Simulation" subtitle="Try changes · see Holy Grail update · stress test allocations" defaultOpen={true}>
           <div style={{ padding: "12px 14px" }}>
             <PortfolioSimulatorPanel
               positions={enriched}
@@ -2939,9 +2906,27 @@ function RiskHelper({ isMobile, macro }) {
               fetchRiskFor={fetchRiskFor}
               index={index}
             />
-            {/* Holy Grail chart — shows diversification benefit */}
-            <HolyGrailChart positions={enriched} hypotheticalPositions={null} isMobile={isMobile} />
           </div>
+          {/* Quick allocation what-ifs — folded in from old Stress Scenarios */}
+          <div style={{ borderTop: "1px solid #efece5" }}>
+            <div style={{ padding: "12px 14px 0" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c", marginBottom: 4 }}>Quick Allocation What-Ifs</div>
+              <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 4 }}>Scripted rotation/diversifier scenarios — see impact at a glance.</div>
+            </div>
+            <QuickAllocationWhatIfs positions={enriched} totalValue={totalValue} totalVar95={totalVar95} macro={macro} isMobile={isMobile} embedded />
+          </div>
+          {/* Macro stress test */}
+          {enriched.some((p) => p.correlations && Object.keys(p.correlations).length > 0) && (
+            <div style={{ borderTop: "1px solid #efece5" }}>
+              <MacroStressPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
+            </div>
+          )}
+          {/* Valuation risk — P/E compression scenarios (effectively "AI bubble" scenarios) */}
+          {enriched.some((p) => p.pe != null) && (
+            <div style={{ borderTop: "1px solid #efece5" }}>
+              <ValuationRiskPanel positions={enriched} isMobile={isMobile} embedded />
+            </div>
+          )}
         </CollapsibleSection>
       )}
 
@@ -4577,72 +4562,44 @@ function QuickAllocationWhatIfs({ positions, totalValue, totalVar95, macro, isMo
 // ============================================================
 // HOLY GRAIL CHART
 // Visualizes Dalio's principle: portfolio std dev decreases as you add
-// uncorrelated assets. Shows curves for different correlation levels.
-// Plots current portfolio and hypothetical portfolio as dots.
+// uncorrelated assets. Reference curves at different correlation levels.
+// Plots the user's ACTUAL portfolio VaR as dots (current + hypothetical).
+// Curves are calibrated to the user's avg individual asset volatility.
 // ============================================================
-function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
-  // ===== Compute current and hypothetical portfolio points =====
-  const computePortfolioPoint = (posList) => {
-    const valid = posList.filter((p) => p.value > 0 && p.var95 != null && p.correlations?.SPY != null);
-    if (valid.length < 1) return null;
-    const totalVal = valid.reduce((s, p) => s + p.value, 0);
-    if (!totalVal) return null;
-    // Avg pairwise correlation (using SPY corr as proxy: pair_corr ≈ corr_i * corr_j)
-    let pairSum = 0, pairCount = 0;
-    for (let i = 0; i < valid.length; i++) {
-      for (let j = i + 1; j < valid.length; j++) {
-        pairSum += valid[i].correlations.SPY * valid[j].correlations.SPY;
-        pairCount++;
-      }
-    }
-    const avgCorr = pairCount > 0 ? pairSum / pairCount : (valid.length === 1 ? 1 : 0.5);
-    // Avg individual VaR (weighted)
-    const avgIndividualVar = valid.reduce((s, p) => s + ((p.value / totalVal) * p.var95), 0);
-    // Portfolio VaR using simple formula:
-    // portfolio_var² = avg_var² * (1/N + (N-1)/N * avg_corr)
-    const N = valid.length;
-    const portfolioVar = avgIndividualVar * Math.sqrt((1 / N) + ((N - 1) / N) * Math.max(0, avgCorr));
-    return { N, portfolioVar, avgIndividualVar, avgCorr };
-  };
+function HolyGrailChart({ currentN, currentVarPct, hypotheticalN, hypotheticalVarPct, avgIndividualVar, isMobile }) {
+  if (!currentN || currentVarPct == null || !avgIndividualVar) return null;
 
-  const current = computePortfolioPoint(positions);
-  const hypothetical = hypotheticalPositions ? computePortfolioPoint(hypotheticalPositions) : null;
-
-  if (!current) return null;
-
-  // Use the user's avg individual VaR as the y-axis reference scale
-  const baseVar = current.avgIndividualVar;
-
-  // Build curves for different correlation levels
+  // Reference curves at different correlation levels
   const corrLevels = [0, 0.2, 0.4, 0.6];
   const colors = ["#0a6e44", "#86b09c", "#d4a017", "#a3203a"];
   const Nmax = 20;
   const curveData = [];
   for (let n = 1; n <= Nmax; n++) {
     const point = { N: n };
-    corrLevels.forEach((rho, i) => {
-      const vol = baseVar * Math.sqrt((1 / n) + ((n - 1) / n) * rho);
+    corrLevels.forEach((rho) => {
+      const vol = avgIndividualVar * Math.sqrt((1 / n) + ((n - 1) / n) * rho);
       point[`corr${Math.round(rho * 100)}`] = +vol.toFixed(3);
     });
+    // Add current dot at the user's actual N
+    if (n === Math.min(currentN, Nmax)) point.current = +currentVarPct.toFixed(3);
+    if (hypotheticalN != null && hypotheticalVarPct != null && n === Math.min(hypotheticalN, Nmax)) {
+      point.hypothetical = +hypotheticalVarPct.toFixed(3);
+    }
     curveData.push(point);
   }
 
-  // Current dot data: { N, var }
-  const currentDot = { N: Math.min(current.N, Nmax), pe: +current.portfolioVar.toFixed(3) };
-  const hypDot = hypothetical ? { N: Math.min(hypothetical.N, Nmax), pe: +hypothetical.portfolioVar.toFixed(3) } : null;
-
   return (
-    <div style={{ marginTop: 12, padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
+    <div style={{ marginTop: 14, padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c" }}>The Holy Grail · Diversification Benefit</span>
-        <span style={{ fontSize: 10, color: "#5a6573" }}>Dalio's principle: more uncorrelated assets = less portfolio risk</span>
+        <span style={{ fontSize: 10, color: "#5a6573" }}>Dalio: more uncorrelated assets = less portfolio risk</span>
       </div>
       <div style={{ width: "100%", height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={curveData} margin={{ top: 8, right: 16, left: 0, bottom: 18 }}>
             <XAxis dataKey="N" tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" label={{ value: "Number of positions →", position: "insideBottom", offset: -8, style: { fontSize: 9, fill: "#5a6573" } }} />
-            <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={36} tickFormatter={(v) => `${v.toFixed(1)}%`} />
-            <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} formatter={(v, name) => [`${Number(v).toFixed(2)}%`, name]} />
+            <YAxis tick={{ fontSize: 9, fill: "#8a93a3" }} stroke="#e6e3db" orientation="right" width={42} tickFormatter={(v) => `${v.toFixed(1)}%`} />
+            <Tooltip contentStyle={{ background: "#1a1f2c", border: "none", fontSize: 11 }} labelFormatter={(n) => `N = ${n}`} labelStyle={{ color: "#d4a017" }} itemStyle={{ color: "#fff" }} formatter={(v, name) => [`${Number(v).toFixed(2)}%`, name]} />
             {corrLevels.map((rho, i) => (
               <Line
                 key={i}
@@ -4654,24 +4611,31 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
                 name={`${Math.round(rho * 100)}% correlation`}
               />
             ))}
-            {/* Reference dots for current and hypothetical */}
-            <ReferenceLine x={currentDot.N} stroke="#1a4c80" strokeDasharray="2 2" strokeWidth={1} label={{ value: `Now (${current.N} pos)`, fontSize: 9, fill: "#1a4c80", position: "insideTop" }} />
-            {hypDot && hypDot.N !== currentDot.N && (
-              <ReferenceLine x={hypDot.N} stroke="#d4a017" strokeDasharray="2 2" strokeWidth={1} label={{ value: `Hyp (${hypothetical.N})`, fontSize: 9, fill: "#d4a017", position: "insideTop" }} />
+            {/* Current portfolio dot */}
+            <Line type="monotone" dataKey="current" stroke="#1a4c80" strokeWidth={0} dot={{ fill: "#1a4c80", r: 6, stroke: "#fff", strokeWidth: 2 }} name="Your portfolio (current)" connectNulls={false} />
+            {/* Hypothetical portfolio dot */}
+            {hypotheticalN != null && hypotheticalVarPct != null && (
+              <Line type="monotone" dataKey="hypothetical" stroke="#d4a017" strokeWidth={0} dot={{ fill: "#d4a017", r: 6, stroke: "#fff", strokeWidth: 2 }} name="Hypothetical (after your changes)" connectNulls={false} />
             )}
           </LineChart>
         </ResponsiveContainer>
       </div>
       <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
-        Your current portfolio: <strong className="mono">{current.N} positions</strong> · avg pair correlation <strong className="mono">{(current.avgCorr * 100).toFixed(0)}%</strong> · estimated portfolio VaR <strong className="mono">{current.portfolioVar.toFixed(2)}%</strong>
-        {hypothetical && (
+        <span style={{ display: "inline-block", width: 10, height: 10, background: "#1a4c80", borderRadius: "50%", marginRight: 4, verticalAlign: "middle" }} />
+        Current: <strong className="mono">{currentN} positions · VaR {currentVarPct.toFixed(2)}%</strong>
+        {hypotheticalN != null && hypotheticalVarPct != null && (
           <>
-            <br />Hypothetical: <strong className="mono">{hypothetical.N} positions</strong> · avg correlation <strong className="mono">{(hypothetical.avgCorr * 100).toFixed(0)}%</strong> · VaR <strong className="mono">{hypothetical.portfolioVar.toFixed(2)}%</strong>
+            {" · "}
+            <span style={{ display: "inline-block", width: 10, height: 10, background: "#d4a017", borderRadius: "50%", marginRight: 4, marginLeft: 6, verticalAlign: "middle" }} />
+            Hypothetical: <strong className="mono">{hypotheticalN} positions · VaR {hypotheticalVarPct.toFixed(2)}%</strong>
+            <span style={{ marginLeft: 6, color: hypotheticalVarPct < currentVarPct ? "#0a6e44" : hypotheticalVarPct > currentVarPct ? "#a3203a" : "#5a6573", fontWeight: 600 }}>
+              ({hypotheticalVarPct < currentVarPct ? "↓ better" : hypotheticalVarPct > currentVarPct ? "↑ worse" : "≈ same"})
+            </span>
           </>
         )}
       </div>
-      <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-        Each curve shows portfolio VaR as you add more positions at a given average correlation. The lower the curve, the better. Diversification helps more when correlations are low. Real portfolios converge to the curve matching their actual avg correlation.
+      <div style={{ marginTop: 4, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+        Reference curves show theoretical portfolio VaR at different average correlations (assuming equal-weighted positions at avg individual VaR {avgIndividualVar.toFixed(2)}%). Your dot may not lie exactly on any curve — that's expected, since real portfolios have unequal weights and varied correlations. Lower-and-left = better.
       </div>
     </div>
   );
@@ -4926,6 +4890,33 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
   const sameThemeCandidates = ["MU", "AVGO", "AMD", "ASML", "AMAT", "LRCX", "KLAC"].filter(isAvailable).slice(0, 4);
   const diversifierCandidates = ["GOOGL", "META", "ORCL", "AAPL", "AMZN", "CRM"].filter(isAvailable).slice(0, 4);
 
+  // Sector-grouped suggestions — each group filtered to watchlist
+  const SUGGESTION_GROUPS = [
+    {
+      label: "AI / Semis",
+      sub: "Extends your AI thesis",
+      candidates: ["MU", "AVGO", "AMD", "AMAT", "LRCX", "KLAC", "ASML", "CDNS", "SNPS"],
+    },
+    {
+      label: "Mega-Cap Tech",
+      sub: "Different growth drivers within tech",
+      candidates: ["GOOGL", "META", "ORCL", "AAPL", "AMZN", "CRM", "ADBE"],
+    },
+    {
+      label: "Healthcare",
+      sub: "Defensive, low correlation to tech",
+      candidates: ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "TMO", "DHR"],
+    },
+    {
+      label: "Financials / Energy / Consumer",
+      sub: "True sector diversifiers",
+      candidates: ["JPM", "BAC", "WFC", "XOM", "CVX", "WMT", "PG", "KO", "PEP", "COST"],
+    },
+  ].map((group) => ({
+    ...group,
+    available: group.candidates.filter(isAvailable).slice(0, 4),
+  })).filter((group) => group.available.length > 0);
+
   // ===== Metrics =====
   const computeMetrics = (positionsList, sharesGetter) => {
     let total = 0, totalVar = 0, totalCvar = 0, betaSum = 0, corrSum = 0, corrCount = 0;
@@ -5119,31 +5110,26 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
         </div>
       </div>
 
-      {/* ===== Try Adding (curated suggestions) ===== */}
+      {/* ===== Try Adding (curated suggestions, grouped by sector) ===== */}
       <div style={{ marginBottom: 12, padding: "10px 12px", background: "#f9f7f1", border: "1px dashed #e6e3db", borderRadius: 2 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Try Adding (5% position by default)</div>
-        {sameThemeCandidates.length > 0 && (
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>Same theme (extends AI/semis thesis):</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Top Stock Diversifiers for Your Portfolio (5% position by default)</div>
+        {SUGGESTION_GROUPS.map((group, gi) => (
+          <div key={gi} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>
+              <strong>{group.label}</strong> <span style={{ color: "#8a93a3" }}>· {group.sub}</span>
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {sameThemeCandidates.map((sym) => (
+              {group.available.map((sym) => (
                 <button key={sym} onClick={() => addSuggestion(sym)} disabled={addLoading[sym]} style={{ fontSize: 11, padding: "4px 10px", cursor: addLoading[sym] ? "default" : "pointer", border: "1px solid #7ba2cc", background: "#fff", color: "#1a4c80", borderRadius: 2, fontWeight: 600 }}>
                   {addLoading[sym] ? "..." : `+ 5% ${sym}`}
                 </button>
               ))}
             </div>
           </div>
-        )}
-        {diversifierCandidates.length > 0 && (
-          <div>
-            <div style={{ fontSize: 10, color: "#5a6573", marginBottom: 4 }}>Diversifiers (different growth drivers):</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-              {diversifierCandidates.map((sym) => (
-                <button key={sym} onClick={() => addSuggestion(sym)} disabled={addLoading[sym]} style={{ fontSize: 11, padding: "4px 10px", cursor: addLoading[sym] ? "default" : "pointer", border: "1px solid #7ba2cc", background: "#fff", color: "#1a4c80", borderRadius: 2, fontWeight: 600 }}>
-                  {addLoading[sym] ? "..." : `+ 5% ${sym}`}
-                </button>
-              ))}
-            </div>
+        ))}
+        {SUGGESTION_GROUPS.length === 0 && (
+          <div style={{ fontSize: 11, color: "#8a93a3", fontStyle: "italic" }}>
+            No suggestions available — make sure your watchlist (tickers.json) includes some tickers from these sectors: semis, mega-cap tech, healthcare, financials/consumer staples.
           </div>
         )}
         {/* Show added positions inline with +/- controls */}
@@ -5195,6 +5181,26 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
           </div>
         </div>
       )}
+
+      {/* ===== Holy Grail Chart — diversification benefit visualization ===== */}
+      {(() => {
+        // Compute weighted-avg individual VaR from current portfolio (calibrates the curves)
+        const validCur = positions.filter((p) => p.var95 != null);
+        if (validCur.length === 0) return null;
+        const totalValForCalc = validCur.reduce((s, p) => s + ((p.shares || 0) * (p.currentPrice || 0)), 0);
+        if (!totalValForCalc) return null;
+        const avgIndividualVar = validCur.reduce((s, p) => s + ((p.shares || 0) * (p.currentPrice || 0) / totalValForCalc) * p.var95, 0);
+        return (
+          <HolyGrailChart
+            currentN={curMetrics.count}
+            currentVarPct={curMetrics.varPct}
+            hypotheticalN={hasChanges ? hypMetrics.count : null}
+            hypotheticalVarPct={hasChanges ? hypMetrics.varPct : null}
+            avgIndividualVar={avgIndividualVar}
+            isMobile={isMobile}
+          />
+        );
+      })()}
 
       {/* ===== Show all metrics toggle ===== */}
       {hasChanges && (
