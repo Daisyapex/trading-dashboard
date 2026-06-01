@@ -3275,22 +3275,47 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
     if (s.includes("quantum") || s.includes("space")) return benchVar("IWM");
     return benchVar("SPY");
   };
+  // Aggregate per-position realistic scenarios into sector totals — SAME math as VaR Decomp & Howard Marks
+  const sectorScenarioMap = {};
+  positions.forEach((p) => {
+    if (!p.value || !p.sector) return;
+    if (!sectorScenarioMap[p.sector]) {
+      sectorScenarioMap[p.sector] = { normalBearDollar: 0, crisisDollar: 0, bestDollar: 0 };
+    }
+    const sectorKey = classifySector(p.sector);
+    const scen = computeRealisticScenarios(p, sectorKey);
+    sectorScenarioMap[p.sector].normalBearDollar += scen.normalBearDollar;
+    sectorScenarioMap[p.sector].crisisDollar += scen.crisisDollar;
+    sectorScenarioMap[p.sector].bestDollar += scen.bestDollar;
+  });
+
   const sectorRows = Object.entries(sectorMap)
-    .map(([sector, value]) => ({
-      sector,
-      value,
-      pct: (value / totalValue) * 100,
-      // Weighted-avg daily VaR for holdings in this sector (per-position avg)
-      dailyVar: sectorVarMap[sector] != null ? sectorVarMap[sector] / value : null,
-      // Contribution to portfolio VaR (= sectorVarMap[sector] / totalValue) — sums to portfolio VaR ~3.3%
-      varContribution: sectorVarMap[sector] != null ? sectorVarMap[sector] / totalValue : null,
-      // Bad-day $ loss from this sector (= sectorVarMap[sector] / 100) — sums to portfolio total Bad Day $
-      dollarVar: sectorVarMap[sector] != null ? sectorVarMap[sector] / 100 : null,
-      typicalVar: sectorTypicalVar(sector),
-    }))
+    .map(([sector, value]) => {
+      const sc = sectorScenarioMap[sector] || { normalBearDollar: 0, crisisDollar: 0, bestDollar: 0 };
+      return {
+        sector,
+        value,
+        pct: (value / totalValue) * 100,
+        // Daily metrics
+        dailyVar: sectorVarMap[sector] != null ? sectorVarMap[sector] / value : null,
+        varContribution: sectorVarMap[sector] != null ? sectorVarMap[sector] / totalValue : null,
+        dollarVar: sectorVarMap[sector] != null ? sectorVarMap[sector] / 100 : null,
+        typicalVar: sectorTypicalVar(sector),
+        // Annual scenarios (SHARED with VaR Decomp + Howard Marks chart)
+        normalBearDollar: sc.normalBearDollar,
+        normalBearPct: value > 0 ? (sc.normalBearDollar / value) * 100 : 0,
+        crisisDollar: sc.crisisDollar,
+        crisisPct: value > 0 ? (sc.crisisDollar / value) * 100 : 0,
+        bestDollar: sc.bestDollar,
+        bestPct: value > 0 ? (sc.bestDollar / value) * 100 : 0,
+      };
+    })
     .sort((a, b) => b.value - a.value);
   const dominantSector = sectorRows[0];
   const totalSectorDollarVar = sectorRows.reduce((s, r) => s + (r.dollarVar || 0), 0);
+  const totalSectorNormalBear = sectorRows.reduce((s, r) => s + r.normalBearDollar, 0);
+  const totalSectorCrisis = sectorRows.reduce((s, r) => s + r.crisisDollar, 0);
+  const totalSectorBest = sectorRows.reduce((s, r) => s + r.bestDollar, 0);
 
   // Effective diversification using average pairwise correlation with SPY
   // (simpler proxy: stocks with high SPY correlation are essentially the same bet)
@@ -3334,66 +3359,6 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
           </div>
         </div>
 
-        {/* Sector breakdown */}
-        <div className="panel-title" style={{ fontSize: 10, marginBottom: 8, marginTop: 14 }}>Sector Breakdown</div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "80px 1fr 35px 60px 55px 55px 60px 60px" : "140px 1fr 45px 70px 65px 65px 75px 75px", gap: 6, fontSize: 9, fontWeight: 600, color: "#8a93a3", padding: "0 0 4px", borderBottom: "1px solid #e6e3db", marginBottom: 4 }}>
-          <div>Sector</div>
-          <div>% of portfolio</div>
-          <div style={{ textAlign: "right" }}>%</div>
-          <div style={{ textAlign: "right" }} title="Dollar amount invested in this sector">Invested $</div>
-          <div style={{ textAlign: "right" }} title="Your weighted-avg daily VaR for holdings in this sector (per-position avg)">Your VaR</div>
-          <div style={{ textAlign: "right" }} title="Typical daily VaR for the sector benchmark ETF (e.g., SMH for semis, OEF for mega-cap tech)">Sector Norm</div>
-          <div style={{ textAlign: "right" }} title="This sector's contribution to portfolio VaR (= weight × your sector VaR). Sums to portfolio VaR.">Contribution</div>
-          <div style={{ textAlign: "right" }} title="Bad-day $ loss from this sector. Sums to portfolio Bad Day $ total.">Bad Day $</div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          {sectorRows.map((s, i) => {
-            const color = s.pct > 60 ? "#c4314b" : s.pct > 40 ? "#d4a017" : "#7ba2cc";
-            // Color "Your VaR" vs "Sector Norm" to show whether you're holding higher- or lower-vol names than typical
-            const yourVsNorm = (s.dailyVar != null && s.typicalVar != null) ? s.dailyVar / s.typicalVar : null;
-            const yourVarColor = yourVsNorm == null ? "#c4314b"
-              : yourVsNorm > 1.3 ? "#c4314b"
-              : yourVsNorm > 1.1 ? "#d4a017"
-              : yourVsNorm < 0.85 ? "#0a8554"
-              : "#1a1f2c";
-            return (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "80px 1fr 35px 60px 55px 55px 60px 60px" : "140px 1fr 45px 70px 65px 65px 75px 75px", gap: 6, alignItems: "center" }}>
-                <span style={{ fontSize: 11, color: "#5a6573", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
-                <div style={{ height: 16, background: "#efece5", borderRadius: 2, position: "relative" }}>
-                  <div style={{ width: `${s.pct}%`, height: "100%", background: color, borderRadius: 2 }} />
-                </div>
-                <span className="mono" style={{ textAlign: "right", fontSize: 11, fontWeight: 600 }}>{s.pct.toFixed(0)}%</span>
-                <span className="mono" title="Invested in this sector" style={{ textAlign: "right", fontSize: 10, color: "#1a1f2c", fontWeight: 600 }}>${s.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                <span className="mono" title="Your weighted-avg daily VaR in this sector" style={{ textAlign: "right", fontSize: 10, color: yourVarColor, fontWeight: 600 }}>
-                  {s.dailyVar != null ? `${s.dailyVar.toFixed(2)}%` : "—"}
-                </span>
-                <span className="mono" title="Typical sector benchmark VaR" style={{ textAlign: "right", fontSize: 10, color: "#5a6573" }}>
-                  {s.typicalVar != null ? `${s.typicalVar.toFixed(2)}%` : "—"}
-                </span>
-                <span className="mono" title="Sector's contribution to portfolio VaR (sums to ~portfolio VaR)" style={{ textAlign: "right", fontSize: 10, color: "#1a4c80", fontWeight: 700 }}>
-                  {s.varContribution != null ? `${s.varContribution.toFixed(2)}%` : "—"}
-                </span>
-                <span className="mono" title="Bad-day $ loss from this sector" style={{ textAlign: "right", fontSize: 10, color: "#c4314b", fontWeight: 700 }}>
-                  {s.dollarVar != null ? `-$${s.dollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
-                </span>
-              </div>
-            );
-          })}
-          {/* Total row */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "80px 1fr 35px 60px 55px 55px 60px 60px" : "140px 1fr 45px 70px 65px 65px 75px 75px", gap: 6, alignItems: "center", borderTop: "2px solid #1a1f2c", paddingTop: 6, marginTop: 2, fontWeight: 700 }}>
-            <span style={{ fontSize: 11, color: "#1a1f2c" }}>Total</span>
-            <span></span>
-            <span className="mono" style={{ textAlign: "right", fontSize: 11 }}>{sectorRows.reduce((s, r) => s + r.pct, 0).toFixed(0)}%</span>
-            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a1f2c" }}>${sectorRows.reduce((s, r) => s + r.value, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-            <span></span>
-            <span></span>
-            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#1a4c80" }}>≈ {sectorRows.reduce((s, r) => s + (r.varContribution || 0), 0).toFixed(2)}%</span>
-            <span className="mono" style={{ textAlign: "right", fontSize: 11, color: "#c4314b" }}>-${totalSectorDollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-          </div>
-        </div>
-        <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.4 }}>
-          <strong>Your VaR</strong> = weighted avg daily VaR for holdings in this sector. <strong>Sector Norm</strong> = typical sector ETF VaR. <strong>Contribution</strong> = how much this sector contributes to your portfolio's total VaR (sum equals your portfolio VaR). <strong>Bad Day $</strong> = same as Contribution but in dollars (sums to your portfolio's headline Bad Day VaR total).
-        </div>
 
         {concentrationFlags.length > 0 && (
           <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -4310,54 +4275,19 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
         else if (vsSectorNorm < 0.85) assessment = { label: "Calmer than sector norm", color: "#0a8554" };
         else assessment = { label: "Roughly at sector norm", color: "#5a6573" };
       }
-      // ===== PE compression impact (per-ticker) =====
-      // Sector PE benchmarks for "Typical" and "Bear" compression scenarios
-      const SECTOR_PE = {
-        // Returns { typical, bear } — sector PE benchmarks based on 10-year history
-        semi: { typical: 24, bear: 18 },
-        software: { typical: 42, bear: 28 },
-        mega: { typical: 27, bear: 20 },
-        hardware: { typical: 22, bear: 16 },
-        health: { typical: 20, bear: 14 },
-        financ: { typical: 14, bear: 9 },
-        energ: { typical: 14, bear: 8 },
-        consumer: { typical: 22, bear: 15 },
-        crypto: { typical: 25, bear: 12 },
-      };
-      const sectorPeBenchmark = (sectorRaw) => {
-        if (!sectorRaw) return SECTOR_PE.mega;
-        const s = sectorRaw.toLowerCase();
-        if (s.includes("semi") || s.includes("memory")) return SECTOR_PE.semi;
-        if (s.includes("ai software") || s.includes("software")) return SECTOR_PE.software;
-        if (s.includes("hyperscaler") || s.includes("mega cap") || s.includes("internet content")) return SECTOR_PE.mega;
-        if (s.includes("ai hardware") || s.includes("ai infrastructure")) return SECTOR_PE.hardware;
-        if (s.includes("health")) return SECTOR_PE.health;
-        if (s.includes("financ") || s.includes("bank") || s.includes("buffett") || s.includes("ackman") || s.includes("payment")) return SECTOR_PE.financ;
-        if (s.includes("energ") || s.includes("oil")) return SECTOR_PE.energ;
-        if (s.includes("consumer") || s.includes("retail") || s.includes("staples") || s.includes("entertain")) return SECTOR_PE.consumer;
-        if (s.includes("crypto")) return SECTOR_PE.crypto;
-        return SECTOR_PE.mega;
-      };
-      let peCompressLoss = null;  // $ loss if PE compresses to "bear" level
-      let peCompressPct = null;   // % loss
-      if (p.pe != null && p.pe > 0) {
-        const benchmark = sectorPeBenchmark(p.sector);
-        if (p.pe > benchmark.bear) {
-          const compression = (p.pe - benchmark.bear) / p.pe;
-          peCompressLoss = -p.value * compression;
-          peCompressPct = -compression * 100;
-        } else {
-          peCompressLoss = 0;
-          peCompressPct = 0;
-        }
-      }
+
+      // ===== SHARED realistic scenarios (identical to Howard Marks chart & Sector Breakdown) =====
+      const sectorKey = classifySector(p.sector);
+      const scen = computeRealisticScenarios(p, sectorKey);
+
       return {
         symbol: p.symbol,
         sector: p.sector || "—",
+        sectorKey,
         invested: p.value,  // $ invested in this position
         weight: weight * 100,
         dailyVar,
-        dollarVar: p.value * (dailyVar / 100),  // $ contribution to portfolio bad-day VaR — sums to total
+        dollarVar: p.value * (dailyVar / 100),  // $ daily bad-day loss — sums to portfolio total
         benchSym,
         benchVarPct,
         spyMultiple,
@@ -4365,102 +4295,106 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, ma
         assessment,
         contribution,
         currentPe: p.pe,
-        peCompressLoss,
-        peCompressPct,
+        // SHARED scenarios — same numbers in Howard Marks chart & Sector Breakdown
+        normalBearPct: scen.normalBearPct,
+        normalBearDollar: scen.normalBearDollar,
+        crisisPct: scen.crisisPct,
+        crisisDollar: scen.crisisDollar,
+        bestPct: scen.bestPct,
+        bestDollar: scen.bestDollar,
       };
     })
     .sort((a, b) => b.contribution - a.contribution);
   if (!rows.length) return null;
   const totalContribution = rows.reduce((s, r) => s + r.contribution, 0);
   const maxContribution = Math.max(...rows.map((r) => r.contribution));
-  const totalPeCompressLoss = rows.reduce((s, r) => s + (r.peCompressLoss || 0), 0);
   const totalDollarVar = rows.reduce((s, r) => s + r.dollarVar, 0);
+  const totalNormalBear = rows.reduce((s, r) => s + r.normalBearDollar, 0);
+  const totalCrisis = rows.reduce((s, r) => s + r.crisisDollar, 0);
+  const totalBest = rows.reduce((s, r) => s + r.bestDollar, 0);
   const totalInvested = rows.reduce((s, r) => s + r.invested, 0);
 
   const innerContent = (
     <>
       <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 8, lineHeight: 1.5 }}>
-        Your portfolio bad-day risk (~<strong className="mono">{totalContribution.toFixed(2)}% VaR</strong>) broken down by holding.
-        Sorted by contribution. Sector Norm uses real ETF benchmarks. PE Bear shows estimated $ loss if each stock's P/E compresses to the sector's bear-case level.
+        Your portfolio risk broken down by holding. <strong>Bad Day $</strong> is daily (95% VaR sums to ~<span className="mono">{totalContribution.toFixed(2)}%</span>). <strong>Normal Bear / Crisis / Best</strong> are annual scenarios — same math as the Howard Marks chart in Section 3 and the Sector Breakdown table below.
       </div>
 
-      {/* ===== Consolidated single table — one row per ticker ===== */}
+      {/* ===== Unified table — daily + annual scenarios using SHARED math ===== */}
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 880 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
-              <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
-              <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
-              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Weight</th>
-              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Dollar amount invested in this position">Invested $</th>
-              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Daily 95% VaR — bad-day move magnitude">Daily VaR</th>
-              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Bad-day loss in dollars for this position (= position value × daily VaR). Sums to portfolio's Bad Day total.">Bad Day $</th>
-              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Sector benchmark VaR — what's typical for this industry">Sector Norm</th>
-              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Multiple of S&P 500 VaR (1.0x = market vol)">vs S&P</th>
-              <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Volatility contribution bar — your daily VaR contribution from this position">Contrib.</th>
-              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Estimated $ loss if this stock's P/E compresses to the sector's bear-case (10-year low) level">PE Bear $</th>
-              <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Assessment</th>
+              <th style={{ padding: "6px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+              <th style={{ padding: "6px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
+              <th style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Wt</th>
+              <th style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Dollar amount invested in this position">Invested $</th>
+              <th style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Daily 95% VaR — bad-day move magnitude (statistical, from 1-year daily returns)">Bad Day $ <span style={{ fontSize: 8, color: "#8a93a3" }}>(daily)</span></th>
+              <th style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Annual normal bear — P/E compresses to sector typical 10-yr P/E (sector selloff scenario)">Normal Bear <span style={{ fontSize: 8, color: "#8a93a3" }}>(annual)</span></th>
+              <th style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Annual crisis bear — worse of P/E to sector bear (2022-style) OR historical max drawdown">Crisis <span style={{ fontSize: 8, color: "#8a93a3" }}>(annual)</span></th>
+              <th style={{ padding: "6px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Annual best year — sector typical bull-year return (10-yr historical average)">Best Year <span style={{ fontSize: 8, color: "#8a93a3" }}>(annual)</span></th>
+              <th style={{ padding: "6px 6px", textAlign: "left", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }}>Assessment</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
-              const barWidth = (r.contribution / maxContribution) * 100;
               return (
                 <tr key={r.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
-                  <td className="mono" style={{ padding: "6px 8px", fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</td>
-                  <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sector}</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{r.weight.toFixed(0)}%</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#1a1f2c", fontWeight: 600 }}>${r.invested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>{r.dailyVar.toFixed(2)}%</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>-${r.dollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#5a6573" }}>
-                    {r.benchVarPct != null ? `${r.benchVarPct.toFixed(2)}%` : "—"}
-                    <span style={{ fontSize: 9, color: "#8a93a3", marginLeft: 3 }}>({r.benchSym})</span>
+                  <td className="mono" style={{ padding: "6px 6px", fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</td>
+                  <td style={{ padding: "6px 6px", fontSize: 10, color: "#5a6573" }}>{r.sector}</td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right" }}>{r.weight.toFixed(0)}%</td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", color: "#1a1f2c", fontWeight: 600 }}>${r.invested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>
+                    -${r.dollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>({r.dailyVar.toFixed(2)}%)</div>
                   </td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: r.spyMultiple > 1.5 ? "#c4314b" : r.spyMultiple > 1.2 ? "#d4a017" : "#5a6573" }}>
-                    {r.spyMultiple != null ? `${r.spyMultiple.toFixed(1)}x` : "—"}
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>
+                    -${Math.abs(r.normalBearDollar).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>({r.normalBearPct.toFixed(0)}%)</div>
                   </td>
-                  <td style={{ padding: "6px 8px", minWidth: 110 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <div style={{ flex: 1, position: "relative", height: 10, background: "#f5f3ed", borderRadius: 2 }}>
-                        <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${barWidth}%`, background: "#7ba2cc", borderRadius: 2 }} />
-                      </div>
-                      <span className="mono" style={{ fontSize: 10, color: "#1a4c80", fontWeight: 600, minWidth: 40, textAlign: "right" }}>{r.contribution.toFixed(2)}%</span>
-                    </div>
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", color: "#a3203a", fontWeight: 500 }}>
+                    -${Math.abs(r.crisisDollar).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>({r.crisisPct.toFixed(0)}%)</div>
                   </td>
-                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontSize: 10 }}>
-                    {r.peCompressLoss != null
-                      ? (r.peCompressLoss === 0 ? "—" : `-$${Math.abs(r.peCompressLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })} (${r.peCompressPct.toFixed(0)}%)`)
-                      : "no PE"}
+                  <td className="mono" style={{ padding: "6px 6px", textAlign: "right", color: "#0a8554", fontWeight: 600 }}>
+                    +${r.bestDollar.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>(+{r.bestPct.toFixed(0)}%)</div>
                   </td>
-                  <td style={{ padding: "6px 8px", fontSize: 10, color: r.assessment?.color || "#5a6573" }}>
+                  <td style={{ padding: "6px 6px", fontSize: 10, color: r.assessment?.color || "#5a6573" }}>
                     {r.assessment?.label || "—"}
                   </td>
                 </tr>
               );
             })}
             <tr style={{ borderTop: "2px solid #1a1f2c", fontWeight: 700, color: "#1a1f2c" }}>
-              <td className="mono" style={{ padding: "8px 8px" }}>Total</td>
-              <td style={{ padding: "8px 8px" }}></td>
-              <td className="mono" style={{ padding: "8px 8px", textAlign: "right" }}>100%</td>
-              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#1a1f2c" }}>${totalInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-              <td style={{ padding: "8px 8px" }}></td>
-              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#c4314b" }}>-${totalDollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-              <td style={{ padding: "8px 8px" }}></td>
-              <td style={{ padding: "8px 8px" }}></td>
-              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#1a4c80" }}>≈ {totalContribution.toFixed(2)}%</td>
-              <td className="mono" style={{ padding: "8px 8px", textAlign: "right", color: "#c4314b" }}>
-                {totalPeCompressLoss !== 0 ? `-$${Math.abs(totalPeCompressLoss).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
+              <td className="mono" style={{ padding: "8px 6px" }}>Total</td>
+              <td style={{ padding: "8px 6px" }}></td>
+              <td className="mono" style={{ padding: "8px 6px", textAlign: "right" }}>100%</td>
+              <td className="mono" style={{ padding: "8px 6px", textAlign: "right", color: "#1a1f2c" }}>${totalInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+              <td className="mono" style={{ padding: "8px 6px", textAlign: "right", color: "#c4314b" }}>
+                -${totalDollarVar.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>({totalContribution.toFixed(2)}%)</div>
               </td>
-              <td style={{ padding: "8px 8px" }}></td>
+              <td className="mono" style={{ padding: "8px 6px", textAlign: "right", color: "#c4314b" }}>
+                -${Math.abs(totalNormalBear).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>({((totalNormalBear / totalInvested) * 100).toFixed(0)}%)</div>
+              </td>
+              <td className="mono" style={{ padding: "8px 6px", textAlign: "right", color: "#a3203a" }}>
+                -${Math.abs(totalCrisis).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>({((totalCrisis / totalInvested) * 100).toFixed(0)}%)</div>
+              </td>
+              <td className="mono" style={{ padding: "8px 6px", textAlign: "right", color: "#0a8554" }}>
+                +${totalBest.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>(+{((totalBest / totalInvested) * 100).toFixed(0)}%)</div>
+              </td>
+              <td style={{ padding: "8px 6px" }}></td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <div style={{ marginTop: 8, padding: "6px 8px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, background: "#fafaf7", borderRadius: 2 }}>
-        <strong>Reading the table:</strong> <strong>Bad Day $</strong> shows the dollar contribution to your portfolio's bad-day loss — these sum to the total at the bottom (matches the "Bad day (VaR)" headline). The Contrib. bar shows the same thing as a % of portfolio. PE Bear $ shows the estimated loss if each stock's P/E compresses to the sector's bear-case (10-yr low) level — that's <em>valuation</em> risk, separate from daily volatility.
-        Sector Norm uses real ETF data (SMH for semis, OEF for mega-cap tech, XLV for healthcare, etc.).
+        <strong>Same math everywhere:</strong> <strong>Bad Day $</strong> = statistical daily 95% VaR (typical bad day, from 1-yr returns). <strong>Normal Bear</strong> = annual sector selloff (P/E compresses to sector typical 10-yr P/E; mega-caps capped at -40%). <strong>Crisis</strong> = annual 2008/2022-style (P/E to sector bear OR historical max drawdown — whichever is worse). <strong>Best Year</strong> = annual sector typical bull-year return. These three annual numbers match exactly what the Howard Marks chart (Section 3) shows per ticker.
       </div>
     </>
   );
@@ -4719,6 +4653,108 @@ function pairCorrelation(sectorA, sectorB, spyCorrA, spyCorrB) {
 }
 
 // ============================================================
+// SHARED REALISTIC SCENARIO HELPERS
+// Used identically across:
+//   · ReturnRiskDistribution (Howard Marks chart)
+//   · VolatilityDecomposition (VaR Decomp table)
+//   · ConcentrationRiskPanel (Sector Breakdown table)
+// One source of truth — same numbers everywhere.
+// ============================================================
+
+// Sector P/E benchmarks for realistic worst-case math
+// typical = sector's mean 10-year P/E, bear = 2022-style trough, severe = 2008-style trough
+const SECTOR_PE_RANGES = {
+  semi:     { typical: 24, bear: 18, severe: 14 },
+  software: { typical: 42, bear: 28, severe: 22 },
+  megatech: { typical: 27, bear: 20, severe: 18 },
+  ai_hw:    { typical: 22, bear: 16, severe: 12 },
+  utility:  { typical: 18, bear: 14, severe: 12 },
+  cyber:    { typical: 38, bear: 26, severe: 20 },
+  health:   { typical: 20, bear: 14, severe: 12 },
+  financ:   { typical: 14, bear: 9,  severe: 8 },
+  energy:   { typical: 14, bear: 8,  severe: 7 },
+  consumer: { typical: 22, bear: 15, severe: 12 },
+  crypto:   { typical: 25, bear: 12, severe: 8 },
+  quantum:  { typical: 60, bear: 25, severe: 15 },
+  space:    { typical: 40, bear: 20, severe: 12 },
+  other:    { typical: 20, bear: 15, severe: 12 },
+};
+
+// Sector-typical best-year return % (10-year historical bull-year averages)
+function sectorMaxUpside(sectorKey) {
+  const map = {
+    semi: 60, software: 75, megatech: 45, ai_hw: 80, utility: 25,
+    cyber: 70, health: 30, financ: 35, energy: 45, consumer: 30,
+    crypto: 200, quantum: 150, space: 100, other: 30,
+  };
+  return map[sectorKey] ?? 30;
+}
+
+// Compute the three realistic scenarios for a position:
+//   · normalBear: P/E compresses to sector typical (sector selloff / valuation reset)
+//   · crisis:     worse of (P/E to sector bear) and (historical max drawdown)
+//   · best:       sector typical bull year return
+// Returns both percentage and $-amount for each scenario.
+function computeRealisticScenarios(p, sectorKey) {
+  const ranges = SECTOR_PE_RANGES[sectorKey] || SECTOR_PE_RANGES.other;
+  const pe = p.pe;
+  const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
+
+  // PE compression %
+  const peCompressTypicalPct = (pe != null && pe > ranges.typical)
+    ? -((pe - ranges.typical) / pe) * 100
+    : null;
+  const peCompressBearPct = (pe != null && pe > ranges.bear)
+    ? -((pe - ranges.bear) / pe) * 100
+    : null;
+
+  // ===== Normal bear (sector selloff): P/E to sector typical =====
+  // Fallback if no PE data: assume mild sector correction (-15%)
+  let normalBearPct;
+  if (peCompressTypicalPct != null) {
+    normalBearPct = peCompressTypicalPct;
+  } else {
+    normalBearPct = -15;
+  }
+  // Cap mega-caps at -40% — they rarely fall more in normal bears without crisis
+  const isMegaCapCorrelated = sectorKey === "megatech" || (p.beta != null && p.beta < 1.2);
+  if (isMegaCapCorrelated) {
+    normalBearPct = Math.max(normalBearPct, -40);
+  }
+
+  // ===== Crisis bear: worse of P/E bear OR historical max drawdown =====
+  let crisisPct;
+  if (peCompressBearPct != null && histWorst != null) {
+    crisisPct = Math.min(peCompressBearPct, histWorst);
+  } else if (peCompressBearPct != null) {
+    crisisPct = peCompressBearPct;
+  } else if (histWorst != null) {
+    crisisPct = histWorst;
+  } else {
+    crisisPct = -50;
+  }
+
+  // ===== Best year: sector typical bull return =====
+  const bestPct = sectorMaxUpside(sectorKey);
+
+  return {
+    normalBearPct,
+    normalBearDollar: p.value * (normalBearPct / 100),
+    crisisPct,
+    crisisDollar: p.value * (crisisPct / 100),
+    bestPct,
+    bestDollar: p.value * (bestPct / 100),
+    peBenchmarkTypical: ranges.typical,
+    peBenchmarkBear: ranges.bear,
+  };
+}
+
+// Helper: format dollar with thousand separator and sign
+function fmt$signed(v) {
+  return (v >= 0 ? "+" : "-") + "$" + Math.abs(Math.round(v)).toLocaleString();
+}
+
+// ============================================================
 // HOLY GRAIL CHART
 // Visualizes Dalio's principle: portfolio VaR decreases as you add
 // uncorrelated assets. Uses the DIVERSIFICATION FORMULA for both dots:
@@ -4879,124 +4915,26 @@ function ReturnRiskDistribution({ positions, isMobile }) {
   const MARKET_PREMIUM = 10;   // S&P 500 long-run annual return assumption (%)
   const RISK_FREE = 4;         // 10Y T-bill yield approximation (%)
 
-  // Helper: format dollar with thousand separator and sign
+  // Helper: format dollar with thousand separator (unsigned)
   const fmt$ = (v) => (v < 0 ? "-" : "") + "$" + Math.abs(Math.round(v)).toLocaleString();
-  const fmt$signed = (v) => (v >= 0 ? "+" : "-") + "$" + Math.abs(Math.round(v)).toLocaleString();
-
-  // Sector-typical best-year return % (10-year historical observations)
-  // Used as the realistic "max upside" — averaged across bull-year performance of sector benchmarks
-  const sectorMaxUpside = (sectorKey) => {
-    const map = {
-      semi: 60,        // SMH up ~65% in 2023, AMD/NVDA delivered this often
-      software: 75,    // IGV / SaaS best years (CRWD, NOW, ZS)
-      megatech: 45,    // OEF / MSFT, GOOGL in bull years
-      ai_hw: 80,       // SMCI, ANET, VRT can rip 100%+ but typical bull = 80%
-      utility: 25,
-      cyber: 70,
-      health: 30,      // XLV
-      financ: 35,      // XLF
-      energy: 45,      // XLE in oil bull years
-      consumer: 30,    // XLY / XLP
-      crypto: 200,     // BTC ETFs / MSTR can do this in a cycle peak
-      quantum: 150,    // IONQ, RGTI saw 300%+ but typical = 100-150%
-      space: 100,
-      other: 30,
-    };
-    return map[sectorKey] ?? 30;
-  };
-
-  // ===== Sector P/E benchmarks for realistic worst-case math =====
-  // PE compression is a fundamentals-based bear scenario — far more grounded than statistical -2σ
-  // typical = sector's mean 10-year P/E, bear = 2022-style trough, severe = 2008-style trough
-  const SECTOR_PE_RANGES = {
-    semi:     { typical: 24, bear: 18, severe: 14 },
-    software: { typical: 42, bear: 28, severe: 22 },
-    megatech: { typical: 27, bear: 20, severe: 18 },
-    ai_hw:    { typical: 22, bear: 16, severe: 12 },
-    utility:  { typical: 18, bear: 14, severe: 12 },
-    cyber:    { typical: 38, bear: 26, severe: 20 },
-    health:   { typical: 20, bear: 14, severe: 12 },
-    financ:   { typical: 14, bear: 9,  severe: 8 },
-    energy:   { typical: 14, bear: 8,  severe: 7 },
-    consumer: { typical: 22, bear: 15, severe: 12 },
-    crypto:   { typical: 25, bear: 12, severe: 8 },
-    quantum:  { typical: 60, bear: 25, severe: 15 },
-    space:    { typical: 40, bear: 20, severe: 12 },
-    other:    { typical: 20, bear: 15, severe: 12 },
-  };
-
-  // Mega-cap downside cap — mega-caps rarely fall more than ~40% in a NORMAL bear without crisis
-  // Crisis-level falls (2008, 2022) are captured by the "severe" / historical max drawdown line
-  const isMegaCapCorrelated = (p) => {
-    // Heuristic: low beta or large position size with mega-tech / megatech sector
-    const sectorKey = classifySector(p.sector);
-    return sectorKey === "megatech" || (p.beta != null && p.beta < 1.2);
-  };
 
   const data = positions
     .filter((p) => p.value > 0 && p.var95 != null && p.var95 > 0)
     .map((p) => {
       const dailyStd = p.var95 / 1.645;                  // daily std dev from 95% VaR
       const annualStd = dailyStd * Math.sqrt(252);       // annualize
-      // Expected annual return ≈ beta × market premium (CAPM)
       const beta = p.beta ?? 1.0;
+      // Expected annual return ≈ risk-free + β × market premium (CAPM)
       const expectedReturn = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
-      // Historical max drawdown (negative number) — actual past floor
       const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
       const sectorKey = classifySector(p.sector);
-      // Max upside — sector's typical best-year return
-      const maxUpsidePct = sectorMaxUpside(sectorKey);
 
-      // ===== PE compression scenarios (fundamentals-based — more realistic than statistical -2σ) =====
-      const peBenchmark = SECTOR_PE_RANGES[sectorKey] || SECTOR_PE_RANGES.other;
-      const pe = p.pe;
-      // PE compression to sector typical = a normal bear / valuation reset
-      const peCompressTypicalPct = (pe != null && pe > peBenchmark.typical)
-        ? -((pe - peBenchmark.typical) / pe) * 100
-        : null;
-      // PE compression to sector bear = 2022-style scenario
-      const peCompressBearPct = (pe != null && pe > peBenchmark.bear)
-        ? -((pe - peBenchmark.bear) / pe) * 100
-        : null;
+      // ===== Realistic scenarios — SHARED with VaR Decomp + Sector Breakdown =====
+      const scen = computeRealisticScenarios(p, sectorKey);
 
-      // ===== Realistic worst case =====
-      // Priority: use PE compression to sector typical (fundamentals-based normal bear)
-      // Fallback: -1σ (gentler than -2σ for liquid mega-caps)
-      // For mega-caps, additionally cap at -35% to reflect "normal bear" limits
-      let realisticWorstPct;
-      if (peCompressTypicalPct != null) {
-        realisticWorstPct = peCompressTypicalPct;
-      } else {
-        realisticWorstPct = expectedReturn - annualStd;  // -1σ as fallback
-      }
-      // Cap realistic worst at -40% for mega-caps (very rare to drop more in a normal bear)
-      if (isMegaCapCorrelated(p)) {
-        realisticWorstPct = Math.max(realisticWorstPct, -40);
-      }
-      const realisticWorstDollar = p.value * (realisticWorstPct / 100);
-
-      // ===== Severe bear (crisis scenario, 2008/2022-style) =====
-      // Take the WORSE of: PE compression to sector bear, OR historical max drawdown
-      let severeBearPct;
-      if (peCompressBearPct != null && histWorst != null) {
-        severeBearPct = Math.min(peCompressBearPct, histWorst);
-      } else if (peCompressBearPct != null) {
-        severeBearPct = peCompressBearPct;
-      } else if (histWorst != null) {
-        severeBearPct = histWorst;
-      } else {
-        severeBearPct = expectedReturn - 2 * annualStd;
-      }
-      const severeBearDollar = p.value * (severeBearPct / 100);
-
-      // $-amount projections based on invested
+      // $-amount projections (for chart visuals: violin width, hist worst tick, etc.)
       const expectedDollar = p.value * (expectedReturn / 100);
-      const upside1sDollar = p.value * ((expectedReturn + annualStd) / 100);
-      const downside1sDollar = p.value * ((expectedReturn - annualStd) / 100);
-      const upside2sDollar = p.value * ((expectedReturn + 2 * annualStd) / 100);
-      const downside2sDollar = p.value * ((expectedReturn - 2 * annualStd) / 100);
       const histWorstDollar = histWorst != null ? p.value * (histWorst / 100) : null;
-      const maxUpsideDollar = p.value * (maxUpsidePct / 100);
 
       return {
         symbol: p.symbol,
@@ -5009,25 +4947,22 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         expectedReturn,
         histWorst,
         var95: p.var95,
-        pe,
-        peBenchmarkTypical: peBenchmark.typical,
-        peBenchmarkBear: peBenchmark.bear,
-        peCompressTypicalPct,
-        peCompressBearPct,
-        // Display values: realistic worst (normal bear) + severe (crisis)
-        realisticWorstPct,
-        realisticWorstDollar,
-        severeBearPct,
-        severeBearDollar,
-        // Upside
-        maxUpsidePct,
-        maxUpsideDollar,
-        // Other
+        pe: p.pe,
+        peBenchmarkTypical: scen.peBenchmarkTypical,
+        peBenchmarkBear: scen.peBenchmarkBear,
+        // Scenarios — same source as VaR Decomp + Sector Breakdown
+        realisticWorstPct: scen.normalBearPct,
+        realisticWorstDollar: scen.normalBearDollar,
+        severeBearPct: scen.crisisPct,
+        severeBearDollar: scen.crisisDollar,
+        maxUpsidePct: scen.bestPct,
+        maxUpsideDollar: scen.bestDollar,
+        // Stat ranges (for violin width)
         expectedDollar,
-        upside1sDollar,
-        downside1sDollar,
-        upside2sDollar,
-        downside2sDollar,
+        upside1sDollar: p.value * ((expectedReturn + annualStd) / 100),
+        downside1sDollar: p.value * ((expectedReturn - annualStd) / 100),
+        upside2sDollar: p.value * ((expectedReturn + 2 * annualStd) / 100),
+        downside2sDollar: p.value * ((expectedReturn - 2 * annualStd) / 100),
         histWorstDollar,
       };
     });
