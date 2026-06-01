@@ -946,7 +946,6 @@ export default function App() {
                     .filter((e) => e?.quarter && e.actual != null)
                     .map((e) => {
                       const qTs = new Date(e.quarter).getTime();
-                      // Add ~30 days to approximate earnings announcement date
                       const announceTs = qTs + 30 * 24 * 60 * 60 * 1000;
                       const dateStr = new Date(announceTs).toISOString().slice(0, 10);
                       return {
@@ -956,20 +955,6 @@ export default function App() {
                       };
                     });
 
-                  // Compute 52W high/low from the 1Y data (regardless of selected timeframe)
-                  const oneY = data?.candles || [];
-                  let priceLines = [];
-                  if (oneY.length) {
-                    const last52w = oneY.slice(-260);
-                    const highs = last52w.map((c) => c.high ?? c.h ?? c.close ?? c.c).filter((v) => v != null && isFinite(v));
-                    const lows = last52w.map((c) => c.low ?? c.l ?? c.close ?? c.c).filter((v) => v != null && isFinite(v));
-                    if (highs.length && lows.length) {
-                      priceLines = [
-                        { price: Math.max(...highs), color: "#86b09c", title: "52W H" },
-                        { price: Math.min(...lows), color: "#c4314b", title: "52W L" },
-                      ];
-                    }
-                  }
                   return (
                     <CandlestickChart
                       key={`${ticker}-${timeframe}`}
@@ -978,7 +963,6 @@ export default function App() {
                       isMobile={isMobile}
                       onPriceScaleWidth={setPriceScaleWidth}
                       earningsMarkers={earningsMarkers}
-                      priceLines={priceLines}
                     />
                   );
                 })()
@@ -2608,8 +2592,19 @@ function RiskHelper({ isMobile, macro }) {
         .map(([, v]) => v?.pe)
         .filter((p) => typeof p === "number" && isFinite(p) && p > 0 && p < 200);
       const peerAvgPE = peerPEs.length ? peerPEs.reduce((s, x) => s + x, 0) / peerPEs.length : null;
+      // Compute drawdown from recent highs for the Kill Switch panel
+      const candles = data.candles || [];
+      const current = data.quote?.current ?? null;
+      const last30 = candles.slice(-22);   // ~30 calendar days (22 trading days)
+      const last90 = candles.slice(-66);   // ~90 calendar days
+      const high30 = last30.length ? Math.max(...last30.map((c) => c.high ?? c.close ?? 0)) : null;
+      const high90 = last90.length ? Math.max(...last90.map((c) => c.high ?? c.close ?? 0)) : null;
+      const high52w = candles.length ? Math.max(...candles.map((c) => c.high ?? c.close ?? 0)) : null;
+      const dd30 = (current && high30) ? ((current - high30) / high30) * 100 : null;
+      const dd90 = (current && high90) ? ((current - high90) / high90) * 100 : null;
+      const dd52w = (current && high52w) ? ((current - high52w) / high52w) * 100 : null;
       return {
-        currentPrice: data.quote?.current ?? null,
+        currentPrice: current,
         var95: data.simons?.var95daily ?? null,
         var955day: data.simons?.var955day ?? null,
         cvar95: data.simons?.cvar95daily ?? null,
@@ -2621,6 +2616,9 @@ function RiskHelper({ isMobile, macro }) {
         sector: data.sector ?? "Unknown",
         correlations: data.correlations ?? {},
         beta: data.fundamentals?.beta ?? null,
+        // Drawdown context for the Kill Switch panel
+        dd30, dd90, dd52w,
+        high30, high90, high52w,
       };
     } catch (e) {
       return null;
@@ -2806,6 +2804,20 @@ function RiskHelper({ isMobile, macro }) {
       {enriched.length > 0 && (
         <CollapsibleSection title="Concentration Risk · How Diversified Are You Really" subtitle={`${enriched.length} positions`} defaultOpen={true}>
           <ConcentrationRiskPanel positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded macro={macro} />
+        </CollapsibleSection>
+      )}
+
+      {/* Macro Regime Detector — tells you how reliable the OTHER panels are right now */}
+      {macro?.items?.length > 0 && (
+        <CollapsibleSection title="Macro Regime · Reliability of Your Other Panels" subtitle="Renaissance-style: when historical patterns stop applying" defaultOpen={true}>
+          <RegimeDetectorPanel macro={macro} isMobile={isMobile} embedded />
+        </CollapsibleSection>
+      )}
+
+      {/* Kill Switch — pre-committed risk gates with traffic-light status */}
+      {enriched.length > 0 && (
+        <CollapsibleSection title="Kill Switch · Pre-Committed Risk Gates" subtitle="STOP / CAUTION / OK signals from explicit thresholds" defaultOpen={true}>
+          <KillSwitchPanel positions={enriched} totalValue={totalValue} macro={macro} isMobile={isMobile} embedded />
         </CollapsibleSection>
       )}
 
@@ -4189,6 +4201,306 @@ function InstitutionalRiskLens({ positions, totalValue, cashRemaining, macro, is
         <AlertTriangle size={13} color="#d4a017" />
       </div>
       {inner}
+    </div>
+  );
+}
+
+// ============================================================
+// MACRO REGIME DETECTOR
+// Classifies current market state from VIX/yield/dollar/SPY signals.
+// Output: regime label + reliability score for everything else on the dashboard.
+// ============================================================
+function RegimeDetectorPanel({ macro, isMobile, embedded }) {
+  if (!macro?.items?.length) return null;
+  const findM = (sym) => macro.items.find((m) => m.symbol === sym);
+  const vix = findM("^VIX");
+  const tnx = findM("^TNX");
+  const dxy = findM("DX-Y.NYB");
+  const spy = findM("SPY");
+  const qqq = findM("QQQ");
+
+  // Compute scored signals. Each: 0 (calm) to 2 (stressed).
+  const signals = [];
+
+  if (vix?.value != null) {
+    const v = vix.value;
+    const score = v < 15 ? 0 : v < 20 ? 0.5 : v < 25 ? 1 : v < 30 ? 1.5 : 2;
+    const status = v < 15 ? "Very calm" : v < 20 ? "Calm" : v < 25 ? "Normal" : v < 30 ? "Elevated fear" : "Crisis fear";
+    signals.push({
+      label: "Volatility (VIX)", value: v.toFixed(1), status, score,
+      detail: v < 20 ? "Below typical equity vol; complacency possible." : v < 25 ? "Normal range; no special posture needed." : "Elevated; bigger swings expected.",
+    });
+  }
+  if (spy?.monthChange != null) {
+    const m = spy.monthChange;
+    const score = m > 3 ? 0 : m > 0 ? 0.5 : m > -3 ? 1 : m > -7 ? 1.5 : 2;
+    const status = m > 3 ? "Strong uptrend" : m > 0 ? "Mild uptrend" : m > -3 ? "Pulling back" : m > -7 ? "Correction" : "Crash mode";
+    signals.push({
+      label: "S&P Trend (30d)", value: `${m >= 0 ? "+" : ""}${m.toFixed(1)}%`, status, score,
+      detail: m > 0 ? "Buyer flows dominant." : "Seller flows dominant; rallies are bear-trap candidates.",
+    });
+  }
+  if (tnx?.value != null) {
+    const v = tnx.value;
+    const mc = tnx.monthChange ?? 0;
+    let score = v < 3 ? 0 : v < 4 ? 0.5 : v < 4.5 ? 1 : v < 5 ? 1.5 : 2;
+    if (mc > 0.2) score = Math.min(2, score + 0.5);
+    const status = v < 3.5 ? "Growth-friendly" : v < 4.5 ? "Neutral" : "Restrictive for growth";
+    signals.push({
+      label: "10Y Yield", value: `${v.toFixed(2)}%`, status, score,
+      detail: mc > 0.2 ? `Rising fast (+${mc.toFixed(2)}pp in 30d); compresses multiples.` : mc > 0 ? "Rising slowly." : "Falling; growth-supportive.",
+    });
+  }
+  if (dxy?.monthChange != null) {
+    const m = dxy.monthChange;
+    const score = m < -2 ? 0 : m < 1 ? 0.5 : m < 3 ? 1 : 1.5;
+    const status = m < -1 ? "Weakening" : m < 1 ? "Stable" : "Strengthening";
+    signals.push({
+      label: "Dollar (DXY 30d)", value: `${m >= 0 ? "+" : ""}${m.toFixed(1)}%`, status, score,
+      detail: m > 1 ? "Strong dollar hurts NVDA/MSFT/TSM overseas revenue." : m < -1 ? "Tailwind for multinationals." : "Neutral.",
+    });
+  }
+  if (spy?.monthChange != null && qqq?.monthChange != null) {
+    const diff = qqq.monthChange - spy.monthChange;
+    const score = diff > 2 ? 0 : diff > 0 ? 0.5 : diff > -2 ? 1 : 1.5;
+    const status = diff > 2 ? "Tech leading" : diff > 0 ? "Tech outperforming" : diff > -2 ? "Lagging" : "Risk-off rotation";
+    signals.push({
+      label: "Tech Rotation (QQQ−SPY)", value: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`, status, score,
+      detail: diff > 0 ? "Growth in favor — your AI thesis tailwind is intact." : "Defensives gaining — your tech-heavy book faces drag.",
+    });
+  }
+
+  if (!signals.length) return null;
+  const totalScore = signals.reduce((s, x) => s + x.score, 0);
+  const maxScore = signals.length * 2;
+  const pct = (totalScore / maxScore) * 100;
+
+  let regime, regimeColor, regimeBg, reliability, reliabilityNote;
+  if (pct < 25) {
+    regime = "Calm Bull";
+    regimeColor = "#0a6e44"; regimeBg = "#dcf0e3";
+    reliability = "HIGH";
+    reliabilityNote = "Historical correlations and risk models should hold. Trust your Factor Decomposition, VaR, and stress-test outputs at face value.";
+  } else if (pct < 50) {
+    regime = "Choppy";
+    regimeColor = "#5f7a4f"; regimeBg = "#e8f0d8";
+    reliability = "MEDIUM-HIGH";
+    reliabilityNote = "Normal-to-bumpy conditions. Models still useful but expect wider error bars. Position sizing matters more than entry timing right now.";
+  } else if (pct < 75) {
+    regime = "Risk-Off";
+    regimeColor = "#a06010"; regimeBg = "#fff4d0";
+    reliability = "MEDIUM-LOW";
+    reliabilityNote = "Defensives gaining, correlations rising. Historical 'cheap' levels may not hold — multiple compression is in motion. Add slowly, don't average down quickly.";
+  } else {
+    regime = "Crisis";
+    regimeColor = "#a3203a"; regimeBg = "#fde0e3";
+    reliability = "LOW";
+    reliabilityNote = "Stop trusting historical averages. Volatility regime has shifted. Hold or reduce — do NOT add to positions on dips based on historical 'support' levels alone.";
+  }
+
+  const innerContent = (
+    <>
+      {/* Regime header */}
+      <div style={{
+        padding: "12px 14px", background: regimeBg, border: `1px solid ${regimeColor}33`,
+        borderRadius: 3, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8,
+      }}>
+        <div>
+          <div style={{ fontSize: 11, color: "#5a6573", fontWeight: 500 }}>Current Market Regime</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: regimeColor, lineHeight: 1.1 }}>{regime}</div>
+        </div>
+        <div style={{ textAlign: isMobile ? "left" : "right" }}>
+          <div style={{ fontSize: 10, color: "#5a6573" }}>Historical pattern reliability</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: regimeColor }}>{reliability}</div>
+          <div style={{ fontSize: 10, color: "#8a93a3", marginTop: 2 }}>Stress score: {totalScore.toFixed(1)} / {maxScore}</div>
+        </div>
+      </div>
+
+      {/* Reliability note */}
+      <div style={{ padding: "8px 12px", background: "#f9f7f1", border: "1px solid #e6e3db", borderRadius: 2, marginBottom: 12, fontSize: 11, lineHeight: 1.6, color: "#1a1f2c" }}>
+        <strong style={{ color: regimeColor }}>What this means:</strong> {reliabilityNote}
+      </div>
+
+      {/* Signal table */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
+        {signals.map((s, i) => {
+          const indColor = s.score < 0.6 ? "#0a6e44" : s.score < 1.2 ? "#86b09c" : s.score < 1.7 ? "#d4a017" : "#a3203a";
+          return (
+            <div key={i} style={{ padding: "8px 10px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 2 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#1a1f2c" }}>{s.label}</span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: indColor }}>{s.value}</span>
+              </div>
+              <div style={{ fontSize: 10, color: indColor, fontWeight: 600, marginBottom: 2 }}>{s.status}</div>
+              <div style={{ fontSize: 9, color: "#8a93a3", lineHeight: 1.4 }}>{s.detail}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 10, padding: "6px 10px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, borderTop: "1px solid #efece5" }}>
+        Renaissance-style "regime awareness": when the composite stress score is high, the underlying probability distributions of returns and correlations have shifted, and historical risk models become less reliable. This panel tells you when to <em>discount</em> the outputs of your other panels, not just consume them.
+      </div>
+    </>
+  );
+
+  if (embedded) return innerContent;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head"><span className="panel-title">Macro Regime · Reliability of Your Other Panels</span></div>
+      {innerContent}
+    </div>
+  );
+}
+
+// ============================================================
+// KILL SWITCH / RISK GATES
+// Explicit thresholds with traffic-light status. Outputs a clear
+// STOP / CAUTION / OK signal per holding and at the portfolio level.
+// ============================================================
+function KillSwitchPanel({ positions, totalValue, macro, isMobile, embedded }) {
+  if (!positions?.length || !totalValue) return null;
+  const holdings = positions.filter((p) => p.holding !== false && p.value > 0);
+  if (!holdings.length) return null;
+
+  // Macro inputs
+  const findM = (sym) => macro?.items?.find((m) => m.symbol === sym);
+  const vixLevel = findM("^VIX")?.value;
+  const tnxLevel = findM("^TNX")?.value;
+  const spyMo = findM("SPY")?.monthChange;
+  const qqqMo = findM("QQQ")?.monthChange;
+
+  // ===== Per-holding gates =====
+  const positionAlerts = holdings.map((p) => {
+    const alerts = [];
+    if (p.dd30 != null) {
+      if (p.dd30 < -20) alerts.push({ level: "red", text: `Down ${p.dd30.toFixed(1)}% from 30d high — review thesis` });
+      else if (p.dd30 < -10) alerts.push({ level: "yellow", text: `Down ${p.dd30.toFixed(1)}% from 30d high — monitor` });
+    }
+    if (p.dd90 != null) {
+      if (p.dd90 < -30) alerts.push({ level: "red", text: `Down ${p.dd90.toFixed(1)}% from 90d high — thesis check warranted` });
+      else if (p.dd90 < -15) alerts.push({ level: "yellow", text: `Down ${p.dd90.toFixed(1)}% from 90d high` });
+    }
+    // Concentration
+    const pct = p.value / totalValue;
+    if (pct > 0.6) alerts.push({ level: "red", text: `${(pct * 100).toFixed(0)}% of portfolio — extreme concentration` });
+    else if (pct > 0.4) alerts.push({ level: "yellow", text: `${(pct * 100).toFixed(0)}% of portfolio — high concentration` });
+    return { symbol: p.symbol, value: p.value, pct: pct * 100, alerts, currentPrice: p.currentPrice, dd30: p.dd30, dd90: p.dd90 };
+  });
+
+  // ===== Portfolio-level gates =====
+  const portfolioAlerts = [];
+  // 1. Aggregate correlation: average pair correlation among holdings (using SPY correlation as proxy — if all are highly correlated to SPY, they're correlated to each other)
+  const spyCorrs = holdings.map((p) => p.correlations?.SPY).filter((c) => typeof c === "number");
+  if (spyCorrs.length >= 2) {
+    const avgSpyCorr = spyCorrs.reduce((s, x) => s + x, 0) / spyCorrs.length;
+    if (avgSpyCorr > 0.85) portfolioAlerts.push({ level: "red", title: "Correlation Spike", text: `Avg SPY correlation ${avgSpyCorr.toFixed(2)} — your holdings will move together in a sell-off (no diversification protection)` });
+    else if (avgSpyCorr > 0.7) portfolioAlerts.push({ level: "yellow", title: "Elevated Correlation", text: `Avg SPY correlation ${avgSpyCorr.toFixed(2)} — limited diversification benefit` });
+    else portfolioAlerts.push({ level: "green", title: "Correlation OK", text: `Avg SPY correlation ${avgSpyCorr.toFixed(2)} — meaningful diversification across holdings` });
+  }
+  // 2. Macro stress combo
+  if (vixLevel != null && tnxLevel != null) {
+    if (vixLevel > 30 && tnxLevel > 4.5) portfolioAlerts.push({ level: "red", title: "Macro Stress (Crisis)", text: `VIX ${vixLevel.toFixed(0)} + 10Y ${tnxLevel.toFixed(2)}% — vol high AND restrictive rates. Defensive posture warranted.` });
+    else if (vixLevel > 25 || (tnxLevel > 4.5 && spyMo != null && spyMo < -3)) portfolioAlerts.push({ level: "yellow", title: "Macro Stress (Elevated)", text: `Vol or rate pressure elevated — historical drawdown patterns less reliable.` });
+    else portfolioAlerts.push({ level: "green", title: "Macro OK", text: `VIX ${vixLevel.toFixed(0)}, 10Y ${tnxLevel.toFixed(2)}% — normal stress levels` });
+  }
+  // 3. Tech rotation
+  if (spyMo != null && qqqMo != null) {
+    const diff = qqqMo - spyMo;
+    if (diff < -3) portfolioAlerts.push({ level: "red", title: "Tech Rotation Risk", text: `QQQ lagging SPY by ${Math.abs(diff).toFixed(1)}pp over 30d — your tech-heavy portfolio is rotating out of favor` });
+    else if (diff < 0) portfolioAlerts.push({ level: "yellow", title: "Tech Underperforming", text: `QQQ vs SPY: ${diff.toFixed(1)}pp — mild rotation against your book` });
+    else portfolioAlerts.push({ level: "green", title: "Tech Leading", text: `QQQ vs SPY: +${diff.toFixed(1)}pp — your AI thesis getting reflected in price` });
+  }
+
+  // Aggregate status
+  const allAlerts = [...positionAlerts.flatMap((p) => p.alerts), ...portfolioAlerts];
+  const reds = allAlerts.filter((a) => a.level === "red").length;
+  const yellows = allAlerts.filter((a) => a.level === "yellow").length;
+  let aggStatus, aggColor, aggBg, aggMsg;
+  if (reds > 0) {
+    aggStatus = "STOP — review action items"; aggColor = "#a3203a"; aggBg = "#fde0e3";
+    aggMsg = `${reds} red flag${reds > 1 ? "s" : ""} active${yellows > 0 ? `, plus ${yellows} caution${yellows > 1 ? "s" : ""}` : ""}. Do not add to positions until you have addressed the red items below.`;
+  } else if (yellows > 0) {
+    aggStatus = "CAUTION — monitor"; aggColor = "#a06010"; aggBg = "#fff4d0";
+    aggMsg = `${yellows} caution${yellows > 1 ? "s" : ""} active. No red lines crossed but conditions warrant elevated attention. Avoid adding new positions on impulse.`;
+  } else {
+    aggStatus = "ALL CLEAR"; aggColor = "#0a6e44"; aggBg = "#dcf0e3";
+    aggMsg = "No risk gates breached. Normal posture appropriate. Standard discipline still applies — this does not mean 'safe to be aggressive'.";
+  }
+
+  const lightColor = (lvl) => lvl === "red" ? "#a3203a" : lvl === "yellow" ? "#d4a017" : "#0a6e44";
+
+  const innerContent = (
+    <>
+      {/* Aggregate status banner */}
+      <div style={{
+        padding: "10px 14px", background: aggBg, border: `1px solid ${aggColor}33`,
+        borderRadius: 3, marginBottom: 12,
+      }}>
+        <div style={{ fontSize: 10, color: "#5a6573", fontWeight: 500, marginBottom: 2 }}>Portfolio-Level Status</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: aggColor, marginBottom: 4, letterSpacing: 0.5 }}>{aggStatus}</div>
+        <div style={{ fontSize: 11, color: "#1a1f2c", lineHeight: 1.5 }}>{aggMsg}</div>
+      </div>
+
+      {/* Portfolio-level gates */}
+      {portfolioAlerts.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#5a6573", marginBottom: 6 }}>Portfolio Gates</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {portfolioAlerts.map((a, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 10px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 2 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: lightColor(a.level), marginTop: 6, flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: lightColor(a.level) }}>{a.title}</div>
+                  <div style={{ fontSize: 10, color: "#5a6573", lineHeight: 1.4 }}>{a.text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Per-holding gates */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "#5a6573", marginBottom: 6 }}>Per-Holding Gates</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {positionAlerts.map((p, i) => {
+            const worstLevel = p.alerts.find((a) => a.level === "red") ? "red" : p.alerts.find((a) => a.level === "yellow") ? "yellow" : "green";
+            return (
+              <div key={i} style={{ padding: "6px 10px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 2 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: p.alerts.length ? 4 : 0 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: lightColor(worstLevel), flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", minWidth: 50 }}>{p.symbol}</span>
+                  <span style={{ fontSize: 10, color: "#8a93a3" }}>
+                    ${p.currentPrice?.toFixed(2)} · {p.pct.toFixed(0)}% of portfolio
+                    {p.dd30 != null && `  ·  30d: ${p.dd30 >= 0 ? "+" : ""}${p.dd30.toFixed(1)}%`}
+                    {p.dd90 != null && `  ·  90d: ${p.dd90 >= 0 ? "+" : ""}${p.dd90.toFixed(1)}%`}
+                  </span>
+                </div>
+                {p.alerts.length > 0 && (
+                  <div style={{ marginLeft: 14, fontSize: 10, color: "#5a6573", lineHeight: 1.5 }}>
+                    {p.alerts.map((a, j) => (
+                      <div key={j} style={{ color: lightColor(a.level) }}>• {a.text}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, padding: "6px 10px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, borderTop: "1px solid #efece5" }}>
+        Thresholds: position −10%/−20% from 30d high (yellow/red), −15%/−30% from 90d high, &gt;40%/&gt;60% concentration, avg SPY correlation &gt;0.7/&gt;0.85, VIX &gt;25/&gt;30 combined with 10Y &gt;4.5%. These are pre-committed rules to override emotional reactions, not predictions. The Kill Switch tells you when to PAUSE, not what to buy or sell.
+      </div>
+    </>
+  );
+
+  if (embedded) return innerContent;
+  return (
+    <div className="panel" style={{ marginBottom: 16 }}>
+      <div className="panel-head"><span className="panel-title">Kill Switch · Pre-Committed Risk Gates</span></div>
+      {innerContent}
     </div>
   );
 }
