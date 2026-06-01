@@ -2632,10 +2632,11 @@ function RiskHelper({ isMobile, macro }) {
         }
       }
 
-      // ===== 5-year max drawdown (Basel "stressed VaR" philosophy) =====
+      // ===== 5-year max drawdown (Basel 2.5 stressed-VaR philosophy) =====
       // The 1-year maxDD (from simons) misses stress regimes like 2022. A tail measure
       // built on a calm 12 months is dangerously benign. Pull the deepest drawdown from
       // the full 5-year weekly series so the crisis floor reflects an actual stress period.
+      // (Basel 2.5 post-2008 requires calibrating tail risk to a stressed window, not recent calm.)
       let maxDD5Y = null;
       const c5 = data.candles5Y || [];
       if (c5.length > 20) {
@@ -4660,30 +4661,50 @@ function classifySector(rawSector) {
   return "other";
 }
 
+// Sector → representative ETF for single-index correlation estimates.
+// These ETFs are fetched in fetch.mjs and every holding stores its return-history
+// correlation to them, so we can estimate same-sector pair correlation from REAL data
+// (single-index / Sharpe model) rather than a hardcoded constant.
+const SECTOR_ETF = {
+  semi: "SOXX", software: "IGV", megatech: "OEF", ai_hw: "XLK",
+  cyber: "CIBR", health: "XLV", financ: "XLF", energy: "XLE",
+  consumer: "XLY", crypto: "BITQ", utility: "XLK", quantum: "IWM",
+  space: "IWM", other: "SPY",
+};
+
 // Sector-aware pair correlation: realistic estimates based on historical sector behavior
 // Returns a value in [0, 0.95]
-function pairCorrelation(sectorA, sectorB, spyCorrA, spyCorrB) {
-  const spyProxy = Math.max(0.20, Math.min(0.85, (spyCorrA ?? 0.7) * (spyCorrB ?? 0.7)));
+// corrA / corrB are the FULL correlation dicts for each holding (ticker → ρ vs macro ETFs),
+// so we can read both ρ-vs-SPY and ρ-vs-sector-ETF. Falls back gracefully when data is missing.
+function pairCorrelation(sectorA, sectorB, corrA, corrB) {
+  // Back-compat: callers may pass bare SPY-correlation numbers instead of full dicts.
+  const isNum = (x) => typeof x === "number";
+  const spyA = isNum(corrA) ? corrA : (corrA?.SPY ?? null);
+  const spyB = isNum(corrB) ? corrB : (corrB?.SPY ?? null);
+  const dictA = isNum(corrA) ? null : corrA;
+  const dictB = isNum(corrB) ? null : corrB;
+  const spyProxy = Math.max(0.20, Math.min(0.85, (spyA ?? 0.7) * (spyB ?? 0.7)));
 
-  // Same sector → high correlation (typical observed values from historical pair returns)
+  // Same sector → use single-index estimate through the SECTOR ETF (real data) when available,
+  // floored at the sector prior so we never UNDERSTATE same-sector correlation (which would
+  // overstate diversification — the dangerous direction). Data can only push it HIGHER.
   if (sectorA === sectorB) {
     const sameSectorMap = {
-      semi: 0.80,        // NVDA-AMD-TSM move very together
-      software: 0.75,    // SaaS basket moves together
-      megatech: 0.72,    // GOOGL-META-AMZN
-      ai_hw: 0.75,       // SMCI-ANET-VRT
-      cyber: 0.78,
-      utility: 0.70,
-      crypto: 0.85,      // crypto-correlated assets are extreme
-      quantum: 0.78,
-      space: 0.70,
-      health: 0.55,      // healthcare more idiosyncratic (drug pipelines vary)
-      financ: 0.65,      // banks move together but split by type
-      energy: 0.72,      // oil & gas highly correlated
-      consumer: 0.50,    // consumer is fragmented
-      other: 0.60,
+      semi: 0.80, software: 0.75, megatech: 0.72, ai_hw: 0.75, cyber: 0.78,
+      utility: 0.70, crypto: 0.85, quantum: 0.78, space: 0.70,
+      health: 0.55, financ: 0.65, energy: 0.72, consumer: 0.50, other: 0.60,
     };
-    return Math.max(spyProxy, sameSectorMap[sectorA] ?? 0.65);
+    const prior = sameSectorMap[sectorA] ?? 0.65;
+    const etf = SECTOR_ETF[sectorA];
+    const ra = dictA?.[etf];
+    const rb = dictB?.[etf];
+    if (ra != null && rb != null) {
+      // Single-index estimate through the correct sector factor (REAL return-history data)
+      const singleIndex = ra * rb;
+      // Floor at prior: real data raises correlation above prior when warranted, never below.
+      return Math.min(0.95, Math.max(prior, singleIndex));
+    }
+    return Math.max(spyProxy, prior);
   }
 
   // Cross-sector: group by macro theme
@@ -4931,11 +4952,11 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
     let pairSum = 0, pairCount = 0;
     for (let i = 0; i < valid.length; i++) {
       const secI = classifySector(valid[i].sector);
-      const spyI = valid[i].correlations?.SPY ?? 0.7;
+      const corrI = valid[i].correlations ?? null;
       for (let j = i + 1; j < valid.length; j++) {
         const secJ = classifySector(valid[j].sector);
-        const spyJ = valid[j].correlations?.SPY ?? 0.7;
-        const rho = pairCorrelation(secI, secJ, spyI, spyJ);
+        const corrJ = valid[j].correlations ?? null;
+        const rho = pairCorrelation(secI, secJ, corrI, corrJ);
         pairSum += rho;
         pairCount++;
       }
@@ -4953,13 +4974,13 @@ function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
       const sigi = valid[i].var95;
       variance += wi * wi * sigi * sigi;
       const secI = classifySector(valid[i].sector);
-      const spyI = valid[i].correlations?.SPY ?? 0.7;
+      const corrI = valid[i].correlations ?? null;
       for (let j = i + 1; j < valid.length; j++) {
         const wj = valid[j].value / totalVal;
         const sigj = valid[j].var95;
         const secJ = classifySector(valid[j].sector);
-        const spyJ = valid[j].correlations?.SPY ?? 0.7;
-        const rho = pairCorrelation(secI, secJ, spyI, spyJ);
+        const corrJ = valid[j].correlations ?? null;
+        const rho = pairCorrelation(secI, secJ, corrI, corrJ);
         variance += 2 * wi * wj * sigi * sigj * rho;
       }
     }
@@ -5206,9 +5227,9 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         if (i === j) {
           rho = 1;
         } else {
-          const spyI = (positions.find((p) => p.symbol === data[i].symbol)?.correlations?.SPY) ?? null;
-          const spyJ = (positions.find((p) => p.symbol === data[j].symbol)?.correlations?.SPY) ?? null;
-          rho = pairCorrelation(data[i].sectorKey, data[j].sectorKey, spyI, spyJ);
+          const corrI = positions.find((p) => p.symbol === data[i].symbol)?.correlations ?? null;
+          const corrJ = positions.find((p) => p.symbol === data[j].symbol)?.correlations ?? null;
+          rho = pairCorrelation(data[i].sectorKey, data[j].sectorKey, corrI, corrJ);
         }
         sumSq += li * lj * rho;
       }
@@ -6061,7 +6082,7 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
           symbol: p.symbol,
           value,
           var95: p.var95,
-          spyCorr: p.correlations?.SPY ?? 0.5,
+          corr: p.correlations ?? null,
           sector: classifySector(p.sector),
         });
       }
@@ -6084,8 +6105,8 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
           const rho = pairCorrelation(
             validForVar[i].sector,
             validForVar[j].sector,
-            validForVar[i].spyCorr,
-            validForVar[j].spyCorr
+            validForVar[i].corr,
+            validForVar[j].corr
           );
           variance += 2 * wi * wj * sigi * sigj * rho;
         }
