@@ -2835,6 +2835,12 @@ function RiskHelper({ isMobile, macro }) {
       {/* ===== SECTION 2: RISK & DIVERSIFICATION ===== */}
       {positions.length > 0 && (
         <CollapsibleSection title="Risk & Diversification" subtitle="Where you stand, what's risky, what's missing" defaultOpen={true}>
+          {/* Risk Spectrum chart — FIRST item: visual reference vs benchmarks (S&P 500, NASDAQ, etc.) */}
+          {portfolioVarPct != null && (
+            <div style={{ borderBottom: "1px solid #efece5" }}>
+              <RiskSpectrumPanel portfolioVarPct={portfolioVarPct} isMobile={isMobile} embedded macro={macro} />
+            </div>
+          )}
           {/* Regime banner */}
           <div style={{ padding: "12px 14px 0" }}>
             <RegimeBanner macro={macro} isMobile={isMobile} />
@@ -2880,10 +2886,14 @@ function RiskHelper({ isMobile, macro }) {
               {" "}— then click "Refresh prices" in Your Setup.
             </div>
           )}
+          {/* Risk Spectrum chart — first thing in section, the visual snapshot */}
+          <div style={{ borderTop: "1px solid #efece5" }}>
+            <RiskSpectrumPanel portfolioVarPct={portfolioVarPct} isMobile={isMobile} embedded macro={macro} />
+          </div>
           {/* VaR Decomposition — main risk view here */}
           <div style={{ padding: "12px 14px", borderTop: "1px solid #efece5" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#1a1f2c", marginBottom: 8 }}>VaR Decomposition · Where Your Bad-Day Risk Comes From</div>
-            <VolatilityDecomposition positions={enriched} totalValue={totalValue} isMobile={isMobile} embedded />
+            <VolatilityDecomposition positions={enriched} totalValue={totalValue} isMobile={isMobile} macro={macro} embedded />
           </div>
           {/* Concentration analysis */}
           <div style={{ borderTop: "1px solid #efece5" }}>
@@ -3195,59 +3205,6 @@ function ValuationRiskPanel({ positions, isMobile, embedded }) {
           />
         </div>
 
-        {/* Per-stock breakdown - compact, single line each */}
-        <div className="panel-title" style={{ fontSize: 10, marginBottom: 6 }}>Per-Position Detail</div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 700 }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
-                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
-                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Now PE</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Fwd PE</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Typical</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Bear</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Severe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                // Forward PE — if available, calculate the implied "real" current pe based on growth
-                // If Fwd PE is significantly lower than trailing, growth is moderating the picture
-                const fwdPctLower = r.fwdPe && r.pe ? ((r.fwdPe / r.pe) - 1) * 100 : null;
-                const fwdNote = fwdPctLower != null
-                  ? (fwdPctLower < -25 ? "Strong forward growth" : fwdPctLower < -10 ? "Forward growth helps" : fwdPctLower < 5 ? "Flat forward" : "Earnings declining")
-                  : null;
-                const fwdColor = fwdPctLower != null
-                  ? (fwdPctLower < -25 ? "#0a8554" : fwdPctLower < -10 ? "#86b09c" : fwdPctLower < 5 ? "#5a6573" : "#c4314b")
-                  : "#5a6573";
-                return (
-                  <tr key={r.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
-                    <td className="mono" style={{ padding: "6px 8px", fontWeight: 600 }}>{r.symbol}</td>
-                    <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sectorAnchors.label}</td>
-                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{fmt(r.pe, 1)}×</td>
-                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: fwdColor }}>
-                      <div>{r.fwdPe != null ? fmt(r.fwdPe, 1) + "×" : "—"}</div>
-                      {fwdNote && <div style={{ fontSize: 8, color: fwdColor, fontWeight: 500 }}>{fwdNote}</div>}
-                    </td>
-                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: r.dollarToTypical >= 0 ? "#0a8554" : "#c4314b" }}>
-                      <div>{r.sectorAnchors.typical}×</div>
-                      <div style={{ fontSize: 9 }}>{r.dollarToTypical >= 0 ? "+" : "-"}${formatMcap(Math.abs(r.dollarToTypical))}</div>
-                    </td>
-                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>
-                      <div>{r.sectorAnchors.bear}×</div>
-                      <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToBear))}</div>
-                    </td>
-                    <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b", fontWeight: 600 }}>
-                      <div>{r.sectorAnchors.severe}×</div>
-                      <div style={{ fontSize: 9 }}>-${formatMcap(Math.abs(r.dollarToSevere))}</div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
         <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
           <strong>How to read:</strong>
           <ul style={{ margin: "6px 0 0 16px", padding: 0, fontSize: 11, lineHeight: 1.6 }}>
@@ -3302,14 +3259,49 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
   const topPct = (top.value / totalValue) * 100;
   const top3Pct = sorted.slice(0, 3).reduce((s, p) => s + p.value, 0) / totalValue * 100;
 
-  // Sector concentration
+  // Sector concentration with weighted Daily VaR per sector
   const sectorMap = {};
+  const sectorVarMap = {};  // weighted VaR contribution per sector
   for (const p of positions) {
     const sector = p.sector || "Unknown";
     sectorMap[sector] = (sectorMap[sector] || 0) + p.value;
+    if (p.var95 != null) {
+      sectorVarMap[sector] = (sectorVarMap[sector] || 0) + p.value * p.var95;
+    }
   }
+  // Typical sector VaR from macro.benchmarks (sector ETFs as proxies)
+  // Convert daily vol % → daily VaR % (× 1.645)
+  const benchmarks = macro?.benchmarks || [];
+  const benchVar = (sym) => {
+    const b = benchmarks.find((x) => x.symbol === sym);
+    return b?.dailyVol ? b.dailyVol * 1.645 : null;
+  };
+  const sectorTypicalVar = (sectorName) => {
+    if (!sectorName) return null;
+    const s = sectorName.toLowerCase();
+    if (s.includes("semi") || s.includes("memory")) return benchVar("SMH");
+    if (s.includes("hyperscaler") || s.includes("internet content") || s.includes("mega cap tech")) return benchVar("OEF");
+    if (s.includes("ai infrastructure") || s.includes("ai hardware")) return benchVar("ARTY");
+    if (s.includes("ai software") || s.includes("software")) return benchVar("IGV");
+    if (s.includes("cyber")) return benchVar("CIBR");
+    if (s.includes("health")) return benchVar("XLV");
+    if (s.includes("financ") || s.includes("bank") || s.includes("payment") || s.includes("buffett") || s.includes("ackman")) return benchVar("XLF");
+    if (s.includes("energ") || s.includes("oil")) return benchVar("XLE");
+    if (s.includes("consumer") || s.includes("retail") || s.includes("entertain") || s.includes("active retail")) return benchVar("XLY");
+    if (s.includes("crypto")) return benchVar("BITQ");
+    if (s.includes("ai power")) return benchVar("XLU");
+    if (s.includes("quantum") || s.includes("space")) return benchVar("IWM");
+    return benchVar("SPY");
+  };
   const sectorRows = Object.entries(sectorMap)
-    .map(([sector, value]) => ({ sector, value, pct: (value / totalValue) * 100 }))
+    .map(([sector, value]) => ({
+      sector,
+      value,
+      pct: (value / totalValue) * 100,
+      // weighted avg daily VaR for the sector (within sector, weight by value)
+      dailyVar: sectorVarMap[sector] != null ? sectorVarMap[sector] / value : null,
+      typicalVar: sectorTypicalVar(sector),
+    }))
     .sort((a, b) => b.value - a.value);
   const dominantSector = sectorRows[0];
 
@@ -3357,19 +3349,42 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
 
         {/* Sector breakdown */}
         <div className="panel-title" style={{ fontSize: 10, marginBottom: 8, marginTop: 14 }}>Sector Breakdown</div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "90px 1fr 50px 70px 70px" : "170px 1fr 50px 80px 80px", gap: 6, fontSize: 9, fontWeight: 600, color: "#8a93a3", padding: "0 0 4px", borderBottom: "1px solid #e6e3db", marginBottom: 4 }}>
+          <div>Sector</div>
+          <div>% of portfolio</div>
+          <div style={{ textAlign: "right" }}>%</div>
+          <div style={{ textAlign: "right" }} title="Your weighted-avg daily VaR for holdings in this sector">Your VaR</div>
+          <div style={{ textAlign: "right" }} title="Typical daily VaR for the sector benchmark ETF (e.g., SMH for semis, OEF for mega-cap tech)">Sector Norm</div>
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           {sectorRows.map((s, i) => {
             const color = s.pct > 60 ? "#c4314b" : s.pct > 40 ? "#d4a017" : "#7ba2cc";
+            // Color "Your VaR" vs "Sector Norm" to show whether you're holding higher- or lower-vol names than typical
+            const yourVsNorm = (s.dailyVar != null && s.typicalVar != null) ? s.dailyVar / s.typicalVar : null;
+            const yourVarColor = yourVsNorm == null ? "#c4314b"
+              : yourVsNorm > 1.3 ? "#c4314b"
+              : yourVsNorm > 1.1 ? "#d4a017"
+              : yourVsNorm < 0.85 ? "#0a8554"
+              : "#1a1f2c";
             return (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: isMobile ? 100 : 180, fontSize: 11, color: "#5a6573", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
-                <div style={{ flex: 1, height: 16, background: "#efece5", borderRadius: 2, position: "relative" }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "90px 1fr 50px 70px 70px" : "170px 1fr 50px 80px 80px", gap: 6, alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "#5a6573", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.sector}</span>
+                <div style={{ height: 16, background: "#efece5", borderRadius: 2, position: "relative" }}>
                   <div style={{ width: `${s.pct}%`, height: "100%", background: color, borderRadius: 2 }} />
                 </div>
-                <span className="mono" style={{ width: 50, textAlign: "right", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{s.pct.toFixed(0)}%</span>
+                <span className="mono" style={{ textAlign: "right", fontSize: 11, fontWeight: 600 }}>{s.pct.toFixed(0)}%</span>
+                <span className="mono" title="Your weighted-avg daily VaR in this sector" style={{ textAlign: "right", fontSize: 10, color: yourVarColor, fontWeight: 600 }}>
+                  {s.dailyVar != null ? `${s.dailyVar.toFixed(2)}%` : "—"}
+                </span>
+                <span className="mono" title="Typical sector benchmark VaR" style={{ textAlign: "right", fontSize: 10, color: "#5a6573" }}>
+                  {s.typicalVar != null ? `${s.typicalVar.toFixed(2)}%` : "—"}
+                </span>
               </div>
             );
           })}
+        </div>
+        <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.4 }}>
+          <strong>Sector Norm</strong> shows the typical daily VaR for the sector ETF (real data). If "Your VaR" is materially above (red/orange), you're holding higher-vol names than the sector average — usually because they're growth/single-stock bets.
         </div>
 
         {concentrationFlags.length > 0 && (
@@ -3382,111 +3397,6 @@ function ConcentrationRiskPanel({ positions, totalValue, isMobile, embedded, mac
           </div>
         )}
 
-        {/* ===== Per-position Volatility Table with Industry Benchmarks ===== */}
-        <div className="panel-title" style={{ fontSize: 10, marginTop: 18, marginBottom: 8 }}>Volatility vs Industry Benchmarks</div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 600 }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
-                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Daily expected move based on 1-year historical volatility.">Daily Vol</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector Norm</th>
-                <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>vs S&P 500 (1%)</th>
-                <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Assessment</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                // Build lookups from macro.benchmarks (real ETF daily vol data)
-                const benchmarks = macro?.benchmarks || [];
-                const spy = benchmarks.find((b) => b.symbol === "SPY");
-                const spyVol = spy?.dailyVol || 1.0;
-                // Per-ticker manual map for cases where stock has specific best-fit benchmark
-                const TICKER_BENCHMARK = {
-                  // Memory stocks
-                  "MU": "HBM",
-                  // Logic semis
-                  "NVDA": "SMH", "AMD": "SMH", "TSM": "SMH", "AVGO": "SMH", "ASML": "SMH",
-                  "ARM": "SMH", "MRVL": "SMH", "QCOM": "SMH", "INTC": "SMH",
-                  // AI infrastructure hardware
-                  "SMCI": "ARTY", "ANET": "ARTY", "VRT": "ARTY", "DELL": "ARTY", "NBIS": "ARTY",
-                  // Software/SaaS
-                  "NOW": "IGV", "ORCL": "IGV", "PLTR": "IGV", "TEM": "IGV", "PATH": "IGV",
-                  // Cybersecurity
-                  "CRWD": "CIBR", "PANW": "CIBR",
-                  // Mega cap tech
-                  "MSFT": "OEF", "AAPL": "OEF", "GOOGL": "OEF", "AMZN": "OEF", "META": "OEF",
-                  // Crypto-related
-                  "MSTR": "BITQ", "COIN": "BITQ",
-                  // Power for AI
-                  "VST": "XLK", "CEG": "XLK",
-                  // Energy
-                  "CVX": "XLE", "OXY": "XLE",
-                  // Healthcare
-                  "LLY": "XLV", "UNH": "XLV", "HIMS": "XLV",
-                  // Financials
-                  "JPM": "XLF", "GS": "XLF", "AXP": "XLF", "SOFI": "XLF", "HOOD": "XLF",
-                  // Consumer
-                  "TSLA": "XLY", "NFLX": "XLY", "RDDT": "XLY", "CMG": "XLY", "DIS": "XLY",
-                  "AMD2": "XLY", // placeholder
-                  // Small-cap special situations
-                  "RKLB": "IWM", "ASTS": "IWM", "OPEN": "IWM",
-                };
-                // Sector-keyword fallback for tickers not in manual map
-                const sectorMatch = (sectorRaw) => {
-                  if (!sectorRaw) return "SPY";
-                  const s = sectorRaw.toLowerCase();
-                  if (s.includes("semi")) return "SMH";
-                  if (s.includes("hyperscaler") || s.includes("internet content")) return "OEF";
-                  if (s.includes("ai infrastructure")) return "ARTY";
-                  if (s.includes("ai software") || s.includes("software")) return "IGV";
-                  if (s.includes("cyber")) return "CIBR";
-                  if (s.includes("health")) return "XLV";
-                  if (s.includes("financ") || s.includes("bank") || s.includes("payment")) return "XLF";
-                  if (s.includes("energ") || s.includes("oil")) return "XLE";
-                  if (s.includes("consumer") || s.includes("retail") || s.includes("entertain")) return "XLY";
-                  if (s.includes("crypto")) return "BITQ";
-                  return "SPY";
-                };
-
-                return positions.map((p) => {
-                  const dailyVol = p.var95 != null ? p.var95 / 1.645 : (p.atr14 && p.currentPrice ? (p.atr14 / p.currentPrice) * 100 : null);
-                  if (dailyVol == null) return null;
-                  // Find best benchmark
-                  const benchmarkSym = TICKER_BENCHMARK[p.symbol] || sectorMatch(p.sector);
-                  const bench = benchmarks.find((b) => b.symbol === benchmarkSym);
-                  const benchVol = bench?.dailyVol || spyVol;
-                  const benchLabel = bench?.vol_label || "S&P 500";
-                  const vsSP500 = dailyVol / spyVol;
-                  const vsBench = dailyVol / benchVol;
-                  // Honest framing: any single stock will be ~1.3-1.8× a diversified ETF by definition
-                  // (idiosyncratic risk doesn't average out for one stock). So the threshold for
-                  // "elevated" must be relative to this expectation, not arbitrary 1.4×.
-                  // Standard single-stock vs broad-ETF ratio: ~1.4-1.6 is NORMAL.
-                  // Above 2.0× = genuinely elevated. Above 2.5× = high. Above 3.0× = extreme.
-                  const assessment = vsBench > 3.0 ? { text: "Extreme vs ETF", color: "#c4314b" }
-                                   : vsBench > 2.0 ? { text: "Elevated vs ETF", color: "#d4a017" }
-                                   : vsBench > 1.3 ? { text: "Typical single-stock", color: "#0a8554" }
-                                   : { text: "Lower than ETF", color: "#0a8554" };
-                  return (
-                    <tr key={p.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
-                      <td className="mono" style={{ padding: "6px 8px", fontWeight: 600 }}>{p.symbol}</td>
-                      <td className="mono" style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{dailyVol.toFixed(2)}%</td>
-                      <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#5a6573" }}>
-                        {bench ? bench.dailyVol.toFixed(2) + "%" : "—"} <span style={{ fontSize: 9, color: "#8a93a3" }}>{benchLabel}</span>
-                      </td>
-                      <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: vsSP500 > 2 ? "#c4314b" : vsSP500 > 1.5 ? "#d4a017" : "#1a1f2c" }}>{vsSP500.toFixed(1)}×</td>
-                      <td style={{ padding: "6px 8px", fontSize: 10, color: assessment.color, fontWeight: 600 }}>{assessment.text}</td>
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ marginTop: 8, padding: 8, background: "#f5f3ed", fontSize: 10, color: "#5a6573", lineHeight: 1.5, borderRadius: 2 }}>
-          <strong>Daily Vol</strong> = the typical 1-day price move (std dev from last 90 days). <strong>Benchmark</strong> = the sector ETF most relevant to that stock. <strong>Honest note:</strong> ANY single stock is naturally 1.3-1.8× more volatile than a diversified ETF (idiosyncratic risk doesn't average out). So "1.5×" alone isn't elevated — it's expected. Only ratios above 2.0× indicate genuinely above-normal volatility for that sector.
-        </div>
 
         <div style={{ marginTop: 12, padding: 10, background: "#f5f3ed", fontSize: 11, color: "#5a6573", lineHeight: 1.6, borderRadius: 2 }}>
           <strong>Effective bets vs nominal count:</strong> Holding 4 tech stocks isn't 4 bets — it's closer to 1.5 because they all rise and fall together. True diversification comes from owning things that move <em>differently</em>: stocks + bonds + gold + international, or tech + utilities + healthcare + energy.
@@ -4330,19 +4240,80 @@ function RegimeDetectorPanel({ macro, isMobile, embedded }) {
 // VAR DECOMPOSITION TABLE — shows how portfolio VaR came from
 // individual positions. Weight × position VaR = contribution.
 // Uses SAME units as Risk Spectrum dot (VaR %) so the total matches.
-// (Simplified weighted view — ignores correlation effects between positions.)
+// Now ALSO includes sector + benchmark comparison columns
+// (folded in from the old "Volatility vs Industry Benchmarks" table).
 // ============================================================
-function VolatilityDecomposition({ positions, totalValue, isMobile, embedded }) {
+function VolatilityDecomposition({ positions, totalValue, isMobile, embedded, macro }) {
   if (!positions?.length || !totalValue) return null;
-  // Each position contributes: weight × position_VaR
-  // Same units as Risk Spectrum so total = portfolio VaR (matching the spectrum dot)
+
+  // Benchmark lookup for per-stock sector norm comparison
+  const benchmarks = macro?.benchmarks || [];
+  const spy = benchmarks.find((b) => b.symbol === "SPY");
+  const spyVol = spy?.dailyVol || 1.0;
+  const TICKER_BENCHMARK = {
+    "MU": "HBM",
+    "NVDA": "SMH", "AMD": "SMH", "TSM": "SMH", "AVGO": "SMH", "ASML": "SMH",
+    "ARM": "SMH", "MRVL": "SMH", "QCOM": "SMH", "INTC": "SMH", "AMAT": "SMH", "LRCX": "SMH", "KLAC": "SMH",
+    "SMCI": "ARTY", "ANET": "ARTY", "VRT": "ARTY", "DELL": "ARTY", "NBIS": "ARTY",
+    "NOW": "IGV", "ORCL": "IGV", "PLTR": "IGV", "TEM": "IGV", "PATH": "IGV", "CRM": "IGV", "ADBE": "IGV",
+    "CRWD": "CIBR", "PANW": "CIBR",
+    "MSFT": "OEF", "AAPL": "OEF", "GOOGL": "OEF", "AMZN": "OEF", "META": "OEF",
+    "MSTR": "BITQ", "COIN": "BITQ",
+    "VST": "XLK", "CEG": "XLK",
+    "CVX": "XLE", "OXY": "XLE", "XOM": "XLE",
+    "LLY": "XLV", "UNH": "XLV", "HIMS": "XLV", "JNJ": "XLV", "ABBV": "XLV", "MRK": "XLV", "PFE": "XLV",
+    "JPM": "XLF", "GS": "XLF", "AXP": "XLF", "SOFI": "XLF", "HOOD": "XLF", "BAC": "XLF", "WFC": "XLF",
+    "TSLA": "XLY", "NFLX": "XLY", "RDDT": "XLY", "CMG": "XLY", "DIS": "XLY", "COST": "XLY",
+    "WMT": "XLP", "PG": "XLP", "KO": "XLP", "PEP": "XLP",
+    "RKLB": "IWM", "ASTS": "IWM", "OPEN": "IWM",
+  };
+  const sectorMatch = (sectorRaw) => {
+    if (!sectorRaw) return "SPY";
+    const s = sectorRaw.toLowerCase();
+    if (s.includes("semi")) return "SMH";
+    if (s.includes("hyperscaler") || s.includes("internet content")) return "OEF";
+    if (s.includes("ai infrastructure")) return "ARTY";
+    if (s.includes("ai software") || s.includes("software")) return "IGV";
+    if (s.includes("cyber")) return "CIBR";
+    if (s.includes("health")) return "XLV";
+    if (s.includes("financ") || s.includes("bank") || s.includes("payment")) return "XLF";
+    if (s.includes("energ") || s.includes("oil")) return "XLE";
+    if (s.includes("consumer") || s.includes("retail") || s.includes("entertain")) return "XLY";
+    if (s.includes("crypto")) return "BITQ";
+    return "SPY";
+  };
+
   const rows = positions
     .filter((p) => p.value > 0 && p.var95 != null)
     .map((p) => {
       const weight = p.value / totalValue;
-      const dailyVar = p.var95; // VaR % directly — matches Risk Spectrum units
+      const dailyVar = p.var95;
       const contribution = weight * dailyVar;
-      return { symbol: p.symbol, weight: weight * 100, dailyVar, contribution };
+      // Benchmark comparison
+      const benchSym = TICKER_BENCHMARK[p.symbol] || sectorMatch(p.sector);
+      const bench = benchmarks.find((b) => b.symbol === benchSym);
+      const benchVarPct = bench?.dailyVol ? bench.dailyVol * 1.645 : null; // convert vol → VaR
+      const spyMultiple = p.var95 / (spyVol * 1.645);
+      const vsSectorNorm = benchVarPct ? p.var95 / benchVarPct : null;
+      let assessment = null;
+      if (vsSectorNorm != null) {
+        if (vsSectorNorm > 1.3) assessment = { label: "More volatile than sector norm", color: "#c4314b" };
+        else if (vsSectorNorm > 1.1) assessment = { label: "Slightly above sector norm", color: "#d4a017" };
+        else if (vsSectorNorm < 0.85) assessment = { label: "Calmer than sector norm", color: "#0a8554" };
+        else assessment = { label: "Roughly at sector norm", color: "#5a6573" };
+      }
+      return {
+        symbol: p.symbol,
+        sector: p.sector || "—",
+        weight: weight * 100,
+        dailyVar,
+        benchSym,
+        benchVarPct,
+        spyMultiple,
+        vsSectorNorm,
+        assessment,
+        contribution,
+      };
     })
     .sort((a, b) => b.contribution - a.contribution);
   if (!rows.length) return null;
@@ -4353,39 +4324,76 @@ function VolatilityDecomposition({ positions, totalValue, isMobile, embedded }) 
     <>
       <div style={{ fontSize: 11, color: "#5a6573", marginBottom: 8, lineHeight: 1.5 }}>
         Your portfolio bad-day risk (~<strong className="mono">{totalContribution.toFixed(2)}% VaR</strong>) broken down by holding.
-        Sorted by contribution. Largest contributor at top. Sum matches the dot in the Risk Spectrum above.
+        Sorted by contribution. The table shows where your VaR comes from <em>and</em> how each holding's volatility compares to its sector benchmark.
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 60px 60px 80px" : "70px 1fr 70px 70px 90px", gap: 6, fontSize: 10, fontWeight: 600, color: "#8a93a3", paddingBottom: 4, borderBottom: "1px solid #e6e3db" }}>
-        <div>Ticker</div>
-        <div>Contribution (bar)</div>
-        <div style={{ textAlign: "right" }}>Weight</div>
-        <div style={{ textAlign: "right" }}>Daily VaR</div>
-        <div style={{ textAlign: "right" }}>= Contribution</div>
-      </div>
-      {rows.map((r) => {
-        const barWidth = (r.contribution / maxContribution) * 100;
-        return (
-          <div key={r.symbol} style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 60px 60px 80px" : "70px 1fr 70px 70px 90px", gap: 6, padding: "5px 0", borderBottom: "1px solid #f5f3ed", alignItems: "center" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</div>
-            <div style={{ position: "relative", height: 14, background: "#f5f3ed", borderRadius: 2 }}>
-              <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${barWidth}%`, background: "#7ba2cc", borderRadius: 2 }} />
+
+      {/* Contribution bars (visual) */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 80px" : "70px 1fr 90px", gap: 6, fontSize: 10, fontWeight: 600, color: "#8a93a3", paddingBottom: 4, borderBottom: "1px solid #e6e3db" }}>
+          <div>Ticker</div>
+          <div>Contribution to portfolio VaR</div>
+          <div style={{ textAlign: "right" }}>= Contribution</div>
+        </div>
+        {rows.map((r) => {
+          const barWidth = (r.contribution / maxContribution) * 100;
+          return (
+            <div key={r.symbol} style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 80px" : "70px 1fr 90px", gap: 6, padding: "5px 0", borderBottom: "1px solid #f5f3ed", alignItems: "center" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</div>
+              <div style={{ position: "relative", height: 14, background: "#f5f3ed", borderRadius: 2 }}>
+                <div style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${barWidth}%`, background: "#7ba2cc", borderRadius: 2 }} />
+              </div>
+              <div className="mono" style={{ fontSize: 11, textAlign: "right", color: "#1a4c80", fontWeight: 600 }}>{r.contribution.toFixed(2)}%</div>
             </div>
-            <div className="mono" style={{ fontSize: 11, textAlign: "right", color: "#1a1f2c" }}>{r.weight.toFixed(0)}%</div>
-            <div className="mono" style={{ fontSize: 11, textAlign: "right", color: "#5a6573" }}>{r.dailyVar.toFixed(2)}%</div>
-            <div className="mono" style={{ fontSize: 11, textAlign: "right", color: "#1a4c80", fontWeight: 600 }}>{r.contribution.toFixed(2)}%</div>
-          </div>
-        );
-      })}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 60px 60px 80px" : "70px 1fr 70px 70px 90px", gap: 6, padding: "6px 0 0", fontSize: 11, fontWeight: 700, color: "#1a1f2c", borderTop: "2px solid #1a1f2c", marginTop: 4 }}>
-        <div>Total</div>
-        <div></div>
-        <div className="mono" style={{ textAlign: "right" }}>100%</div>
-        <div></div>
-        <div className="mono" style={{ textAlign: "right", color: "#1a4c80" }}>≈ {totalContribution.toFixed(2)}%</div>
+          );
+        })}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "60px 1fr 80px" : "70px 1fr 90px", gap: 6, padding: "6px 0 0", fontSize: 11, fontWeight: 700, color: "#1a1f2c", borderTop: "2px solid #1a1f2c", marginTop: 4 }}>
+          <div>Total</div>
+          <div></div>
+          <div className="mono" style={{ textAlign: "right", color: "#1a4c80" }}>≈ {totalContribution.toFixed(2)}%</div>
+        </div>
       </div>
+
+      {/* Detail table with sector + benchmark comparison */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse", minWidth: 640 }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid #e6e3db", color: "#8a93a3" }}>
+              <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Ticker</th>
+              <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
+              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Weight</th>
+              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Daily 95% VaR — bad-day move magnitude">Daily VaR</th>
+              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Sector benchmark VaR — what's typical for this industry">Sector Norm</th>
+              <th style={{ padding: "6px 8px", textAlign: "right", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }} title="Multiple of S&P 500 VaR (1.0x = market vol)">vs S&P</th>
+              <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 9, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>Assessment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.symbol} style={{ borderBottom: "1px dotted #efece5" }}>
+                <td className="mono" style={{ padding: "6px 8px", fontWeight: 700, color: "#1a1f2c" }}>{r.symbol}</td>
+                <td style={{ padding: "6px 8px", fontSize: 10, color: "#5a6573" }}>{r.sector}</td>
+                <td className="mono" style={{ padding: "6px 8px", textAlign: "right" }}>{r.weight.toFixed(0)}%</td>
+                <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#c4314b" }}>{r.dailyVar.toFixed(2)}%</td>
+                <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#5a6573" }}>
+                  {r.benchVarPct != null ? `${r.benchVarPct.toFixed(2)}%` : "—"}
+                  <span style={{ fontSize: 9, color: "#8a93a3", marginLeft: 3 }}>({r.benchSym})</span>
+                </td>
+                <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: r.spyMultiple > 1.5 ? "#c4314b" : r.spyMultiple > 1.2 ? "#d4a017" : "#5a6573" }}>
+                  {r.spyMultiple != null ? `${r.spyMultiple.toFixed(1)}x` : "—"}
+                </td>
+                <td style={{ padding: "6px 8px", fontSize: 10, color: r.assessment?.color || "#5a6573" }}>
+                  {r.assessment?.label || "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div style={{ marginTop: 8, padding: "6px 8px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, background: "#fafaf7", borderRadius: 2 }}>
-        Simplified weighted view (ignores correlation effects between holdings — true value may differ slightly).
-        Action: to lower portfolio VaR, reduce the position contributing most (top row), or add low-correlation positions to dilute.
+        Simplified weighted view (assumes positions are perfectly correlated — a conservative upper bound).
+        To lower portfolio VaR: reduce the position contributing most (top row of bars), or add positions with a different sector and lower correlation.
+        Sector Norm VaR uses real ETF data when available (e.g., SMH for semis, OEF for mega-cap tech, XLV for healthcare).
       </div>
     </>
   );
@@ -4561,15 +4569,46 @@ function QuickAllocationWhatIfs({ positions, totalValue, totalVar95, macro, isMo
 
 // ============================================================
 // HOLY GRAIL CHART
-// Visualizes Dalio's principle: portfolio std dev decreases as you add
-// uncorrelated assets. Reference curves at different correlation levels.
-// Plots the user's ACTUAL portfolio VaR as dots (current + hypothetical).
-// Curves are calibrated to the user's avg individual asset volatility.
+// Visualizes Dalio's principle: portfolio VaR decreases as you add
+// uncorrelated assets. Uses the DIVERSIFICATION FORMULA for both dots:
+//   portfolio_var = avg_individual_var × √(1/N + (N-1)/N × avg_pair_correlation)
+// This is theoretical "diversification-adjusted" VaR — not the conservative
+// weighted-sum VaR shown in VaR Decomposition (which assumes correlation=1).
+// As you add uncorrelated positions, the dot DROPS. As you add correlated ones, it rises modestly.
 // ============================================================
-function HolyGrailChart({ currentN, currentVarPct, hypotheticalN, hypotheticalVarPct, avgIndividualVar, isMobile }) {
-  if (!currentN || currentVarPct == null || !avgIndividualVar) return null;
+function HolyGrailChart({ positions, hypotheticalPositions, isMobile }) {
+  const compute = (posList) => {
+    if (!posList) return null;
+    const valid = posList.filter((p) => p.value > 0 && p.var95 != null);
+    if (valid.length < 1) return null;
+    const totalVal = valid.reduce((s, p) => s + p.value, 0);
+    if (!totalVal) return null;
+    // Weighted avg individual VaR
+    const avgVar = valid.reduce((s, p) => s + (p.value / totalVal) * p.var95, 0);
+    // Avg pair correlation using SPY corr as proxy: pair_corr ≈ corr_i × corr_j
+    // Default to 0.7 for positions missing SPY correlation
+    let pairSum = 0, pairCount = 0;
+    for (let i = 0; i < valid.length; i++) {
+      for (let j = i + 1; j < valid.length; j++) {
+        const ci = valid[i].correlations?.SPY ?? 0.7;
+        const cj = valid[j].correlations?.SPY ?? 0.7;
+        pairSum += ci * cj;
+        pairCount++;
+      }
+    }
+    const avgCorr = pairCount ? pairSum / pairCount : (valid.length === 1 ? 1 : 0.5);
+    const N = valid.length;
+    // Diversification formula
+    const portfolioVar = avgVar * Math.sqrt((1 / N) + ((N - 1) / N) * Math.max(0, avgCorr));
+    return { N, portfolioVar, avgVar, avgCorr };
+  };
 
-  // Reference curves at different correlation levels
+  const current = compute(positions);
+  const hypothetical = hypotheticalPositions ? compute(hypotheticalPositions) : null;
+  if (!current) return null;
+
+  // Use current's avgVar for reference curves
+  const baseVar = current.avgVar;
   const corrLevels = [0, 0.2, 0.4, 0.6];
   const colors = ["#0a6e44", "#86b09c", "#d4a017", "#a3203a"];
   const Nmax = 20;
@@ -4577,14 +4616,11 @@ function HolyGrailChart({ currentN, currentVarPct, hypotheticalN, hypotheticalVa
   for (let n = 1; n <= Nmax; n++) {
     const point = { N: n };
     corrLevels.forEach((rho) => {
-      const vol = avgIndividualVar * Math.sqrt((1 / n) + ((n - 1) / n) * rho);
+      const vol = baseVar * Math.sqrt((1 / n) + ((n - 1) / n) * rho);
       point[`corr${Math.round(rho * 100)}`] = +vol.toFixed(3);
     });
-    // Add current dot at the user's actual N
-    if (n === Math.min(currentN, Nmax)) point.current = +currentVarPct.toFixed(3);
-    if (hypotheticalN != null && hypotheticalVarPct != null && n === Math.min(hypotheticalN, Nmax)) {
-      point.hypothetical = +hypotheticalVarPct.toFixed(3);
-    }
+    if (n === Math.min(current.N, Nmax)) point.current = +current.portfolioVar.toFixed(3);
+    if (hypothetical && n === Math.min(hypothetical.N, Nmax)) point.hypothetical = +hypothetical.portfolioVar.toFixed(3);
     curveData.push(point);
   }
 
@@ -4611,10 +4647,8 @@ function HolyGrailChart({ currentN, currentVarPct, hypotheticalN, hypotheticalVa
                 name={`${Math.round(rho * 100)}% correlation`}
               />
             ))}
-            {/* Current portfolio dot */}
             <Line type="monotone" dataKey="current" stroke="#1a4c80" strokeWidth={0} dot={{ fill: "#1a4c80", r: 6, stroke: "#fff", strokeWidth: 2 }} name="Your portfolio (current)" connectNulls={false} />
-            {/* Hypothetical portfolio dot */}
-            {hypotheticalN != null && hypotheticalVarPct != null && (
+            {hypothetical && (
               <Line type="monotone" dataKey="hypothetical" stroke="#d4a017" strokeWidth={0} dot={{ fill: "#d4a017", r: 6, stroke: "#fff", strokeWidth: 2 }} name="Hypothetical (after your changes)" connectNulls={false} />
             )}
           </LineChart>
@@ -4622,20 +4656,20 @@ function HolyGrailChart({ currentN, currentVarPct, hypotheticalN, hypotheticalVa
       </div>
       <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
         <span style={{ display: "inline-block", width: 10, height: 10, background: "#1a4c80", borderRadius: "50%", marginRight: 4, verticalAlign: "middle" }} />
-        Current: <strong className="mono">{currentN} positions · VaR {currentVarPct.toFixed(2)}%</strong>
-        {hypotheticalN != null && hypotheticalVarPct != null && (
+        Current: <strong className="mono">{current.N} positions · avg pair corr {(current.avgCorr * 100).toFixed(0)}% · VaR {current.portfolioVar.toFixed(2)}%</strong>
+        {hypothetical && (
           <>
-            {" · "}
-            <span style={{ display: "inline-block", width: 10, height: 10, background: "#d4a017", borderRadius: "50%", marginRight: 4, marginLeft: 6, verticalAlign: "middle" }} />
-            Hypothetical: <strong className="mono">{hypotheticalN} positions · VaR {hypotheticalVarPct.toFixed(2)}%</strong>
-            <span style={{ marginLeft: 6, color: hypotheticalVarPct < currentVarPct ? "#0a6e44" : hypotheticalVarPct > currentVarPct ? "#a3203a" : "#5a6573", fontWeight: 600 }}>
-              ({hypotheticalVarPct < currentVarPct ? "↓ better" : hypotheticalVarPct > currentVarPct ? "↑ worse" : "≈ same"})
+            <br />
+            <span style={{ display: "inline-block", width: 10, height: 10, background: "#d4a017", borderRadius: "50%", marginRight: 4, verticalAlign: "middle" }} />
+            Hypothetical: <strong className="mono">{hypothetical.N} positions · avg corr {(hypothetical.avgCorr * 100).toFixed(0)}% · VaR {hypothetical.portfolioVar.toFixed(2)}%</strong>
+            <span style={{ marginLeft: 6, color: hypothetical.portfolioVar < current.portfolioVar ? "#0a6e44" : hypothetical.portfolioVar > current.portfolioVar ? "#a3203a" : "#5a6573", fontWeight: 600 }}>
+              ({hypothetical.portfolioVar < current.portfolioVar ? "↓ better" : hypothetical.portfolioVar > current.portfolioVar ? "↑ worse" : "≈ same"})
             </span>
           </>
         )}
       </div>
-      <div style={{ marginTop: 4, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-        Reference curves show theoretical portfolio VaR at different average correlations (assuming equal-weighted positions at avg individual VaR {avgIndividualVar.toFixed(2)}%). Your dot may not lie exactly on any curve — that's expected, since real portfolios have unequal weights and varied correlations. Lower-and-left = better.
+      <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+        <strong>Important:</strong> this chart uses Dalio's diversification formula, which accounts for correlation benefit. The "VaR" shown here will be <em>lower</em> than the conservative VaR shown in Section 2 (~3.3%) because it credits diversification. When you add uncorrelated positions (e.g., LLY healthcare, JPM financials), the dot drops. When you add correlated positions (e.g., another semis stock), the dot barely moves or rises slightly. The lower curves represent better-diversified portfolios.
       </div>
     </div>
   );
@@ -4890,56 +4924,142 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
   const sameThemeCandidates = ["MU", "AVGO", "AMD", "ASML", "AMAT", "LRCX", "KLAC"].filter(isAvailable).slice(0, 4);
   const diversifierCandidates = ["GOOGL", "META", "ORCL", "AAPL", "AMZN", "CRM"].filter(isAvailable).slice(0, 4);
 
-  // Sector-grouped suggestions — each group filtered to watchlist
-  const SUGGESTION_GROUPS = [
-    {
-      label: "AI / Semis",
-      sub: "Extends your AI thesis",
-      candidates: ["MU", "AVGO", "AMD", "AMAT", "LRCX", "KLAC", "ASML", "CDNS", "SNPS"],
-    },
-    {
-      label: "Mega-Cap Tech",
-      sub: "Different growth drivers within tech",
-      candidates: ["GOOGL", "META", "ORCL", "AAPL", "AMZN", "CRM", "ADBE"],
-    },
-    {
-      label: "Healthcare",
-      sub: "Defensive, low correlation to tech",
-      candidates: ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "TMO", "DHR"],
-    },
-    {
-      label: "Financials / Energy / Consumer",
-      sub: "True sector diversifiers",
-      candidates: ["JPM", "BAC", "WFC", "XOM", "CVX", "WMT", "PG", "KO", "PEP", "COST"],
-    },
-  ].map((group) => ({
-    ...group,
-    available: group.candidates.filter(isAvailable).slice(0, 4),
-  })).filter((group) => group.available.length > 0);
+  // Sector-grouped suggestions — each group expanded from BOTH hardcoded list AND watchlist sectors
+  // Pulls additional tickers dynamically by matching the `sector` field on each watchlist ticker
+  const sectorMatches = (tickerSector, keywords) => {
+    if (!tickerSector) return false;
+    const s = tickerSector.toLowerCase();
+    return keywords.some((kw) => s.includes(kw.toLowerCase()));
+  };
+  const expandGroup = (hardcoded, sectorKeywords) => {
+    const set = new Set(hardcoded);
+    if (index?.tickers) {
+      for (const t of index.tickers) {
+        if (sectorMatches(t.sector, sectorKeywords)) set.add(t.symbol);
+      }
+    }
+    return [...set].filter(isAvailable);
+  };
+  const SUGGESTION_GROUPS = (() => {
+    const groups = [
+      {
+        label: "AI / Semis",
+        sub: "Extends your AI thesis (highly correlated to your existing holdings)",
+        available: expandGroup(
+          ["MU", "AVGO", "AMD", "ASML", "AMAT", "LRCX", "KLAC", "CDNS", "SNPS", "MRVL", "ARM", "QCOM", "INTC", "GFS", "TXN", "ON", "MCHP", "NXPI"],
+          ["semi", "memory"]
+        ).slice(0, 14),
+      },
+      {
+        label: "AI-Adjacent (Hardware · Power · Quantum · Space)",
+        sub: "Different drivers but still tied to the AI build-out",
+        available: expandGroup(
+          ["SMCI", "ANET", "DELL", "VRT", "VST", "CEG", "NEE", "IBM", "RGTI", "IONQ", "QBTS", "RKLB", "ASTS", "PLTR", "TEM", "NBIS"],
+          ["ai hardware", "ai infrastructure", "ai power", "quantum", "space", "utility"]
+        ).slice(0, 12),
+      },
+      {
+        label: "Mega-Cap Tech",
+        sub: "Diversified tech earnings (cloud, ads, consumer)",
+        available: expandGroup(
+          ["GOOGL", "META", "AAPL", "AMZN", "ORCL", "IBM", "CRM", "ADBE", "NOW"],
+          ["mega cap tech", "hyperscaler", "ai software", "software"]
+        ).slice(0, 12),
+      },
+      {
+        label: "Internet / Cyber / Fintech / Consumer Tech",
+        sub: "Tech-exposed but different business models",
+        available: expandGroup(
+          ["CRWD", "PANW", "ZS", "FTNT", "NFLX", "DIS", "SPOT", "HOOD", "COIN", "SOFI", "PYPL", "SQ", "RDDT", "PINS", "SNAP", "TSLA", "UBER", "ABNB", "DASH"],
+          ["cyber", "stream", "fintech", "crypto", "active retail", "internet"]
+        ).slice(0, 14),
+      },
+      {
+        label: "True Diversifiers (Healthcare · Financials · Energy · Consumer Staples)",
+        sub: "Lower correlation to tech — these actually reduce portfolio risk per Dalio's Holy Grail",
+        available: expandGroup(
+          ["LLY", "UNH", "JNJ", "ABBV", "MRK", "PFE", "TMO", "DHR", "ABT", "ISRG",
+           "JPM", "GS", "BAC", "AXP", "WFC", "MS", "BLK", "V", "MA",
+           "XOM", "CVX", "OXY", "COP", "SLB",
+           "WMT", "PG", "KO", "PEP", "COST", "CMG", "MCD", "HD", "TGT"],
+          ["health", "financ", "bank", "payment", "buffett", "ackman", "energ", "oil", "consumer", "staples", "retail"]
+        ).slice(0, 18),
+      },
+    ];
+
+    // CATCH-ALL: any remaining watchlist tickers not surfaced in the groups above
+    const surfaced = new Set();
+    groups.forEach((g) => g.available.forEach((sym) => surfaced.add(sym)));
+    const remaining = index?.tickers
+      ? index.tickers.map((t) => t.symbol).filter((sym) => isAvailable(sym) && !surfaced.has(sym))
+      : [];
+    if (remaining.length > 0) {
+      groups.push({
+        label: "Other Watchlist Tickers",
+        sub: "Everything else in your tickers.json that didn't fit the categories above",
+        available: remaining.slice(0, 20),
+      });
+    }
+    return groups.filter((g) => g.available.length > 0);
+  })();
 
   // ===== Metrics =====
+  // computeMetrics uses CORRELATION-AWARE portfolio variance:
+  //   σ_p² = Σᵢ wᵢ² σᵢ² + 2 Σᵢ<j wᵢ wⱼ σᵢ σⱼ ρᵢⱼ
+  // where pair correlation ρᵢⱼ is approximated as corr_i_SPY × corr_j_SPY
+  // (clamped to [0.10, 0.95]). This way adding low-correlation positions
+  // (GLD, TLT, healthcare) actually decreases portfolio VaR — matching
+  // Dalio's Holy Grail diversification principle.
+  // (Dashboard's headline VaR uses simpler weighted-sum which is more conservative.)
   const computeMetrics = (positionsList, sharesGetter) => {
-    let total = 0, totalVar = 0, totalCvar = 0, betaSum = 0, corrSum = 0, corrCount = 0;
+    let total = 0, totalCvar = 0, betaSum = 0, corrSum = 0, corrCount = 0;
     const byValue = [];
+    const validForVar = [];
     for (const p of positionsList) {
       const sh = sharesGetter(p);
       if (!sh || !p.currentPrice) continue;
       const value = sh * p.currentPrice;
       total += value;
       byValue.push({ symbol: p.symbol, value });
-      if (p.var95 != null) totalVar += value * (p.var95 / 100);
       if (p.cvar95 != null) totalCvar += value * (p.cvar95 / 100);
       if (p.beta != null) betaSum += value * p.beta;
       else betaSum += value;
       if (p.correlations?.SPY != null) { corrSum += p.correlations.SPY; corrCount++; }
+      if (p.var95 != null) {
+        validForVar.push({ symbol: p.symbol, value, var95: p.var95, spyCorr: p.correlations?.SPY ?? 0.5 });
+      }
     }
     if (!total) return null;
+
+    // Correlation-aware portfolio VaR
+    let portfolioVarPct = 0;
+    let simpleVarPct = 0;
+    if (validForVar.length > 0) {
+      // Simple weighted (matches Risk Decomposition / dashboard headline)
+      simpleVarPct = validForVar.reduce((s, p) => s + (p.value / total) * p.var95, 0);
+      // Correlation-aware (shows diversification benefit)
+      let variance = 0;
+      for (let i = 0; i < validForVar.length; i++) {
+        const wi = validForVar[i].value / total;
+        const sigi = validForVar[i].var95;
+        variance += wi * wi * sigi * sigi;
+        for (let j = i + 1; j < validForVar.length; j++) {
+          const wj = validForVar[j].value / total;
+          const sigj = validForVar[j].var95;
+          const pairCorr = Math.max(0.10, Math.min(0.95, validForVar[i].spyCorr * validForVar[j].spyCorr));
+          variance += 2 * wi * wj * sigi * sigj * pairCorr;
+        }
+      }
+      portfolioVarPct = Math.sqrt(variance);
+    }
     byValue.sort((a, b) => b.value - a.value);
     const largestPct = byValue[0] ? (byValue[0].value / total) * 100 : 0;
     const top3 = byValue.slice(0, 3).reduce((s, p) => s + p.value, 0);
     return {
       total,
-      totalVar, varPct: (totalVar / total) * 100,
+      totalVar: (portfolioVarPct / 100) * total,
+      varPct: portfolioVarPct,
+      simpleVarPct,  // for comparison / display
       totalCvar, cvarPct: (totalCvar / total) * 100,
       largestPct, largestSym: byValue[0]?.symbol,
       top3Pct: (top3 / total) * 100,
@@ -5164,6 +5284,9 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
               <li key={i} style={{ color: b.color }}>{b.text}</li>
             ))}
           </ul>
+          <div style={{ marginTop: 8, padding: "6px 8px", fontSize: 9, color: "#8a93a3", lineHeight: 1.5, background: "#fafaf7", borderRadius: 2 }}>
+            <strong>Methodology:</strong> Simulator uses <em>correlation-aware</em> portfolio VaR (σ_p² = Σ wᵢ² σᵢ² + 2 Σᵢ&lt;j wᵢ wⱼ σᵢ σⱼ ρᵢⱼ), so adding uncorrelated positions actually lowers risk per Dalio's principle. The dashboard's headline VaR (~{curMetrics.simpleVarPct?.toFixed(2)}%) uses the simpler weighted sum (more conservative). Both views are valid.
+          </div>
         </div>
       )}
 
@@ -5184,19 +5307,18 @@ function PortfolioSimulatorPanel({ positions, totalAccountValue, cashRemaining, 
 
       {/* ===== Holy Grail Chart — diversification benefit visualization ===== */}
       {(() => {
-        // Compute weighted-avg individual VaR from current portfolio (calibrates the curves)
-        const validCur = positions.filter((p) => p.var95 != null);
-        if (validCur.length === 0) return null;
-        const totalValForCalc = validCur.reduce((s, p) => s + ((p.shares || 0) * (p.currentPrice || 0)), 0);
-        if (!totalValForCalc) return null;
-        const avgIndividualVar = validCur.reduce((s, p) => s + ((p.shares || 0) * (p.currentPrice || 0) / totalValForCalc) * p.var95, 0);
+        // Build hypothetical positions list (current adjusted + additions) so the chart can compute properly
+        const hypotheticalList = positions.map((p) => {
+          const sh = adjustments[p.symbol] != null ? adjustments[p.symbol] : p.shares;
+          return { ...p, shares: sh, value: sh * (p.currentPrice || 0) };
+        });
+        for (const a of additions) {
+          hypotheticalList.push({ ...a, value: (a.shares || 0) * (a.currentPrice || 0) });
+        }
         return (
           <HolyGrailChart
-            currentN={curMetrics.count}
-            currentVarPct={curMetrics.varPct}
-            hypotheticalN={hasChanges ? hypMetrics.count : null}
-            hypotheticalVarPct={hasChanges ? hypMetrics.varPct : null}
-            avgIndividualVar={avgIndividualVar}
+            positions={positions}
+            hypotheticalPositions={hasChanges ? hypotheticalList : null}
             isMobile={isMobile}
           />
         );
