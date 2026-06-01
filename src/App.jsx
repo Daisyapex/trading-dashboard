@@ -4889,6 +4889,13 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       const expectedReturn = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
       // Historical max drawdown (negative number)
       const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
+      // $-amount projections based on invested
+      const expectedDollar = p.value * (expectedReturn / 100);
+      const upside1sDollar = p.value * ((expectedReturn + annualStd) / 100);
+      const downside1sDollar = p.value * ((expectedReturn - annualStd) / 100);
+      const upside2sDollar = p.value * ((expectedReturn + 2 * annualStd) / 100);
+      const downside2sDollar = p.value * ((expectedReturn - 2 * annualStd) / 100);
+      const histWorstDollar = histWorst != null ? p.value * (histWorst / 100) : null;
       return {
         symbol: p.symbol,
         sector: p.sector || "—",
@@ -4900,6 +4907,12 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         expectedReturn,
         histWorst,
         var95: p.var95,
+        expectedDollar,
+        upside1sDollar,
+        downside1sDollar,
+        upside2sDollar,
+        downside2sDollar,
+        histWorstDollar,
       };
     });
 
@@ -4910,6 +4923,29 @@ function ReturnRiskDistribution({ positions, isMobile }) {
     if (a.sectorKey !== b.sectorKey) return a.sectorKey.localeCompare(b.sectorKey);
     return b.weight - a.weight;
   });
+
+  // ===== Portfolio-level aggregates =====
+  const totalInvested = data.reduce((s, d) => s + d.value, 0);
+  // Weighted expected return for portfolio (= weighted avg of position expected returns)
+  const portfolioExpectedReturnPct = data.reduce((s, d) => s + (d.value / totalInvested) * d.expectedReturn, 0);
+  const portfolioExpectedDollar = totalInvested * (portfolioExpectedReturnPct / 100);
+  // Portfolio std dev — use SIMPLE weighted (conservative, matches dashboard headline approach)
+  const portfolioStdPct = data.reduce((s, d) => s + (d.value / totalInvested) * d.annualStd, 0);
+  const portfolioStdDollar = totalInvested * (portfolioStdPct / 100);
+  // 68% & 95% ranges in $
+  const portfolioRange68Low = portfolioExpectedDollar - portfolioStdDollar;
+  const portfolioRange68High = portfolioExpectedDollar + portfolioStdDollar;
+  const portfolioRange95Low = portfolioExpectedDollar - 2 * portfolioStdDollar;
+  const portfolioRange95High = portfolioExpectedDollar + 2 * portfolioStdDollar;
+  // Portfolio daily VaR $ (simple weighted)
+  const portfolioDailyVarPct = data.reduce((s, d) => s + (d.value / totalInvested) * d.var95, 0);
+  const portfolioDailyVarDollar = totalInvested * (portfolioDailyVarPct / 100);
+  // S&P comparison: 10% annual on totalInvested; daily VaR ~1.5%
+  const SP_VAR_DAILY = 1.5;
+  const spAnnualDollar = totalInvested * (MARKET_PREMIUM / 100);
+  const spDailyVarDollar = totalInvested * (SP_VAR_DAILY / 100);
+  const portfolioVsSpDollar = portfolioExpectedDollar - spAnnualDollar;
+  const portfolioVsSpPct = portfolioExpectedReturnPct - MARKET_PREMIUM;
 
   // Sector color palette
   const sectorColors = {
@@ -4929,14 +4965,14 @@ function ReturnRiskDistribution({ positions, isMobile }) {
     other: "#5a6573",
   };
 
-  // Chart dimensions
+  // Chart dimensions — give more right padding so reference labels fit fully
   const width = isMobile ? 380 : 720;
-  const height = isMobile ? 320 : 360;
-  const padding = { top: 20, right: 60, bottom: 60, left: 50 };
+  const height = isMobile ? 380 : 380;
+  const padding = { top: 18, right: isMobile ? 70 : 110, bottom: 76, left: 50 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
   const xStep = chartW / data.length;
-  const violinW = Math.min(xStep * 0.65, isMobile ? 26 : 42);
+  const violinW = Math.min(xStep * 0.6, isMobile ? 22 : 38);
 
   // Y-axis range: from min(expected - 2σ, histWorst) to max(expected + 2σ)
   const yMin = Math.min(0, ...data.map((d) => Math.min(d.expectedReturn - 2 * d.annualStd, d.histWorst ?? 0))) - 5;
@@ -4963,9 +4999,63 @@ function ReturnRiskDistribution({ positions, isMobile }) {
 
   return (
     <div style={{ marginTop: 14, padding: "12px 14px", background: "#fff", border: "1px solid #e6e3db", borderRadius: 3 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#1a1f2c" }}>Return vs Risk Distribution · Per Holding</span>
         <span style={{ fontSize: 10, color: "#5a6573" }}>Howard Marks-style: wider violin = more uncertain outcome</span>
+      </div>
+
+      {/* ===== Portfolio Summary Card — answers "what do I expect, what could I lose, vs S&P?" ===== */}
+      <div style={{ marginBottom: 12, padding: "10px 12px", background: "#fafaf7", border: "1px solid #e6e3db", borderRadius: 3 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#1a1f2c", marginBottom: 8 }}>Portfolio summary at a glance:</div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 10 }}>
+          <div title="Total $ invested across all positions">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Invested</div>
+            <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: "#1a1f2c" }}>${totalInvested.toFixed(0)}</div>
+          </div>
+          <div title="Expected annual return: weighted avg of position CAPM expected returns">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Expected return / yr</div>
+            <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: portfolioExpectedDollar >= 0 ? "#0a8554" : "#c4314b" }}>
+              {portfolioExpectedDollar >= 0 ? "+" : "-"}${Math.abs(portfolioExpectedDollar).toFixed(0)}
+            </div>
+            <div style={{ fontSize: 10, color: "#5a6573" }}>{portfolioExpectedReturnPct >= 0 ? "+" : ""}{portfolioExpectedReturnPct.toFixed(1)}%</div>
+          </div>
+          <div title="68% confidence range (±1σ) in $ for annual return">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>68% range (±1σ)</div>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+              <span style={{ color: "#c4314b" }}>{portfolioRange68Low >= 0 ? "+" : "-"}${Math.abs(portfolioRange68Low).toFixed(0)}</span>
+              <span style={{ color: "#8a93a3" }}> to </span>
+              <span style={{ color: "#0a8554" }}>{portfolioRange68High >= 0 ? "+" : "-"}${Math.abs(portfolioRange68High).toFixed(0)}</span>
+            </div>
+          </div>
+          <div title="95% confidence range (±2σ) — extreme bad/good year">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>95% range (±2σ)</div>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+              <span style={{ color: "#c4314b" }}>{portfolioRange95Low >= 0 ? "+" : "-"}${Math.abs(portfolioRange95Low).toFixed(0)}</span>
+              <span style={{ color: "#8a93a3" }}> to </span>
+              <span style={{ color: "#0a8554" }}>{portfolioRange95High >= 0 ? "+" : "-"}${Math.abs(portfolioRange95High).toFixed(0)}</span>
+            </div>
+          </div>
+          <div title="Daily 95% VaR: typical bad-day loss">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>Daily VaR (bad day)</div>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+              <span style={{ color: "#c4314b" }}>-${portfolioDailyVarDollar.toFixed(0)}</span>
+              <span style={{ fontSize: 10, color: "#8a93a3", marginLeft: 4 }}>({portfolioDailyVarPct.toFixed(2)}%)</span>
+            </div>
+            <div style={{ fontSize: 9, color: "#8a93a3" }}>S&P bad day: ~-${spDailyVarDollar.toFixed(0)} ({SP_VAR_DAILY}%)</div>
+          </div>
+          <div title="Yours vs S&P 500 expected return">
+            <div style={{ fontSize: 9, color: "#8a93a3", letterSpacing: "0.06em", textTransform: "uppercase" }}>S&P vs you (annual)</div>
+            <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+              <span style={{ color: "#5a6573" }}>S&P +${spAnnualDollar.toFixed(0)}</span>
+            </div>
+            <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: portfolioVsSpDollar >= 0 ? "#0a8554" : "#c4314b" }}>
+              You {portfolioVsSpDollar >= 0 ? "+" : "-"}${Math.abs(portfolioVsSpDollar).toFixed(0)} {portfolioVsSpPct >= 0 ? "(+" : "("}{portfolioVsSpPct.toFixed(1)}pp)
+            </div>
+          </div>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
+          Expected return uses CAPM (risk-free 4% + β × market premium 6%). Std dev annualized from your var95. "95% range" means in a typical year, the outcome will fall inside these dollar bounds ~95% of the time.
+        </div>
       </div>
 
       <div style={{ overflowX: "auto" }}>
@@ -4978,7 +5068,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
             </g>
           ))}
 
-          {/* Reference lines (Cash, T-bill, S&P) */}
+          {/* Reference lines (Cash, T-bill, S&P) — labels on RIGHT inside expanded padding so they fit fully */}
           {refLines.map((rl, ri) => (
             <g key={ri}>
               <line x1={padding.left} y1={yToPx(rl.y)} x2={width - padding.right} y2={yToPx(rl.y)}
@@ -5001,12 +5091,10 @@ function ReturnRiskDistribution({ positions, isMobile }) {
             // Build a bell-shaped violin via SVG path (simple bezier approximation)
             // Width tapers from violinW at center to 0 at ±2σ
             const halfW = violinW / 2;
-            // Quarter widths at ±0.5σ, ±1σ, ±1.5σ, ±2σ
             const w0 = halfW;
             const w05 = halfW * 0.88;
             const w1 = halfW * 0.65;
             const w15 = halfW * 0.35;
-            const w2 = halfW * 0.05;
             const y0 = meanY;
             const y05 = yToPx(d.expectedReturn + 0.5 * d.annualStd);
             const y1 = oneSigmaTopY;
@@ -5042,19 +5130,25 @@ function ReturnRiskDistribution({ positions, isMobile }) {
                   stroke="#1a1f2c" strokeWidth={2} />
                 {/* Historical worst (red tick) */}
                 {histWorstY != null && (
-                  <g>
-                    <line x1={cx - halfW - 4} y1={histWorstY} x2={cx + halfW + 4} y2={histWorstY}
-                      stroke="#c4314b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
-                    <text x={cx + halfW + 6} y={histWorstY + 3} fontSize="7" fill="#c4314b">hist worst</text>
-                  </g>
+                  <line x1={cx - halfW - 4} y1={histWorstY} x2={cx + halfW + 4} y2={histWorstY}
+                    stroke="#c4314b" strokeWidth={1} strokeDasharray="2,2" opacity={0.7} />
                 )}
-                {/* Expected return value (above the mean line) */}
-                <text x={cx} y={meanY - 3} textAnchor="middle" fontSize="9" fill="#1a1f2c" fontWeight="600">
-                  {d.expectedReturn >= 0 ? "+" : ""}{d.expectedReturn.toFixed(0)}%
+                {/* Expected $ amount above the mean line */}
+                <text x={cx} y={meanY - 3} textAnchor="middle" fontSize="9" fill="#1a1f2c" fontWeight="700">
+                  {d.expectedDollar >= 0 ? "+$" : "-$"}{Math.abs(d.expectedDollar).toFixed(0)}
                 </text>
-                {/* Ticker label (rotated for space) */}
+                {/* Ticker label */}
                 <text x={cx} y={height - padding.bottom + 14} textAnchor="middle" fontSize="10" fill="#1a1f2c" fontWeight="700">{d.symbol}</text>
-                <text x={cx} y={height - padding.bottom + 26} textAnchor="middle" fontSize="7" fill="#8a93a3">
+                {/* Invested $ */}
+                <text x={cx} y={height - padding.bottom + 26} textAnchor="middle" fontSize="8" fill="#5a6573">
+                  inv ${d.value.toFixed(0)}
+                </text>
+                {/* Worst $ (-2σ or histWorst, whichever lower) */}
+                <text x={cx} y={height - padding.bottom + 38} textAnchor="middle" fontSize="8" fill="#c4314b" fontWeight="600">
+                  worst -${Math.abs(d.histWorstDollar != null ? Math.min(d.downside2sDollar, d.histWorstDollar) : d.downside2sDollar).toFixed(0)}
+                </text>
+                {/* β · σ% */}
+                <text x={cx} y={height - padding.bottom + 50} textAnchor="middle" fontSize="7" fill="#8a93a3">
                   β {d.beta.toFixed(2)} · σ {d.annualStd.toFixed(0)}%
                 </text>
               </g>
@@ -5064,7 +5158,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
           {/* Y-axis label */}
           <text x={padding.left - 30} y={padding.top + chartH / 2} textAnchor="middle" fontSize="9" fill="#5a6573"
             transform={`rotate(-90 ${padding.left - 30} ${padding.top + chartH / 2})`}>
-            Annual return % (expected ± σ)
+            Annual return %
           </text>
         </svg>
       </div>
@@ -5082,14 +5176,15 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       <div style={{ marginTop: 8, fontSize: 11, color: "#5a6573", lineHeight: 1.6 }}>
         <strong>How to read each violin:</strong>
         <ul style={{ margin: "4px 0 0 18px", padding: 0, lineHeight: 1.5 }}>
-          <li><strong>Center line</strong> = expected annual return (= risk-free + β × market premium, CAPM). Higher = better.</li>
-          <li><strong>±1σ marks</strong> = 68% of outcomes fall inside this band.</li>
-          <li><strong>Violin width</strong> = how spread out outcomes are. <strong>Fat violin = high risk</strong> (small-caps, semis); thin violin = low risk (mega-caps, defensive).</li>
-          <li><strong>Red dashed line</strong> = historical worst drawdown — your actual past floor.</li>
+          <li><strong>+$X above each violin</strong> = expected annual $ return on what you invested in that stock</li>
+          <li><strong>"inv $X"</strong> below = your invested amount; <strong>"worst -$X"</strong> = worst-case loss (either −2σ or historical max drawdown, whichever is uglier)</li>
+          <li><strong>Center black line</strong> = expected annual return (CAPM: risk-free + β × market premium)</li>
+          <li><strong>Violin width</strong> = how uncertain the outcome is. <strong>Fat violin = high risk</strong> (small-caps, semis); thin violin = low risk (mega-caps, defensive)</li>
+          <li><strong>Red dashed line</strong> across the violin = historical worst drawdown</li>
         </ul>
       </div>
       <div style={{ marginTop: 6, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-        <strong>The Howard Marks insight:</strong> high-risk positions don't <em>only</em> have higher expected returns — they have <strong>wider distributions of outcomes</strong>, including much worse downsides. A wide violin centered at +15% can still deliver −30% in a bad year. Compare violin <em>widths</em> across your holdings: are your highest-return positions also your widest (most uncertain)? That's where Holy Grail diversification matters — combining wide violins that don't move together makes the portfolio's combined violin narrower.
+        <strong>The Howard Marks insight:</strong> high-risk positions don't <em>only</em> have higher expected returns — they have <strong>wider distributions of outcomes</strong>, including much worse downsides. A wide violin centered at +$500 expected can still deliver −$1,500 in a bad year. Compare violin <em>widths</em> across your holdings: are your highest-return positions also your widest (most uncertain)? That's where Holy Grail diversification matters — combining wide violins that don't move together makes the portfolio's combined violin narrower.
       </div>
     </div>
   );
