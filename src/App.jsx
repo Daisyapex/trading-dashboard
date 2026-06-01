@@ -2609,6 +2609,29 @@ function RiskHelper({ isMobile, macro }) {
       const dd30 = (current && high30) ? ((current - high30) / high30) * 100 : null;
       const dd90 = (current && high90) ? ((current - high90) / high90) * 100 : null;
       const dd52w = (current && high52w) ? ((current - high52w) / high52w) * 100 : null;
+
+      // ===== 12-month momentum (the strongest single equity factor in academic literature) =====
+      // Two versions: simple 12-month return, and Jegadeesh-Titman skip-month (avoids short-term reversal)
+      let momentum12m = null;
+      if (candles.length >= 200 && current) {
+        const startIdx = Math.max(0, candles.length - 252); // ~252 trading days ago
+        const startPrice = candles[startIdx]?.close;
+        if (startPrice && startPrice > 0) {
+          momentum12m = (current / startPrice) - 1;
+        }
+      }
+      // Jegadeesh-Titman 12-1: price 21 days ago vs price 252 days ago (skips last month, less noisy)
+      let momentum12m1m = null;
+      if (candles.length >= 240) {
+        const recentIdx = candles.length - 21;
+        const oldIdx = Math.max(0, candles.length - 252);
+        const recentPrice = candles[recentIdx]?.close;
+        const oldPrice = candles[oldIdx]?.close;
+        if (recentPrice && oldPrice && oldPrice > 0) {
+          momentum12m1m = (recentPrice / oldPrice) - 1;
+        }
+      }
+
       return {
         currentPrice: current,
         var95: data.simons?.var95daily ?? null,
@@ -2641,6 +2664,9 @@ function RiskHelper({ isMobile, macro }) {
         ivATMLong: data.options?.ivATMLong ?? null,                  // Annualized IV %, long-dated (more reliable)
         ivSkew: data.options?.skew ?? null,                          // Put-call IV skew (positive = fear)
         expectedMovePct: data.options?.expectedMove?.pct ?? null,    // Market's expected 1σ move %
+        // Momentum (strongest equity factor in academic literature)
+        momentum12m,                                                  // Simple 12-month return (decimal, e.g., 0.42 = +42%)
+        momentum12m1m,                                                // Jegadeesh-Titman 12-1 (skips last month)
         // Drawdown context for the Kill Switch panel
         dd30, dd90, dd52w,
         high30, high90, high52w,
@@ -5025,8 +5051,24 @@ function ReturnRiskDistribution({ positions, isMobile }) {
       const dailyStd = p.var95 / 1.645;                  // daily std dev from 95% VaR
       const annualStd = dailyStd * Math.sqrt(252);       // annualize
       const beta = p.beta ?? 1.0;
-      // Expected annual return ≈ risk-free + β × market premium (CAPM)
-      const expectedReturn = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
+      // Base CAPM expected return: risk-free + β × market premium
+      const expectedReturnCAPM = RISK_FREE + beta * (MARKET_PREMIUM - RISK_FREE);
+
+      // ===== MOMENTUM TILT (Jegadeesh-Titman factor) =====
+      // 12-month return is the single strongest equity factor in academic literature
+      // (Jegadeesh-Titman 1993, Fama-French momentum extension 2012).
+      // Effect: top-decile momentum stocks outperform bottom-decile by ~8-12% annually for 3-12 months forward.
+      // Use Jegadeesh-Titman 12-1 (skip last month to avoid short-term reversal) when available, else simple 12m.
+      const mom = p.momentum12m1m != null ? p.momentum12m1m : p.momentum12m;
+      let momentumTilt = 0;
+      if (mom != null) {
+        if (mom > 0.50) momentumTilt = 3;
+        else if (mom > 0.25) momentumTilt = 1.5;
+        else if (mom > 0.10) momentumTilt = 0.5;
+        else if (mom < -0.25) momentumTilt = -3;
+        else if (mom < -0.10) momentumTilt = -1.5;
+      }
+      const expectedReturn = expectedReturnCAPM + momentumTilt;
       const histWorst = p.maxDD != null ? -Math.abs(p.maxDD) : null;
       const sectorKey = classifySector(p.sector);
 
@@ -5068,6 +5110,11 @@ function ReturnRiskDistribution({ positions, isMobile }) {
         ivAnnualPct: scen.ivAnnualPct,
         analystRating: p.analystRating,
         numAnalysts: p.numAnalysts,
+        // Momentum (12-month return + computed tilt)
+        momentum12m: p.momentum12m,
+        momentum12m1m: p.momentum12m1m,
+        momentumTilt,
+        expectedReturnCAPM,
         // Stat ranges (for violin width)
         expectedDollar,
         upside1sDollar: p.value * ((expectedReturn + annualStd) / 100),
@@ -5499,6 +5546,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
                 <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Forward P/E (next 12 months)">Fwd PE</th>
                 <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="PEG = PE ÷ earnings growth. Under 1 = cheap vs growth (Lynch), over 2 = expensive">PEG</th>
                 <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Analyst consensus EPS growth next year">EPS Gr</th>
+                <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="12-month price return (Jegadeesh-Titman 12-1 skip-month when available). Strongest single equity factor — past winners tend to keep winning 3-12 months forward.">Mom 12m</th>
                 <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Options-implied volatility, annualized — market's forward-looking risk estimate">IV (ann)</th>
                 <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Analyst target mean price">Target $</th>
                 <th style={{ padding: "5px 6px", textAlign: "right", fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 500 }} title="Implied upside in % and $ on your position">Analyst Upside</th>
@@ -5516,6 +5564,12 @@ function ReturnRiskDistribution({ positions, isMobile }) {
                   : d.epsGrowthNextYr > 25 ? "#0a8554"
                   : d.epsGrowthNextYr > 10 ? "#5a6573"
                   : d.epsGrowthNextYr > 0 ? "#d4a017"
+                  : "#c4314b";
+                const momPct = (d.momentum12m1m != null ? d.momentum12m1m : d.momentum12m);
+                const momColor = momPct == null ? "#8a93a3"
+                  : momPct > 0.25 ? "#0a8554"
+                  : momPct > 0.10 ? "#5a6573"
+                  : momPct > -0.10 ? "#d4a017"
                   : "#c4314b";
                 const ivColor = d.ivAnnualPct == null ? "#8a93a3"
                   : d.ivAnnualPct > 50 ? "#c4314b"
@@ -5536,6 +5590,10 @@ function ReturnRiskDistribution({ positions, isMobile }) {
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{d.fwdPe != null ? d.fwdPe.toFixed(1) : "—"}</td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: pegColor, fontWeight: 600 }}>{d.peg != null ? d.peg.toFixed(2) : "—"}</td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: epsGrowthColor, fontWeight: 600 }}>{d.epsGrowthNextYr != null ? `${d.epsGrowthNextYr.toFixed(0)}%` : "—"}</td>
+                    <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: momColor, fontWeight: 600 }} title={d.momentumTilt ? `Tilts expected return by ${d.momentumTilt >= 0 ? "+" : ""}${d.momentumTilt}pp` : "No tilt"}>
+                      {momPct != null ? `${momPct >= 0 ? "+" : ""}${(momPct * 100).toFixed(0)}%` : "—"}
+                      {d.momentumTilt ? <div style={{ fontSize: 9, color: "#8a93a3", fontWeight: 400 }}>{d.momentumTilt >= 0 ? "+" : ""}{d.momentumTilt}pp tilt</div> : null}
+                    </td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: ivColor }}>{d.ivAnnualPct != null ? `${d.ivAnnualPct.toFixed(0)}%` : "—"}</td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right" }}>{d.analystTargetPrice != null ? `$${d.analystTargetPrice.toFixed(0)}` : "—"}</td>
                     <td className="mono" style={{ padding: "5px 6px", textAlign: "right", color: upsideColor, fontWeight: 600 }}>
@@ -5553,7 +5611,7 @@ function ReturnRiskDistribution({ positions, isMobile }) {
           </table>
         </div>
         <div style={{ marginTop: 8, fontSize: 9, color: "#8a93a3", lineHeight: 1.5 }}>
-          <strong>How the model uses these:</strong> <strong>PEG &lt; 1</strong> bumps Best Year up 10% (cheap vs growth) and reduces Normal Bear by 3pp. <strong>PEG &gt; 3</strong> cuts Best Year by 15%. <strong>EPS Growth &gt; 20%</strong> adds a growth cushion to Normal Bear (high earnings growth offsets P/E compression). <strong>EPS Growth &gt; 30%</strong> bumps Best Year up 15%. <strong>IV</strong> is the market's annualized 1σ expected move — if it's much higher than our annualized historical vol, the market is pricing in more risk than history suggests. <strong>Analyst Target</strong> is shown as an <em>independent reference upside</em> — compare it to our "Best Year (sector bull)" to see if Wall Street agrees, disagrees, or is more conservative.
+          <strong>How the model uses these:</strong> <strong>PEG &lt; 1</strong> bumps Best Year up 10% (cheap vs growth) and reduces Normal Bear by 3pp. <strong>PEG &gt; 3</strong> cuts Best Year by 15%. <strong>EPS Growth &gt; 20%</strong> adds a growth cushion to Normal Bear (high earnings growth offsets P/E compression). <strong>EPS Growth &gt; 30%</strong> bumps Best Year up 15%. <strong>Mom 12m</strong> tilts expected return: ≥+50% → +3pp, ≥+25% → +1.5pp, ≥+10% → +0.5pp; ≤-10% → -1.5pp, ≤-25% → -3pp. Based on Jegadeesh-Titman (1993) — strongest single equity factor in academic literature. <strong>IV</strong> is the market's annualized 1σ expected move — if it's much higher than our annualized historical vol, the market is pricing in more risk than history suggests. <strong>Analyst Target</strong> is shown as an <em>independent reference upside</em> — compare it to our "Best Year (sector bull)" to see if Wall Street agrees, disagrees, or is more conservative.
         </div>
       </div>
     </div>
