@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-01T22:49:53.530Z",
+  "generatedAt": "2026-06-02T12:16:49.620Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -53,8 +53,8 @@
       "price": 697.3,
       "change": 1.81,
       "changePct": 0.2602,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "QQQ",
@@ -64,8 +64,8 @@
       "price": 742.74,
       "change": 4.43,
       "changePct": 0.6,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "VTI",
@@ -460,7 +460,7 @@
       "price": 600.47,
       "change": -32.04,
       "changePct": -5.0655,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
@@ -515,8 +515,8 @@
       "price": 90.73,
       "change": -3.57,
       "changePct": -3.7858,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "COIN",
@@ -559,8 +559,8 @@
       "price": 185.83,
       "change": 3.37,
       "changePct": 1.847,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "OXY",
@@ -570,8 +570,8 @@
       "price": 58.92,
       "change": 2.29,
       "changePct": 4.0438,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "CMG",
@@ -581,8 +581,8 @@
       "price": 30.55,
       "change": -1.31,
       "changePct": -4.1117,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "PYPL",
@@ -625,8 +625,8 @@
       "price": 1082.2,
       "change": -22.8,
       "changePct": -2.0633,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "UNH",
