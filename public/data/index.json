@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-03T22:38:38.299Z",
+  "generatedAt": "2026-06-04T10:44:40.166Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -130,8 +130,8 @@
       "price": 479.23,
       "change": -2.34,
       "changePct": -0.4859,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "AMD",
