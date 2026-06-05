@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-06-04T21:07:40.152Z",
+  "fetchedAt": "2026-06-05T08:58:48.406Z",
   "items": [
     {
       "symbol": "^TNX",
@@ -14,18 +14,18 @@
       "symbol": "^VIX",
       "name": "Volatility Index",
       "explain": "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear.",
-      "value": 15.4,
-      "dayChange": -4.11,
-      "monthChange": -11.44,
-      "dailyVol": 7.05
+      "value": 15.7,
+      "dayChange": 1.95,
+      "monthChange": -8.08,
+      "dailyVol": 6.89
     },
     {
       "symbol": "DX-Y.NYB",
       "name": "Dollar Index",
       "explain": "Strong dollar hurts US multinationals' overseas revenue.",
-      "value": 99.44,
-      "dayChange": -0.09,
-      "monthChange": 0.97,
+      "value": 99.24,
+      "dayChange": -0.17,
+      "monthChange": 1.24,
       "dailyVol": 0.35
     },
     {
@@ -151,9 +151,9 @@
     {
       "symbol": "CIBR",
       "name": "Cybersecurity ETF",
-      "value": 90.7,
-      "dayChange": -1.06,
-      "monthChange": 27.98,
+      "value": 91.67,
+      "dayChange": -2.81,
+      "monthChange": 31.43,
       "dailyVol": 2.06,
       "category": "Cybersecurity",
       "vol_label": "Cyber (CIBR)"
@@ -161,9 +161,9 @@
     {
       "symbol": "ARTY",
       "name": "AI & Big Data ETF",
-      "value": 78.4,
-      "dayChange": -2.02,
-      "monthChange": 20.25,
+      "value": 80.02,
+      "dayChange": -0.9,
+      "monthChange": 26.1,
       "dailyVol": 2.46,
       "category": "AI Infra",
       "vol_label": "AI Infra (ARTY)"
@@ -211,19 +211,19 @@
     {
       "symbol": "BITQ",
       "name": "Crypto Industry",
-      "value": 27.49,
-      "dayChange": -1.33,
-      "monthChange": 4.84,
-      "dailyVol": 3.19,
+      "value": 27.86,
+      "dayChange": -2.21,
+      "monthChange": 11.04,
+      "dailyVol": 3.21,
       "category": "Crypto Equity",
       "vol_label": "Crypto Cos (BITQ)"
     },
     {
       "symbol": "IBIT",
       "name": "iShares Bitcoin",
-      "value": 36.02,
-      "dayChange": -2.65,
-      "monthChange": -22.17,
+      "value": 37,
+      "dayChange": -2.76,
+      "monthChange": -18.5,
       "dailyVol": 2.23,
       "category": "Bitcoin",
       "vol_label": "Bitcoin (IBIT)"
@@ -389,9 +389,9 @@
     {
       "symbol": "INDA",
       "name": "India",
-      "value": 48.02,
-      "dayChange": 1.39,
-      "monthChange": -2.32,
+      "value": 47.36,
+      "dayChange": -1.39,
+      "monthChange": -2.61,
       "dailyVol": 1.31,
       "category": "India",
       "vol_label": "India (INDA)"
@@ -419,9 +419,9 @@
     {
       "symbol": "AVUV",
       "name": "Small Cap Value",
-      "value": 121.45,
-      "dayChange": 1.22,
-      "monthChange": 1.07,
+      "value": 119.99,
+      "dayChange": -0.97,
+      "monthChange": 1.21,
       "dailyVol": 0.94,
       "category": "Small Cap Value",
       "vol_label": "SC Value (AVUV)"

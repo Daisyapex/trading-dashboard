@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-04T21:07:40.152Z",
+  "generatedAt": "2026-06-05T08:58:48.406Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -460,7 +460,7 @@
       "price": 627.57,
       "change": 4.59,
       "changePct": 0.7368,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
@@ -471,8 +471,8 @@
       "price": 253.79,
       "change": 3.77,
       "changePct": 1.5079,
-      "stance": "Negative",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "TSLA",
