@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-05T20:56:44.658Z",
+  "generatedAt": "2026-06-06T07:38:43.030Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -383,8 +383,8 @@
       "price": 110.08,
       "change": -9.87,
       "changePct": -8.2284,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "ASTS",
@@ -438,8 +438,8 @@
       "price": 307.34,
       "change": -3.89,
       "changePct": -1.2499,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "GOOGL",
