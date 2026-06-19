@@ -1,32 +1,32 @@
 {
-  "fetchedAt": "2026-06-18T22:51:44.570Z",
+  "fetchedAt": "2026-06-19T16:59:32.578Z",
   "items": [
     {
       "symbol": "^TNX",
       "name": "10Y Treasury Yield",
       "explain": "When this rises, growth stocks usually fall. >4.5% is restrictive.",
-      "value": 4.45,
-      "dayChange": -0.89,
-      "monthChange": -0.22,
-      "dailyVol": 1.05
+      "value": 4.49,
+      "dayChange": 0.67,
+      "monthChange": 0.22,
+      "dailyVol": 1.06
     },
     {
       "symbol": "^VIX",
       "name": "Volatility Index",
       "explain": "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear.",
-      "value": 16.4,
-      "dayChange": -11.06,
-      "monthChange": -5.96,
+      "value": 16.78,
+      "dayChange": 2.32,
+      "monthChange": 0.12,
       "dailyVol": 7.77
     },
     {
       "symbol": "DX-Y.NYB",
       "name": "Dollar Index",
       "explain": "Strong dollar hurts US multinationals' overseas revenue.",
-      "value": 100.81,
-      "dayChange": 0.72,
-      "monthChange": 1.52,
-      "dailyVol": 0.34
+      "value": 100.8,
+      "dayChange": -0.05,
+      "monthChange": 1.71,
+      "dailyVol": 0.32
     },
     {
       "symbol": "SPY",
