@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T20:41:29.928Z",
+  "generatedAt": "2026-09-29T00:43:33.512Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -64,8 +64,8 @@
       "price": 736.53,
       "change": -7.97,
       "changePct": -1.0705,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "VTI",
@@ -174,8 +174,8 @@
       "price": 486.76,
       "change": 1.76,
       "changePct": 0.3629,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "LRCX",
@@ -361,8 +361,8 @@
       "price": 138.02,
       "change": -0.44,
       "changePct": -0.3178,
-      "stance": "Negative",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "CEG",
@@ -372,8 +372,8 @@
       "price": 260.43,
       "change": -2.84,
       "changePct": -1.0787,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "RKLB",
@@ -471,8 +471,8 @@
       "price": 246.15,
       "change": -3.52,
       "changePct": -1.4099,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "TSLA",
