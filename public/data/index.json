@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T21:35:03.949Z",
+  "generatedAt": "2026-10-06T01:40:38.243Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -53,8 +53,8 @@
       "price": 712.32,
       "change": 4.78,
       "changePct": 0.6756,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "QQQ",
@@ -119,8 +119,8 @@
       "price": 92.78,
       "change": 2.95,
       "changePct": 3.284,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "AVGO",
@@ -361,8 +361,8 @@
       "price": 144.89,
       "change": 4.87,
       "changePct": 3.4781,
-      "stance": "Negative",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "CEG",
@@ -383,8 +383,8 @@
       "price": 73.02,
       "change": -0.9,
       "changePct": -1.2175,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "ASTS",
@@ -493,7 +493,7 @@
       "price": 67.5,
       "change": 0.44,
       "changePct": 0.6561,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
@@ -515,8 +515,8 @@
       "price": 114.11,
       "change": 1.37,
       "changePct": 1.2152,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "COIN",
