@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-10-07T20:05:52.214Z",
+  "generatedAt": "2026-10-08T00:32:53.217Z",
   "tickers": [
     {
       "symbol": "NVDA",
       "name": "NVIDIA Corp.",
       "sector": "Semiconductors",
       "holding": true,
-      "price": 237.36,
-      "change": -1.88,
-      "changePct": -0.7858,
+      "price": 237.47,
+      "change": -1.77,
+      "changePct": -0.7398,
       "stance": "Negative",
       "stanceColor": "negative"
     },
@@ -116,9 +116,9 @@
       "name": "ARK Innovation",
       "sector": "ETF · Innovation",
       "holding": false,
-      "price": 88.33,
-      "change": -2.16,
-      "changePct": -2.387,
+      "price": 88.3,
+      "change": -2.19,
+      "changePct": -2.4202,
       "stance": "Mixed",
       "stanceColor": "neutral"
     },
@@ -240,8 +240,8 @@
       "price": 294.37,
       "change": -8.19,
       "changePct": -2.7069,
-      "stance": "Cautious",
-      "stanceColor": "negative"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "QCOM",
@@ -259,9 +259,9 @@
       "name": "Intel Corp.",
       "sector": "Semiconductors",
       "holding": false,
-      "price": 113.063,
-      "change": 0.563,
-      "changePct": 0.5004,
+      "price": 113.12,
+      "change": 0.62,
+      "changePct": 0.5511,
       "stance": "Cautious",
       "stanceColor": "negative"
     },
@@ -479,11 +479,11 @@
       "name": "Tesla, Inc.",
       "sector": "Active Retail",
       "holding": false,
-      "price": 377.751705,
-      "change": -2.928295,
-      "changePct": -0.7692,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "price": 377.81,
+      "change": -2.87,
+      "changePct": -0.7539,
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "NFLX",
@@ -534,9 +534,9 @@
       "name": "SoFi Technologies",
       "sector": "Fintech",
       "holding": false,
-      "price": 15.6599,
-      "change": -0.1001,
-      "changePct": -0.6352,
+      "price": 15.66,
+      "change": -0.1,
+      "changePct": -0.6345,
       "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
