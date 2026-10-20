@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-19T20:06:42.287Z",
+  "generatedAt": "2026-10-20T00:01:46.498Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -31,7 +31,7 @@
       "price": 420.22,
       "change": 7.61,
       "changePct": 1.8444,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
@@ -229,8 +229,8 @@
       "price": 237.09,
       "change": 9.26,
       "changePct": 4.0644,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "ARM",
@@ -328,7 +328,7 @@
       "price": 129.59,
       "change": 1.36,
       "changePct": 1.0606,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -391,9 +391,9 @@
       "name": "AST SpaceMobile",
       "sector": "Space",
       "holding": false,
-      "price": 41.85,
-      "change": 1.19,
-      "changePct": 2.9267,
+      "price": 41.87,
+      "change": 1.21,
+      "changePct": 2.9759,
       "stance": "Mixed",
       "stanceColor": "neutral"
     },
@@ -504,8 +504,8 @@
       "price": 155.14,
       "change": -1,
       "changePct": -0.6405,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "HOOD",
@@ -537,8 +537,8 @@
       "price": 14.3,
       "change": -0.25,
       "changePct": -1.7182,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "AXP",
