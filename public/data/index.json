@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T21:32:36.932Z",
+  "generatedAt": "2026-11-13T01:33:34.488Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -130,7 +130,7 @@
       "price": 364.36,
       "change": 19.14,
       "changePct": 5.5443,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
