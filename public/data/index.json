@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T23:28:36.894Z",
+  "generatedAt": "2026-11-17T03:17:20.034Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -42,7 +42,7 @@
       "price": 99.37,
       "change": -2.88,
       "changePct": -2.8166,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
@@ -163,7 +163,7 @@
       "price": 1406.785,
       "change": -88.375,
       "changePct": -5.9107,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -196,8 +196,8 @@
       "price": 143.96,
       "change": -8.36,
       "changePct": -5.4884,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "CDNS",
@@ -262,8 +262,8 @@
       "price": 55.47,
       "change": -4.19,
       "changePct": -7.0231,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "SMCI",
@@ -361,7 +361,7 @@
       "price": 130.16,
       "change": -2.85,
       "changePct": -2.1427,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -416,8 +416,8 @@
       "price": 39.42,
       "change": -2.05,
       "changePct": -4.9433,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "RGTI",
@@ -460,8 +460,8 @@
       "price": 626.41,
       "change": -15.28,
       "changePct": -2.3812,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "AMZN",
@@ -493,7 +493,7 @@
       "price": 60.75,
       "change": -1.4,
       "changePct": -2.2526,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
