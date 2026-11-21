@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-20T21:55:33.398Z",
+  "generatedAt": "2026-11-21T01:52:16.921Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -20,8 +20,8 @@
       "price": 484.52,
       "change": -13.78,
       "changePct": -2.7654,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "TSM",
@@ -196,8 +196,8 @@
       "price": 126.87,
       "change": -14.61,
       "changePct": -10.3265,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "CDNS",
@@ -317,8 +317,8 @@
       "price": 143.49,
       "change": -10.19,
       "changePct": -6.6307,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "ORCL",
@@ -449,7 +449,7 @@
       "price": 265.29,
       "change": -7.37,
       "changePct": -2.703,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
