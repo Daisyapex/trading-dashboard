@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-24T23:36:05.180Z",
+  "generatedAt": "2026-11-25T03:51:37.623Z",
   "tickers": [
     {
       "symbol": "NVDA",
@@ -42,7 +42,7 @@
       "price": 91.74,
       "change": 0.02,
       "changePct": 0.0218,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -141,8 +141,8 @@
       "price": 413.27,
       "change": -40.19,
       "changePct": -8.863,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "MU",
@@ -163,7 +163,7 @@
       "price": 1336.06,
       "change": -47.72,
       "changePct": -3.4485,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -185,7 +185,7 @@
       "price": 196.16,
       "change": -13.6,
       "changePct": -6.4836,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -229,8 +229,8 @@
       "price": 131.57,
       "change": -13.17,
       "changePct": -9.0991,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "ARM",
@@ -240,8 +240,8 @@
       "price": 161.56,
       "change": -15.11,
       "changePct": -8.5527,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "QCOM",
@@ -328,7 +328,7 @@
       "price": 109.5,
       "change": -4.18,
       "changePct": -3.677,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -361,7 +361,7 @@
       "price": 120.72,
       "change": -3.15,
       "changePct": -2.543,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
@@ -405,8 +405,8 @@
       "price": 235.62,
       "change": 2.62,
       "changePct": 1.1245,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautiously positive",
+      "stanceColor": "positive"
     },
     {
       "symbol": "GFS",
@@ -416,8 +416,8 @@
       "price": 36.42,
       "change": -2.53,
       "changePct": -6.4955,
-      "stance": "Mixed",
-      "stanceColor": "neutral"
+      "stance": "Cautious",
+      "stanceColor": "negative"
     },
     {
       "symbol": "RGTI",
@@ -449,7 +449,7 @@
       "price": 279.05,
       "change": -3.05,
       "changePct": -1.0812,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
@@ -471,7 +471,7 @@
       "price": 252.29,
       "change": -3.1,
       "changePct": -1.2138,
-      "stance": "Cautiously positive",
+      "stance": "Constructive",
       "stanceColor": "positive"
     },
     {
@@ -537,8 +537,8 @@
       "price": 12.86,
       "change": -0.23,
       "changePct": -1.7571,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "AXP",
@@ -592,8 +592,8 @@
       "price": 56.17,
       "change": 0.93,
       "changePct": 1.6836,
-      "stance": "Cautiously positive",
-      "stanceColor": "positive"
+      "stance": "Mixed",
+      "stanceColor": "neutral"
     },
     {
       "symbol": "JPM",
@@ -636,7 +636,7 @@
       "price": 341.88,
       "change": 5.8,
       "changePct": 1.7258,
-      "stance": "Constructive",
+      "stance": "Cautiously positive",
       "stanceColor": "positive"
     },
     {
