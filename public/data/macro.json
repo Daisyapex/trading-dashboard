@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-11-26T03:16:45.675Z",
+  "fetchedAt": "2026-11-26T23:13:03.460Z",
   "items": [
     {
       "symbol": "^TNX",
@@ -14,18 +14,18 @@
       "symbol": "^VIX",
       "name": "Volatility Index",
       "explain": "Market fear gauge. <15 = calm. 15-25 = normal. >30 = fear.",
-      "value": 28.29,
-      "dayChange": 7.32,
-      "monthChange": 61.47,
-      "dailyVol": 11.24
+      "value": 26.8,
+      "dayChange": -5.27,
+      "monthChange": 58.49,
+      "dailyVol": 11.26
     },
     {
       "symbol": "DX-Y.NYB",
       "name": "Dollar Index",
       "explain": "Strong dollar hurts US multinationals' overseas revenue.",
-      "value": 103.79,
-      "dayChange": 0.12,
-      "monthChange": 1.57,
+      "value": 103.78,
+      "dayChange": 0.11,
+      "monthChange": 1.56,
       "dailyVol": 0.31
     },
     {
